@@ -61,6 +61,6 @@ yarn-error.log*
 pnpm-debug.log*
 
 # Generated reports and temporary exports
-reports/
+/reports/
 tmp/
 temp/

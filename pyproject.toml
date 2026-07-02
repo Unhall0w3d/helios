@@ -12,7 +12,7 @@ authors = [
   { name = "Cisco Collaboration Health Assessment Tool contributors" }
 ]
 license = { file = "LICENSE" }
-dependencies = []
+dependencies = ["keyring>=25"]
 
 [project.optional-dependencies]
 dev = ["pytest>=8", "ruff>=0.5", "mypy>=1.10"]
