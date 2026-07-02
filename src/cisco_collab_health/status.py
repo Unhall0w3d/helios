@@ -43,7 +43,7 @@ class StatusPrinter:
         label = f"[{level}]"
         if self._should_color():
             label = f"{COLORS.get(level, '')}{label}{RESET}"
-        print(f"{label} {message}", file=self.stream)
+        print(f"{label} {message}", file=self.stream, flush=True)
 
     def _should_color(self) -> bool:
         if self.use_color is not None:

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import sys
 from collections.abc import Sequence
 from datetime import datetime
 from pathlib import Path
@@ -70,7 +71,8 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    status = StatusPrinter()
+    status_stream = sys.stderr if args.format == "json" else sys.stdout
+    status = StatusPrinter(stream=status_stream)
 
     context = CollectionContext()
     if not args.skip_profile:
