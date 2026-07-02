@@ -7,7 +7,10 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from cisco_collab_health.artifacts import ArtifactStore
+from cisco_collab_health.artifacts import ArtifactStore, RunLogStore, write_log_bundle
+from cisco_collab_health.collectors.base import CollectionResult
+from cisco_collab_health.models.assessment import AssessmentReport
+from cisco_collab_health.models.facts import AssessmentFacts
 
 
 class ArtifactStoreTests(unittest.TestCase):
@@ -46,6 +49,43 @@ class ArtifactStoreTests(unittest.TestCase):
 
         self.assertTrue(str(request).endswith("nodes/192.0.2.10/api/axl/getCCMVersion/request.txt"))
         self.assertTrue(str(response).endswith("nodes/192.0.2.10/api/axl/getCCMVersion/response.txt"))
+
+    def test_log_bundle_contains_summary_report_and_artifact_index(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            artifact_store = ArtifactStore.create(Path(tmpdir) / "assessment_runs", "lab")
+            artifact_store.write_text("nodes/192.0.2.10/api/axl/getCCMVersion/response.txt", "<xml />")
+            log_store = RunLogStore.create(Path(tmpdir) / "logs", "lab")
+            html_report = Path(tmpdir) / "report.html"
+            html_report.write_text("<html></html>", encoding="utf-8")
+            report = AssessmentReport(
+                facts=AssessmentFacts(),
+                collector_results=[
+                    CollectionResult(
+                        collector_name="axl",
+                        facts=AssessmentFacts(),
+                        warnings=["AXL call failed"],
+                    )
+                ],
+                findings=[],
+            )
+
+            write_log_bundle(
+                log_store,
+                report=report,
+                summary_text="Executive Summary\n",
+                artifact_store=artifact_store,
+                html_report_path=html_report,
+            )
+
+            summary = log_store.root / "executive_summary.txt"
+            warnings = log_store.root / "collector_warnings.json"
+            artifact_index = log_store.root / "artifact_index.txt"
+            report_copy = log_store.root / "report.html"
+
+            self.assertTrue(summary.exists())
+            self.assertTrue(warnings.exists())
+            self.assertIn("response.txt", artifact_index.read_text(encoding="utf-8"))
+            self.assertTrue(report_copy.exists())
 
 
 if __name__ == "__main__":

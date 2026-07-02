@@ -62,6 +62,7 @@ pnpm-debug.log*
 
 # Generated reports and temporary exports
 /assessment_runs/
+/logs/
 /reports/
 /scriptdebugs/
 tmp/

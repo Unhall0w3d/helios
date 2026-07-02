@@ -6,8 +6,8 @@ The project is currently focused on Cisco Unified Communications Manager
 and CUCM Session Management Edition environments, with an initial target of
 CUCM 11.5 and later.
 
-This repository is in the skeleton/prototyping stage. The current code is
-intentionally offline-first and defines the core assessment pipeline:
+This repository is in the early API-collection stage and defines the core
+assessment pipeline:
 
 ```text
 Collectors -> Data Models -> Health Rules -> Report Builders
@@ -26,14 +26,15 @@ This is not yet a production-ready assessment tool.
 Current capabilities:
 
 - Core pipeline contracts
-- Sample in-memory collector
-- Initial health rule runner
+- Initial AXL collector for `getCCMVersion` and `listProcessNode`
+- Publisher preflight and interface reachability checks
+- Initial health rule runner for collected identity/node facts
 - Terminal Executive Summary output
 - Styled HTML report builder
 - JSON output for development and automation
-- Placeholder AXL, RISPort, Serviceability, and CLI fallback collectors
+- Placeholder RISPort, Serviceability, and CLI fallback collectors
 
-External Cisco API implementations are intentionally not included yet.
+The current real API implementation is limited to initial AXL collection.
 
 ## Quick Start
 
@@ -55,12 +56,22 @@ Run Helios:
 ./helios.py
 ```
 
-This launcher is the main user entry point for a cloned repository. It loads the
-package from `src/` directly, so an editable package install is optional.
+This launcher is the main user entry point for a cloned repository. It opens the
+interactive menu by default and loads the package from `src/` directly, so an
+editable package install is optional.
 
-When the assessment completes, Helios prints an Executive Summary in the
-terminal and writes a styled HTML report under `reports/` by default.
-It also writes local parser/debug artifacts under `assessment_runs/` by default.
+Main menu options:
+
+- Load Profile
+- New Profile
+- Generate Report
+- TEMP Test Options
+- Quit
+
+When a health assessment runs, Helios prints an Executive Summary in the
+terminal, writes a styled HTML report under `reports/`, and writes local
+parser/debug artifacts under `assessment_runs/` by default. It also writes a
+shareable troubleshooting log bundle under `logs/`.
 
 On startup, the CLI checks for saved connection profiles. If any exist, it asks
 whether to load an existing profile. Answering `Y` lets you choose the saved
@@ -96,7 +107,7 @@ Run tests with the standard library:
 PYTHONPATH=src python -m unittest discover -s tests
 ```
 
-To run the offline sample without prompting for connection details:
+To run a framework smoke test without prompting for connection details:
 
 ```bash
 ./helios.py --skip-profile
@@ -118,6 +129,18 @@ To disable local artifact writing:
 
 ```bash
 ./helios.py --no-artifacts
+```
+
+To choose an explicit troubleshooting log directory:
+
+```bash
+./helios.py --log-dir logs
+```
+
+To disable troubleshooting log writing:
+
+```bash
+./helios.py --no-logs
 ```
 
 To print JSON instead of the terminal Executive Summary:
@@ -187,8 +210,9 @@ Use `--no-save-credentials` to avoid storing passwords for the current run:
 
 ## Local Artifacts
 
-Helios writes local per-run artifacts for parser development, debugging, and
-future evidence traceability. These files are intentionally ignored by git.
+Helios writes local per-run artifacts for parser development, debugging, manual
+review, and future evidence traceability. These files are intentionally ignored
+by git and are separate from the human HTML files in `reports/`.
 
 Default layout:
 
@@ -206,11 +230,35 @@ assessment_runs/
           cli/
 ```
 
-Current artifacts include Publisher preflight data and normalized sample
-collector output. Future API and SSH collectors should write raw request,
-response, command, and stdout/stderr artifacts here before parsing.
+Current artifacts include Publisher preflight data, raw AXL SOAP request/response
+artifacts when AXL collection runs, normalized collector output, and per-node
+facts. Future SSH collectors should write raw command and stdout/stderr
+artifacts here before parsing.
 
 Reusable credentials should not be written to artifact files.
+
+## Troubleshooting Logs
+
+Helios also writes a run-specific troubleshooting bundle under `logs/`.
+
+Default layout:
+
+```text
+logs/
+  <timestamp>/
+    manifest.json
+    run.log
+    executive_summary.txt
+    report.html
+    assessment_report.json
+    collector_warnings.json
+    artifact_index.txt
+```
+
+Use this folder when you want to provide a compact troubleshooting package for
+analysis. It contains status messages, collector warnings, a copy of the HTML
+report, the normalized assessment JSON, and an index of the raw artifact files
+stored in `assessment_runs/`.
 
 ## Cluster Discovery Direction
 

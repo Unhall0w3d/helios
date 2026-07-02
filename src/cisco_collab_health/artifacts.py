@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import re
+import shutil
 from dataclasses import asdict, dataclass, is_dataclass
 from datetime import datetime
 from enum import Enum
@@ -91,6 +92,65 @@ class ArtifactStore:
         return self.write_node_text(node, "cli", filename, content)
 
 
+@dataclass(frozen=True)
+class RunLogStore:
+    """Writes troubleshooting logs for one Helios run."""
+
+    root: Path
+    run_id: str
+    profile_name: str
+
+    @classmethod
+    def create(
+        cls,
+        root_dir: str | Path,
+        profile_name: str,
+        started_at: datetime | None = None,
+    ) -> "RunLogStore":
+        run_time = started_at or datetime.now()
+        run_id = run_time.strftime("%Y%m%d-%H%M%S")
+        root = Path(root_dir).expanduser() / run_id
+        root.mkdir(parents=True, exist_ok=True)
+        return cls(root=root, run_id=run_id, profile_name=profile_name)
+
+    @property
+    def run_log_path(self) -> Path:
+        return self.root / "run.log"
+
+    def open_run_log(self):
+        self.root.mkdir(parents=True, exist_ok=True)
+        return self.run_log_path.open("a", encoding="utf-8")
+
+    def write_manifest(self, metadata: dict[str, Any]) -> Path:
+        payload = {
+            "run_id": self.run_id,
+            "profile_name": self.profile_name,
+            **metadata,
+        }
+        return self.write_json("manifest.json", payload)
+
+    def write_json(self, relative_path: str | Path, payload: Any) -> Path:
+        path = self.root / relative_path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            json.dumps(_to_jsonable(payload), indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        return path
+
+    def write_text(self, relative_path: str | Path, content: str) -> Path:
+        path = self.root / relative_path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
+        return path
+
+    def copy_file(self, source: Path, relative_path: str | Path) -> Path:
+        destination = self.root / relative_path
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, destination)
+        return destination
+
+
 def write_preflight_artifacts(store: ArtifactStore, publisher: str, preflight: Any) -> Path:
     """Write Publisher preflight evidence for parser/debug review."""
 
@@ -128,9 +188,51 @@ def write_assessment_artifacts(store: ArtifactStore, report: Any) -> list[Path]:
     return paths
 
 
+def write_log_bundle(
+    store: RunLogStore,
+    *,
+    report: Any,
+    summary_text: str,
+    artifact_store: ArtifactStore | None,
+    html_report_path: Path | None,
+) -> list[Path]:
+    """Write troubleshooting files that are easy to share for analysis."""
+
+    paths = [
+        store.write_text("executive_summary.txt", summary_text),
+        store.write_json("assessment_report.json", report),
+        store.write_json("collector_warnings.json", _collector_warnings(report)),
+    ]
+    if artifact_store is not None:
+        paths.append(
+            store.write_text(
+                "artifact_index.txt",
+                "\n".join(_artifact_index(artifact_store.root)) + "\n",
+            )
+        )
+    if html_report_path is not None and html_report_path.exists():
+        paths.append(store.copy_file(html_report_path, "report.html"))
+    return paths
+
+
 def _safe_name(value: str) -> str:
     sanitized = re.sub(r"[^A-Za-z0-9_.-]+", "_", value.strip())
     return sanitized.strip("._") or "unknown"
+
+
+def _collector_warnings(report: Any) -> list[dict[str, Any]]:
+    warnings = []
+    for result in getattr(report, "collector_results", []):
+        collector_name = getattr(result, "collector_name", "unknown_collector")
+        for warning in getattr(result, "warnings", []):
+            warnings.append({"collector": collector_name, "warning": warning})
+    return warnings
+
+
+def _artifact_index(root: Path) -> list[str]:
+    if not root.exists():
+        return []
+    return [str(path) for path in sorted(root.rglob("*")) if path.is_file()]
 
 
 def _category_path(value: str) -> Path:

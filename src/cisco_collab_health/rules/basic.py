@@ -55,6 +55,22 @@ class NodeReachabilityRule:
     rule_id = "core.node_reachability"
 
     def evaluate(self, facts: AssessmentFacts) -> list[HealthFinding]:
+        if not facts.nodes:
+            return [
+                HealthFinding(
+                    rule_id=self.rule_id,
+                    title="No collaboration nodes were collected",
+                    severity=FindingSeverity.WARNING,
+                    recommendation_kind=RecommendationKind.ENGINEERING_RECOMMENDATION,
+                    facts=["No normalized node facts were produced by collectors."],
+                    reasoning=(
+                        "Cluster health cannot be evaluated until the Publisher API or another "
+                        "authoritative source returns cluster node inventory."
+                    ),
+                    recommendation="Verify API reachability and collector warnings for cluster discovery.",
+                )
+            ]
+
         unreachable_nodes = [node for node in facts.nodes if node.reachable is False]
         if not unreachable_nodes:
             return [

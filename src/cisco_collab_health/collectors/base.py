@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Protocol
+from typing import Any, Protocol
 
 from cisco_collab_health.models.facts import AssessmentFacts
 
@@ -20,6 +20,11 @@ class CollectionContext:
     os_username: str | None = None
     os_password: str | None = field(default=None, repr=False)
     timeout_seconds: int = 30
+    artifact_store: Any | None = field(default=None, repr=False)
+    axl_port: int = 8443
+    risport_port: int = 8443
+    control_center_port: int = 8443
+    perfmon_port: int = 8443
 
 
 @dataclass(frozen=True)
