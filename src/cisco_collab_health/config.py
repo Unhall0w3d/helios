@@ -253,20 +253,32 @@ def prompt_for_profile_name(
         output_func("No saved profiles found. Create a new connection profile.")
         return ProfileSelection(_prompt_new_profile_name(existing_names, input_func, output_func))
 
+    while True:
+        choice = input_func("Existing profile found. Load existing profile? (Y/N): ").strip().lower()
+        if choice == "n":
+            return ProfileSelection(_prompt_new_profile_name(existing_names, input_func, output_func))
+        if choice == "y":
+            return ProfileSelection(_prompt_existing_profile_name(existing_names, input_func, output_func))
+        output_func("Enter Y to load an existing profile or N to create a new profile.")
+
+
+def _prompt_existing_profile_name(
+    existing_names: list[str],
+    input_func: Callable[[str], str],
+    output_func: Callable[[str], None],
+) -> str:
     output_func("Saved profiles:")
     for index, name in enumerate(existing_names, start=1):
         output_func(f"  {index}. {name}")
 
     while True:
-        choice = input_func("Use profile number/name, or enter 'n' for new profile: ").strip()
-        if choice.lower() in {"n", "new"}:
-            return ProfileSelection(_prompt_new_profile_name(existing_names, input_func, output_func))
+        choice = input_func("Profile number/name: ").strip()
         if choice.isdigit():
             index = int(choice)
             if 1 <= index <= len(existing_names):
-                return ProfileSelection(existing_names[index - 1])
+                return existing_names[index - 1]
         if choice in existing_names:
-            return ProfileSelection(choice)
+            return choice
         output_func("Invalid profile selection.")
 
 

@@ -37,23 +37,33 @@ External Cisco API implementations are intentionally not included yet.
 
 ## Quick Start
 
-Install the package in editable mode:
+Install runtime dependencies:
 
 ```bash
-python -m pip install -e .
+python -m pip install -r requirements.txt
 ```
 
-Run the alpha sample assessment:
+Make the launcher executable:
 
 ```bash
-ccha
+chmod +x helios.py
 ```
+
+Run Helios:
+
+```bash
+./helios.py
+```
+
+This launcher is the main user entry point for a cloned repository. It loads the
+package from `src/` directly, so an editable package install is optional.
 
 When the assessment completes, Helios prints an Executive Summary in the
 terminal and writes a styled HTML report under `reports/` by default.
 
 On startup, the CLI checks for saved connection profiles. If any exist, it asks
-whether to use an existing profile or create a new one. If no profile exists, it
+whether to load an existing profile. Answering `Y` lets you choose the saved
+profile. Answering `N` starts new profile creation. If no profile exists, it
 prompts for a new profile name before collecting connection details.
 
 For a new profile, the CLI prompts for:
@@ -65,6 +75,20 @@ For a new profile, the CLI prompts for:
 If an FQDN is entered, it is resolved and the resulting IP address is used for
 collector context.
 
+After a profile is loaded, Helios runs a Publisher preflight:
+
+- ping reachability
+- HTTP base URL check
+- HTTPS base URL check
+- AXL endpoint reachability
+- RISPort70 endpoint reachability
+- Control Center Services endpoint reachability
+- PerfMon endpoint reachability
+
+Progress is shown with bracketed status messages such as `[STAGE]`, `[OK]`,
+`[WARN]`, and `[INFO]`. Raw command or API output should be stored as evidence
+for parsing/reporting rather than streamed directly to the terminal.
+
 Run tests with the standard library:
 
 ```bash
@@ -74,19 +98,38 @@ PYTHONPATH=src python -m unittest discover -s tests
 To run the offline sample without prompting for connection details:
 
 ```bash
-PYTHONPATH=src python -m cisco_collab_health.cli --skip-profile
+./helios.py --skip-profile
 ```
 
 To choose an explicit HTML report path:
 
 ```bash
-ccha --html-report reports/lab-assessment.html
+./helios.py --html-report reports/lab-assessment.html
 ```
 
 To print JSON instead of the terminal Executive Summary:
 
 ```bash
-ccha --format json
+./helios.py --format json
+```
+
+Publisher preflight runs automatically after profile load. The legacy
+`--probe-interfaces` flag is currently accepted as a compatibility alias but is
+no longer required:
+
+```bash
+./helios.py --probe-interfaces
+```
+
+Future collectors will use preflight status to avoid running collectors for
+interfaces that are unavailable.
+
+If you prefer installing Helios as a Python package during development, the
+`ccha` console command is also available after an editable install:
+
+```bash
+python -m pip install -e .
+ccha
 ```
 
 ## Development
@@ -114,13 +157,13 @@ again on future runs.
 Use `--reset-profile` to replace the saved profile:
 
 ```bash
-ccha --reset-profile
+./helios.py --reset-profile
 ```
 
 Use `--no-save-credentials` to avoid storing passwords for the current run:
 
 ```bash
-ccha --no-save-credentials
+./helios.py --no-save-credentials
 ```
 
 ## Cluster Discovery Direction

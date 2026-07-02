@@ -127,7 +127,7 @@ class ConfigTests(unittest.TestCase):
 
     def test_select_or_create_can_use_existing_profile_by_number(self) -> None:
         store = FakeCredentialStore()
-        inputs = iter(["1"])
+        inputs = iter(["y", "1"])
 
         with tempfile.TemporaryDirectory() as tmpdir:
             config_dir = Path(tmpdir)
@@ -169,6 +169,24 @@ class ConfigTests(unittest.TestCase):
 
         self.assertEqual(runtime.stored.name, "prod")
         self.assertIn("Profile Name In Use", messages)
+
+    def test_existing_profile_prompt_can_create_new_profile(self) -> None:
+        store = FakeCredentialStore()
+        inputs = iter(["n", "prod", "192.0.2.10", "admin", "osadmin"])
+        passwords = iter(["gui-secret", "os-secret"])
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config_dir = Path(tmpdir)
+            register_profile_name("lab", config_dir)
+            runtime = select_or_create_runtime_profile(
+                config_dir=config_dir,
+                input_func=lambda prompt: next(inputs),
+                getpass_func=lambda prompt: next(passwords),
+                output_func=lambda message: None,
+                credential_store=store,
+            )
+
+        self.assertEqual(runtime.stored.name, "prod")
 
     def test_without_credential_store_only_non_secret_profile_is_saved(self) -> None:
         inputs = iter(["192.0.2.10", "admin", "osadmin"])
