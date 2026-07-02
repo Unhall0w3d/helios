@@ -74,6 +74,17 @@ def main(argv: Sequence[str] | None = None) -> int:
     status_stream = sys.stderr if args.format == "json" else sys.stdout
     status = StatusPrinter(stream=status_stream)
 
+    try:
+        return _run(args, status)
+    except KeyboardInterrupt:
+        status.warn("Interrupted by user")
+        return 130
+    except (OSError, ValueError) as exc:
+        status.fail(str(exc))
+        return 1
+
+
+def _run(args: argparse.Namespace, status: StatusPrinter) -> int:
     context = CollectionContext()
     if not args.skip_profile:
         status.stage("Loading connection profile")
@@ -117,8 +128,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     html_report_path = None
     if not args.no_html_report:
         status.stage("Writing HTML report")
-        html_report_path = _write_html_report(report, args.html_report)
-        status.ok(f"HTML report written: {html_report_path}")
+        try:
+            html_report_path = _write_html_report(report, args.html_report)
+            status.ok(f"HTML report written: {html_report_path}")
+        except OSError as exc:
+            status.fail(f"Unable to write HTML report: {exc}")
 
     status.stage("Rendering terminal output")
     if args.format == "json":
