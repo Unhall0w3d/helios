@@ -16,6 +16,8 @@ Collectors -> Data Models -> Health Rules -> Report Builders
 Collectors gather facts, data models normalize them, rules interpret them, and
 report builders present the results.
 
+The project is intentionally CLI/report focused. A GUI is not currently planned.
+
 ## Status
 
 This is not yet a production-ready assessment tool.
