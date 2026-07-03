@@ -16,6 +16,7 @@ class HtmlReportBuilder:
         severity_counts = Counter(finding.severity for finding in report.findings)
         cluster_section = self._cluster_section(report)
         node_rows = self._node_rows(report)
+        device_rows = self._device_rows(report)
         collector_issues_section = self._collector_issues_section(report)
         finding_sections = "\n".join(self._finding_section(finding) for finding in report.findings)
 
@@ -141,6 +142,7 @@ class HtmlReportBuilder:
       <h2>Executive Overview</h2>
       <div class="summary-grid">
         <div class="metric"><strong>{len(report.facts.nodes)}</strong><span>Nodes</span></div>
+        <div class="metric"><strong>{len(report.facts.devices)}</strong><span>Devices</span></div>
         <div class="metric"><strong>{severity_counts[FindingSeverity.CRITICAL]}</strong><span>Critical</span></div>
         <div class="metric"><strong>{severity_counts[FindingSeverity.WARNING]}</strong><span>Warnings</span></div>
         <div class="metric"><strong>{severity_counts[FindingSeverity.INFO]}</strong><span>Informational</span></div>
@@ -153,6 +155,19 @@ class HtmlReportBuilder:
         <thead><tr><th>Name</th><th>Address</th><th>Role</th><th>Reachable</th></tr></thead>
         <tbody>
           {node_rows}
+        </tbody>
+      </table>
+    </section>
+    <section>
+      <h2>Device Inventory</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Name</th><th>Model</th><th>Protocol</th><th>Device Pool</th><th>Location</th><th>Load</th>
+          </tr>
+        </thead>
+        <tbody>
+          {device_rows}
         </tbody>
       </table>
     </section>
@@ -203,6 +218,24 @@ class HtmlReportBuilder:
                 "</tr>"
             )
             for node in report.facts.nodes
+        )
+
+    def _device_rows(self, report: AssessmentReport) -> str:
+        if not report.facts.devices:
+            return '<tr><td colspan="6">No devices inventoried.</td></tr>'
+
+        return "\n".join(
+            (
+                "<tr>"
+                f"<td>{escape(device.name)}</td>"
+                f"<td>{escape(device.model or '')}</td>"
+                f"<td>{escape(device.protocol or '')}</td>"
+                f"<td>{escape(device.device_pool or '')}</td>"
+                f"<td>{escape(device.location or '')}</td>"
+                f"<td>{escape(device.configured_load or '')}</td>"
+                "</tr>"
+            )
+            for device in report.facts.devices
         )
 
     def _collector_issues_section(self, report: AssessmentReport) -> str:

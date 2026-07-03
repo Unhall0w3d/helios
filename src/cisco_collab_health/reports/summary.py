@@ -39,6 +39,7 @@ class ExecutiveSummaryBuilder:
         lines.extend(
             [
                 f"Nodes discovered: {len(report.facts.nodes)}",
+                f"Devices inventoried: {len(report.facts.devices)}",
                 f"Findings: {critical_count} critical, {warning_count} warning, {info_count} info",
                 f"Collector errors: {collector_error_count}",
                 "",

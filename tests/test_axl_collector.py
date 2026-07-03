@@ -78,6 +78,36 @@ LIST_PROCESS_NODE_WITH_ENTERPRISE_DATA_RESPONSE = """<?xml version="1.0" encodin
 """
 
 
+LIST_PHONE_RESPONSE = """<?xml version="1.0" encoding="UTF-8"?>
+<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/">
+  <soapenv:Body>
+    <ns:listPhoneResponse xmlns:ns="http://www.cisco.com/AXL/API/14.0">
+      <return>
+        <phone uuid="{11111111-1111-1111-1111-111111111111}">
+          <name>SEP001122334455</name>
+          <description>Lobby phone</description>
+          <model>Cisco 8845</model>
+          <protocol>SIP</protocol>
+          <devicePoolName uuid="{22222222-2222-2222-2222-222222222222}">Default</devicePoolName>
+          <locationName uuid="{33333333-3333-3333-3333-333333333333}">Hub_None</locationName>
+          <loadInformation>sip8845.14-2-1</loadInformation>
+        </phone>
+        <phone uuid="{44444444-4444-4444-4444-444444444444}">
+          <name>CSFALICE</name>
+          <description />
+          <model>Cisco Unified Client Services Framework</model>
+          <protocol>SIP</protocol>
+          <devicePoolName>Remote</devicePoolName>
+          <locationName />
+          <loadInformation />
+        </phone>
+      </return>
+    </ns:listPhoneResponse>
+  </soapenv:Body>
+</soapenv:Envelope>
+"""
+
+
 INCORRECT_AXL_VERSION_RESPONSE = """<!-- custom Cisco error page --><html>
 <body>
 <div id="content-header">HTTP Status 599 - Incorrect axl version. Supported axl versions are 12.x, 14.0 and 15.0</div>
@@ -130,7 +160,7 @@ class AxlCollectorTests(unittest.TestCase):
         with patch.object(
             collector,
             "_call_axl",
-            side_effect=[GET_VERSION_RESPONSE, LIST_PROCESS_NODE_RESPONSE],
+            side_effect=[GET_VERSION_RESPONSE, LIST_PROCESS_NODE_RESPONSE, LIST_PHONE_RESPONSE],
         ):
             result = collector.collect(context)
 
@@ -140,6 +170,9 @@ class AxlCollectorTests(unittest.TestCase):
         self.assertEqual(result.facts.cluster.name, "10.51.200.8")
         self.assertEqual([node.address for node in result.facts.nodes], ["10.51.200.8", "10.51.200.9"])
         self.assertEqual([node.role for node in result.facts.nodes], ["publisher", "subscriber"])
+        self.assertEqual([device.name for device in result.facts.devices], ["SEP001122334455", "CSFALICE"])
+        self.assertEqual(result.facts.devices[0].device_pool, "Default")
+        self.assertEqual(result.facts.devices[0].configured_load, "sip8845.14-2-1")
 
     def test_axl_collector_ignores_enterprise_wide_data_process_node(self) -> None:
         context = CollectionContext(
@@ -152,7 +185,11 @@ class AxlCollectorTests(unittest.TestCase):
         with patch.object(
             collector,
             "_call_axl",
-            side_effect=[GET_VERSION_RESPONSE, LIST_PROCESS_NODE_WITH_ENTERPRISE_DATA_RESPONSE],
+            side_effect=[
+                GET_VERSION_RESPONSE,
+                LIST_PROCESS_NODE_WITH_ENTERPRISE_DATA_RESPONSE,
+                LIST_PHONE_RESPONSE,
+            ],
         ):
             result = collector.collect(context)
 
@@ -162,6 +199,28 @@ class AxlCollectorTests(unittest.TestCase):
             ["HS-UCM-SUB.Yorktown.org", "YT-CUCM-PUB.yorktown.org"],
         )
         self.assertEqual(result.facts.cluster.name, "YT-CUCM-PUB.yorktown.org")
+
+    def test_axl_collector_warns_when_phone_inventory_fails(self) -> None:
+        context = CollectionContext(
+            publisher_ip="10.51.200.8",
+            gui_username="apiuser",
+            gui_password="secret",
+        )
+        collector = AxlCollector()
+
+        with patch.object(
+            collector,
+            "_call_axl",
+            side_effect=[
+                GET_VERSION_RESPONSE,
+                LIST_PROCESS_NODE_RESPONSE,
+                "<not-xml",
+            ],
+        ):
+            result = collector.collect(context)
+
+        self.assertEqual(result.facts.devices, [])
+        self.assertIn("AXL listPhone failed", result.warnings[0])
 
     def test_axl_collector_returns_warning_without_credentials(self) -> None:
         result = AxlCollector().collect(CollectionContext(publisher_ip="10.51.200.8"))

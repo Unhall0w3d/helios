@@ -26,7 +26,7 @@ This is not yet a production-ready assessment tool.
 Current capabilities:
 
 - Core pipeline contracts
-- Initial AXL collector for `getCCMVersion` and `listProcessNode`
+- Initial AXL collector for `getCCMVersion`, `listProcessNode`, and `listPhone`
 - AXL schema retry when CUCM reports that the requested AXL version is unsupported
 - Publisher preflight and interface reachability checks
 - Initial health rule runner for collected identity/node facts

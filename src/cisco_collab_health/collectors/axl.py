@@ -7,7 +7,12 @@ import re
 import xml.etree.ElementTree as ET
 
 from cisco_collab_health.collectors.base import CollectionContext, CollectionResult
-from cisco_collab_health.models.facts import AssessmentFacts, ClusterIdentity, CollaborationNode
+from cisco_collab_health.models.facts import (
+    AssessmentFacts,
+    ClusterIdentity,
+    CollaborationNode,
+    DeviceInventoryFact,
+)
 from cisco_collab_health.transport.soap import (
     SoapClient,
     SoapHttpError,
@@ -104,6 +109,16 @@ class AxlCollector:
             facts.nodes.extend(_parse_process_nodes(process_node_response, context.publisher_ip))
         except AxlCollectionError as exc:
             warnings.append(f"AXL listProcessNode failed: {exc}")
+
+        try:
+            phone_response = self._call_axl(
+                context,
+                "listPhone",
+                _list_phone_body(),
+            )
+            facts.devices.extend(_parse_phone_inventory(phone_response))
+        except AxlCollectionError as exc:
+            warnings.append(f"AXL listPhone failed: {exc}")
 
         if facts.cluster is not None and facts.nodes:
             facts.cluster = ClusterIdentity(
@@ -241,6 +256,23 @@ def _list_process_node_body() -> str:
     </axl:listProcessNode>"""
 
 
+def _list_phone_body() -> str:
+    return """<axl:listPhone>
+      <searchCriteria>
+        <name>%</name>
+      </searchCriteria>
+      <returnedTags>
+        <name />
+        <description />
+        <model />
+        <protocol />
+        <devicePoolName />
+        <locationName />
+        <loadInformation />
+      </returnedTags>
+    </axl:listPhone>"""
+
+
 def _parse_process_nodes(response_text: str, publisher_ip: str | None) -> list[CollaborationNode]:
     try:
         root = ET.fromstring(response_text)
@@ -268,6 +300,34 @@ def _parse_process_nodes(response_text: str, publisher_ip: str | None) -> list[C
             )
         )
     return nodes
+
+
+def _parse_phone_inventory(response_text: str) -> list[DeviceInventoryFact]:
+    try:
+        root = ET.fromstring(response_text)
+    except ET.ParseError as exc:
+        raise AxlCollectionError(f"Unable to parse listPhone response: {exc}") from exc
+
+    devices: list[DeviceInventoryFact] = []
+    for phone in _iter_local_name(root, "phone"):
+        name = _child_text(phone, "name")
+        if not name:
+            continue
+        devices.append(
+            DeviceInventoryFact(
+                name=name,
+                description=_child_text(phone, "description"),
+                model=_child_text(phone, "model"),
+                protocol=_child_text(phone, "protocol"),
+                device_pool=_child_text(phone, "devicePoolName"),
+                call_manager_group=None,
+                location=_child_text(phone, "locationName"),
+                region=None,
+                configured_load=_child_text(phone, "loadInformation"),
+                source="AXL.listPhone",
+            )
+        )
+    return devices
 
 
 def _is_pseudo_process_node(name: str) -> bool:
