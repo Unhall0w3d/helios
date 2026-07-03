@@ -51,6 +51,33 @@ LIST_PROCESS_NODE_RESPONSE = """<?xml version="1.0" encoding="UTF-8"?>
 """
 
 
+LIST_PROCESS_NODE_WITH_ENTERPRISE_DATA_RESPONSE = """<?xml version="1.0" encoding="UTF-8"?>
+<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/">
+  <soapenv:Body>
+    <ns:listProcessNodeResponse xmlns:ns="http://www.cisco.com/AXL/API/14.0">
+      <return>
+        <processNode uuid="{00000000-1111-0000-0000-000000000000}">
+          <name>EnterpriseWideData</name>
+          <description />
+          <nodeUsage>Subscriber</nodeUsage>
+        </processNode>
+        <processNode uuid="{100425D0-8780-F699-9C0F-9BA20D7C8DB7}">
+          <name>HS-UCM-SUB.Yorktown.org</name>
+          <description>HS-UCM-SUB</description>
+          <nodeUsage>Subscriber</nodeUsage>
+        </processNode>
+        <processNode uuid="{953D3FCA-EAB5-4B3C-928B-450C6884CE26}">
+          <name>YT-CUCM-PUB.yorktown.org</name>
+          <description>UCM-PUB</description>
+          <nodeUsage>Publisher</nodeUsage>
+        </processNode>
+      </return>
+    </ns:listProcessNodeResponse>
+  </soapenv:Body>
+</soapenv:Envelope>
+"""
+
+
 INCORRECT_AXL_VERSION_RESPONSE = """<!-- custom Cisco error page --><html>
 <body>
 <div id="content-header">HTTP Status 599 - Incorrect axl version. Supported axl versions are 12.x, 14.0 and 15.0</div>
@@ -99,6 +126,28 @@ class AxlCollectorTests(unittest.TestCase):
         self.assertEqual(result.facts.cluster.name, "10.51.200.8")
         self.assertEqual([node.address for node in result.facts.nodes], ["10.51.200.8", "10.51.200.9"])
         self.assertEqual([node.role for node in result.facts.nodes], ["publisher", "subscriber"])
+
+    def test_axl_collector_ignores_enterprise_wide_data_process_node(self) -> None:
+        context = CollectionContext(
+            publisher_ip="10.51.200.8",
+            gui_username="apiuser",
+            gui_password="secret",
+        )
+        collector = AxlCollector()
+
+        with patch.object(
+            collector,
+            "_call_axl",
+            side_effect=[GET_VERSION_RESPONSE, LIST_PROCESS_NODE_WITH_ENTERPRISE_DATA_RESPONSE],
+        ):
+            result = collector.collect(context)
+
+        self.assertEqual(result.warnings, [])
+        self.assertEqual(
+            [node.name for node in result.facts.nodes],
+            ["HS-UCM-SUB.Yorktown.org", "YT-CUCM-PUB.yorktown.org"],
+        )
+        self.assertEqual(result.facts.cluster.name, "YT-CUCM-PUB.yorktown.org")
 
     def test_axl_collector_returns_warning_without_credentials(self) -> None:
         result = AxlCollector().collect(CollectionContext(publisher_ip="10.51.200.8"))

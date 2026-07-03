@@ -64,6 +64,7 @@ pnpm-debug.log*
 /assessment_runs/
 /logs/
 /reports/
+/review/
 /scriptdebugs/
 tmp/
 temp/

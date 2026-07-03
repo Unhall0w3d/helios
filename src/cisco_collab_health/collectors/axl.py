@@ -14,6 +14,7 @@ from cisco_collab_health.models.facts import AssessmentFacts, ClusterIdentity, C
 
 DEFAULT_AXL_VERSION = "14.0"
 SOAP_NAMESPACE = "http://schemas.xmlsoap.org/soap/envelope/"
+PSEUDO_PROCESS_NODE_NAMES = {"enterprisewidedata"}
 
 
 class AxlCollector:
@@ -264,6 +265,8 @@ def _parse_process_nodes(response_text: str, publisher_ip: str | None) -> list[C
         name = _child_text(process_node, "name")
         if not name:
             continue
+        if _is_pseudo_process_node(name):
+            continue
         node_usage = (_child_text(process_node, "nodeUsage") or "").lower()
         role = "publisher" if publisher_ip and name == publisher_ip else "subscriber"
         if "publisher" in node_usage:
@@ -279,6 +282,10 @@ def _parse_process_nodes(response_text: str, publisher_ip: str | None) -> list[C
             )
         )
     return nodes
+
+
+def _is_pseudo_process_node(name: str) -> bool:
+    return name.strip().lower() in PSEUDO_PROCESS_NODE_NAMES
 
 
 def _cluster_name_from_nodes(nodes: list[CollaborationNode], publisher_ip: str) -> str:
