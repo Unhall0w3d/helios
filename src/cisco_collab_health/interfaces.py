@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import socket
-import ssl
 import subprocess
 import sys
 import urllib.error
@@ -12,6 +11,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 from cisco_collab_health.collectors.base import CollectionContext
+from cisco_collab_health.transport.tls import build_ssl_context
 
 
 @dataclass(frozen=True)
@@ -176,7 +176,7 @@ def run_publisher_preflight(
         )
 
     ping = ping_probe or _ping_probe
-    http = http_probe or _http_probe
+    http = http_probe or (lambda url, timeout: _http_probe(url, timeout, context))
 
     try:
         ping_available = ping(host, timeout_seconds)
@@ -244,11 +244,15 @@ def _ping_probe(host: str, timeout_seconds: float) -> bool:
     return result.returncode == 0
 
 
-def _http_probe(url: str, timeout_seconds: float) -> tuple[bool, str | None]:
+def _http_probe(
+    url: str,
+    timeout_seconds: float,
+    context: CollectionContext,
+) -> tuple[bool, str | None]:
     request = urllib.request.Request(url, method="GET")
-    context = ssl._create_unverified_context() if url.startswith("https://") else None
+    ssl_context = build_ssl_context(context.tls) if url.startswith("https://") else None
     try:
-        with urllib.request.urlopen(request, timeout=timeout_seconds, context=context) as response:
+        with urllib.request.urlopen(request, timeout=timeout_seconds, context=ssl_context) as response:
             return 200 <= response.status < 500, f"HTTP {response.status}"
     except urllib.error.HTTPError as exc:
         return exc.code < 500, f"HTTP {exc.code}"

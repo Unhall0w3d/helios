@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import Enum
 
+from cisco_collab_health.models.evidence import EvidenceRef
+
 
 class FindingSeverity(str, Enum):
     """Severity assigned to a health finding."""
@@ -34,4 +36,4 @@ class HealthFinding:
     facts: list[str]
     reasoning: str
     recommendation: str | None = None
-    evidence: dict[str, str] = field(default_factory=dict)
+    evidence: list[EvidenceRef] = field(default_factory=list)

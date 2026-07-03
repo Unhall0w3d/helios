@@ -16,6 +16,14 @@ from pathlib import Path
 from typing import Any
 
 
+class ArtifactRedactionMode(str, Enum):
+    """Controls how much sensitive content is removed from written artifacts."""
+
+    NONE = "none"
+    SECRETS = "secrets"
+    CUSTOMER_DATA = "customer-data"
+
+
 @dataclass(frozen=True)
 class ArtifactStore:
     """Writes assessment artifacts into a per-run local directory."""
@@ -23,6 +31,7 @@ class ArtifactStore:
     root: Path
     run_id: str
     profile_name: str
+    redaction_mode: ArtifactRedactionMode = ArtifactRedactionMode.SECRETS
 
     @classmethod
     def create(
@@ -30,12 +39,18 @@ class ArtifactStore:
         root_dir: str | Path,
         profile_name: str,
         started_at: datetime | None = None,
+        redaction_mode: str | ArtifactRedactionMode = ArtifactRedactionMode.SECRETS,
     ) -> "ArtifactStore":
         run_time = started_at or datetime.now()
         run_id = run_time.strftime("%Y%m%d-%H%M%S")
         root = Path(root_dir).expanduser() / _safe_name(profile_name) / run_id
         root.mkdir(parents=True, exist_ok=True)
-        return cls(root=root, run_id=run_id, profile_name=profile_name)
+        return cls(
+            root=root,
+            run_id=run_id,
+            profile_name=profile_name,
+            redaction_mode=ArtifactRedactionMode(redaction_mode),
+        )
 
     def write_manifest(self, metadata: dict[str, Any]) -> Path:
         payload = {
@@ -82,8 +97,18 @@ class ArtifactStore:
         response: str,
     ) -> tuple[Path, Path]:
         category = Path("api") / _safe_name(interface) / _safe_name(operation)
-        request_path = self.write_node_text(node, str(category), "request.txt", request)
-        response_path = self.write_node_text(node, str(category), "response.txt", response)
+        request_path = self.write_node_text(
+            node,
+            str(category),
+            "request.txt",
+            _sanitize_artifact_text(request, self.redaction_mode),
+        )
+        response_path = self.write_node_text(
+            node,
+            str(category),
+            "response.txt",
+            _sanitize_artifact_text(response, self.redaction_mode),
+        )
         return request_path, response_path
 
     def write_command_output(self, node: str, command: str, output: str) -> Path:
@@ -244,12 +269,42 @@ def _safe_name(value: str) -> str:
     return sanitized.strip("._") or "unknown"
 
 
+def _sanitize_artifact_text(content: str, mode: ArtifactRedactionMode) -> str:
+    if mode is ArtifactRedactionMode.NONE:
+        return content
+    return _redact_secret_values(content)
+
+
+def _redact_secret_values(content: str) -> str:
+    content = re.sub(
+        r"(?im)^(authorization|cookie|set-cookie|x-csrf-token|x-auth-token):.*$",
+        lambda match: f"{match.group(1)}: <redacted>",
+        content,
+    )
+    return re.sub(
+        r"(<[^>]*(?:password|passwd|secret|token)[^>]*>)(.*?)(</[^>]+>)",
+        r"\1<redacted>\3",
+        content,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+
+
 def _collector_warnings(report: Any) -> list[dict[str, Any]]:
     warnings = []
     for result in getattr(report, "collector_results", []):
         collector_name = getattr(result, "collector_name", "unknown_collector")
         for warning in getattr(result, "warnings", []):
-            warnings.append({"collector": collector_name, "warning": warning})
+            warnings.append({"collector": collector_name, "type": "warning", "message": warning})
+        for error in getattr(result, "errors", []):
+            warnings.append(
+                {
+                    "collector": collector_name,
+                    "type": "error",
+                    "message": getattr(error, "message", ""),
+                    "exception_type": getattr(error, "exception_type", "Exception"),
+                    "recoverable": getattr(error, "recoverable", True),
+                }
+            )
     return warnings
 
 
@@ -272,6 +327,8 @@ def _category_path(value: str) -> Path:
 def _to_jsonable(value: Any) -> Any:
     if is_dataclass(value) and not isinstance(value, type):
         return _to_jsonable(asdict(value))
+    if isinstance(value, datetime):
+        return value.isoformat()
     if isinstance(value, Enum):
         return value.value
     if isinstance(value, Path):

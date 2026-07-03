@@ -16,16 +16,16 @@ from cisco_collab_health.artifacts import (
     write_log_bundle,
     write_preflight_artifacts,
 )
-from cisco_collab_health.collectors.axl import AxlCollector
-from cisco_collab_health.collectors.base import CollectionContext
+from cisco_collab_health.collector_registry import select_collectors
+from cisco_collab_health.collectors.base import CollectionContext, TlsPolicy
 from cisco_collab_health.config import (
     RuntimeProfile,
     ensure_runtime_profile,
-    load_profile_names,
     select_or_create_runtime_profile,
 )
 from cisco_collab_health.engine import AssessmentEngine
 from cisco_collab_health.interfaces import PreflightResult, run_publisher_preflight
+from cisco_collab_health.menu import run_menu
 from cisco_collab_health.models.assessment import AssessmentReport
 from cisco_collab_health.reports.html import HtmlReportBuilder
 from cisco_collab_health.reports.json import JsonReportBuilder
@@ -64,6 +64,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--no-artifacts",
         action="store_true",
         help="Do not write local parser/debug artifacts.",
+    )
+    parser.add_argument(
+        "--artifact-redaction",
+        choices=("none", "secrets", "customer-data"),
+        default="secrets",
+        help="Redaction mode for local API artifacts. Defaults to secrets.",
     )
     parser.add_argument(
         "--log-dir",
@@ -123,6 +129,21 @@ def build_parser() -> argparse.ArgumentParser:
         default=8443,
         help="PerfMon HTTPS port.",
     )
+    parser.add_argument(
+        "--verify-tls",
+        action="store_true",
+        help="Verify CUCM HTTPS certificates using system trust or --ca-bundle.",
+    )
+    parser.add_argument(
+        "--insecure",
+        action="store_true",
+        help="Disable CUCM HTTPS certificate verification. This is the alpha default.",
+    )
+    parser.add_argument(
+        "--ca-bundle",
+        default=None,
+        help="CA bundle path used when --verify-tls is enabled.",
+    )
     return parser
 
 
@@ -134,7 +155,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     try:
         if not provided_args:
-            return _run_menu(args, status)
+            return run_menu(args, status, _run_assessment)
         return _run(args, status)
     except KeyboardInterrupt:
         status.warn("Interrupted by user")
@@ -163,137 +184,13 @@ def _run(args: argparse.Namespace, status: StatusPrinter) -> int:
     return _run_assessment(args, status, runtime_profile)
 
 
-def _run_menu(args: argparse.Namespace, status: StatusPrinter) -> int:
-    while True:
-        print()
-        print("Helios Main Menu")
-        print("================")
-        print("L. Load Profile")
-        print("N. New Profile")
-        print("G. Generate Report")
-        print("T. TEMP Test Options")
-        print("Q. Quit")
-        print()
-
-        choice = input("Selection: ").strip().lower()
-        if choice == "l":
-            result = _menu_load_profile(args, status)
-            if result is not None:
-                return result
-        elif choice == "n":
-            result = _menu_new_profile(args, status)
-            if result is not None:
-                return result
-        elif choice == "g":
-            _menu_generate_report(status)
-        elif choice == "t":
-            result = _menu_temp_options(args, status)
-            if result is not None:
-                return result
-        elif choice == "q":
-            status.info("Exiting Helios")
-            return 0
-        else:
-            status.warn("Invalid selection")
-
-
-def _menu_load_profile(args: argparse.Namespace, status: StatusPrinter) -> int | None:
-    profile_names = load_profile_names()
-    if not profile_names:
-        status.warn("No saved profiles found. Starting new profile creation.")
-        return _menu_new_profile(args, status)
-
-    print()
-    print("Saved Profiles")
-    print("==============")
-    for index, name in enumerate(profile_names, start=1):
-        print(f"{index}. {name}")
-    print("R. Return")
-    print()
-
-    while True:
-        choice = input("Profile number/name: ").strip()
-        if choice.lower() == "r":
-            return None
-        if choice.isdigit():
-            index = int(choice)
-            if 1 <= index <= len(profile_names):
-                runtime_profile = ensure_runtime_profile(
-                    profile_names[index - 1],
-                    save_credentials=not args.no_save_credentials,
-                )
-                return _menu_profile_action(args, status, runtime_profile)
-        if choice in profile_names:
-            runtime_profile = ensure_runtime_profile(
-                choice,
-                save_credentials=not args.no_save_credentials,
-            )
-            return _menu_profile_action(args, status, runtime_profile)
-        status.warn("Invalid profile selection")
-
-
-def _menu_new_profile(args: argparse.Namespace, status: StatusPrinter) -> int | None:
-    profile_name = _prompt_new_menu_profile_name(load_profile_names(), status)
-    runtime_profile = ensure_runtime_profile(
-        profile_name,
-        save_credentials=not args.no_save_credentials,
-    )
-    return _menu_profile_action(args, status, runtime_profile)
-
-
-def _menu_profile_action(
-    args: argparse.Namespace,
-    status: StatusPrinter,
-    runtime_profile: RuntimeProfile,
-) -> int | None:
-    while True:
-        choice = input("Run (H)ealth Assessment or (R)eturn to main menu: ").strip().lower()
-        if choice == "h":
-            return _run_assessment(args, status, runtime_profile)
-        if choice == "r":
-            return None
-        status.warn("Enter H to run the assessment or R to return")
-
-
-def _menu_generate_report(status: StatusPrinter) -> None:
-    status.warn("Report generation from existing artifacts is not implemented yet.")
-    status.info("Run a Health Assessment to generate the current Executive Summary and HTML report.")
-
-
-def _menu_temp_options(args: argparse.Namespace, status: StatusPrinter) -> int | None:
-    while True:
-        print()
-        print("TEMP Test Options")
-        print("=================")
-        print("S. Run framework smoke test")
-        print("R. Return")
-        print()
-        choice = input("Selection: ").strip().lower()
-        if choice == "s":
-            return _run_assessment(args, status, None)
-        if choice == "r":
-            return None
-        status.warn("Invalid selection")
-
-
-def _prompt_new_menu_profile_name(existing_names: list[str], status: StatusPrinter) -> str:
-    while True:
-        profile_name = input("New profile name: ").strip()
-        if not profile_name:
-            status.warn("Profile name cannot be empty")
-            continue
-        if profile_name in existing_names:
-            status.warn("Profile Name In Use")
-            continue
-        return profile_name
-
-
 def _run_assessment(
     args: argparse.Namespace,
     status: StatusPrinter,
     runtime_profile: RuntimeProfile | None,
 ) -> int:
-    context = CollectionContext()
+    tls_policy = _tls_policy_from_args(args)
+    context = CollectionContext(tls=tls_policy)
     run_started = datetime.now()
     artifact_store: ArtifactStore | None = None
     log_store: RunLogStore | None = None
@@ -318,6 +215,7 @@ def _run_assessment(
             risport_port=args.risport_port,
             control_center_port=args.control_center_port,
             perfmon_port=args.perfmon_port,
+            tls=tls_policy,
         )
         artifact_store = _create_artifact_store(args, status, profile_name, run_started)
         context = replace(context, artifact_store=artifact_store)
@@ -326,8 +224,12 @@ def _run_assessment(
             profile_name=profile_name,
             publisher_ip=runtime_profile.stored.publisher_ip,
             skipped_profile=False,
+            artifact_redaction=args.artifact_redaction,
+            tls_verify=tls_policy.verify,
+            tls_ca_bundle=str(tls_policy.ca_bundle) if tls_policy.ca_bundle else None,
         )
         status.ok(f"Profile loaded: {runtime_profile.stored.name}")
+        _print_tls_status(tls_policy, status)
         status.stage(f"Running Publisher preflight: {runtime_profile.stored.publisher_ip}")
         preflight = run_publisher_preflight(
             context,
@@ -351,9 +253,15 @@ def _run_assessment(
             profile_name=profile_name,
             publisher_ip=None,
             skipped_profile=True,
+            artifact_redaction=args.artifact_redaction,
+            tls_verify=tls_policy.verify,
+            tls_ca_bundle=str(tls_policy.ca_bundle) if tls_policy.ca_bundle else None,
         )
 
-    collectors = _select_collectors(preflight if runtime_profile is not None else None)
+    collectors = select_collectors(
+        preflight if runtime_profile is not None else None,
+        smoke_test=runtime_profile is None,
+    )
     if collectors:
         status.info("Collectors enabled: " + ", ".join(collector.name for collector in collectors))
     else:
@@ -369,6 +277,11 @@ def _run_assessment(
     for collector_result in report.collector_results:
         for warning in collector_result.warnings:
             status.warn(f"{collector_result.collector_name}: {warning}")
+        for error in collector_result.errors:
+            status.fail(
+                f"{collector_result.collector_name}: "
+                f"{error.exception_type}: {error.message}"
+            )
     if artifact_store:
         write_assessment_artifacts(artifact_store, report)
         status.ok(f"Assessment artifacts written: {artifact_store.root}")
@@ -426,7 +339,12 @@ def _create_artifact_store(
         return None
 
     status.stage("Preparing local artifact storage")
-    store = ArtifactStore.create(args.artifact_dir, profile_name, run_started)
+    store = ArtifactStore.create(
+        args.artifact_dir,
+        profile_name,
+        run_started,
+        redaction_mode=args.artifact_redaction,
+    )
     status.ok(f"Artifact directory: {store.root}")
     return store
 
@@ -453,6 +371,9 @@ def _write_manifest(
     profile_name: str,
     publisher_ip: str | None,
     skipped_profile: bool,
+    artifact_redaction: str,
+    tls_verify: bool,
+    tls_ca_bundle: str | None,
 ) -> None:
     if not store:
         return
@@ -463,8 +384,25 @@ def _write_manifest(
             "profile_name": profile_name,
             "publisher_ip": publisher_ip,
             "skipped_profile": skipped_profile,
+            "artifact_redaction": artifact_redaction,
+            "tls_verify": tls_verify,
+            "tls_ca_bundle": tls_ca_bundle,
         }
     )
+
+
+def _tls_policy_from_args(args: argparse.Namespace) -> TlsPolicy:
+    verify = bool(args.verify_tls and not args.insecure)
+    ca_bundle = Path(args.ca_bundle).expanduser() if args.ca_bundle else None
+    return TlsPolicy(verify=verify, ca_bundle=ca_bundle)
+
+
+def _print_tls_status(policy: TlsPolicy, status: StatusPrinter) -> None:
+    if policy.verify:
+        detail = f" using CA bundle {policy.ca_bundle}" if policy.ca_bundle else ""
+        status.info(f"TLS verification: enabled{detail}")
+    else:
+        status.warn("TLS verification: disabled")
 
 
 def _write_log_manifest(
@@ -483,15 +421,6 @@ def _write_log_manifest(
             "publisher_ip": publisher_ip,
         }
     )
-
-
-def _select_collectors(preflight: PreflightResult | None):
-    if preflight is None:
-        return []
-    collectors = []
-    if "axl" in preflight.available_interfaces:
-        collectors.append(AxlCollector())
-    return collectors
 
 
 def _print_preflight_status(preflight: PreflightResult, status: StatusPrinter) -> None:

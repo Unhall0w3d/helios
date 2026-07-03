@@ -10,7 +10,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from cisco_collab_health.artifacts import ArtifactStore
-from cisco_collab_health.collectors.axl import AxlCollector
+from cisco_collab_health.collectors.axl import AxlCollector, AxlVersionPolicy
 from cisco_collab_health.collectors.base import CollectionContext
 
 
@@ -105,6 +105,20 @@ class FakeResponse:
 
 
 class AxlCollectorTests(unittest.TestCase):
+    def test_axl_version_policy_prefers_discovered_supported_version(self) -> None:
+        policy = AxlVersionPolicy()
+
+        candidates = policy.candidates("15.0.1.12900(234)")
+
+        self.assertEqual(candidates[:2], ("15.0", "14.0"))
+
+    def test_axl_version_policy_selects_best_helios_supported_cucm_version(self) -> None:
+        policy = AxlVersionPolicy()
+
+        retry = policy.best_supported_version(["12.x", "14.0", "15.0"], {"14.0"})
+
+        self.assertEqual(retry, "15.0")
+
     def test_axl_collector_normalizes_version_and_process_nodes(self) -> None:
         context = CollectionContext(
             publisher_ip="10.51.200.8",
@@ -166,7 +180,7 @@ class AxlCollectorTests(unittest.TestCase):
             )
 
             with patch(
-                "cisco_collab_health.collectors.axl.urllib.request.urlopen",
+                "cisco_collab_health.transport.soap.urllib.request.urlopen",
                 return_value=FakeResponse(GET_VERSION_RESPONSE),
             ):
                 AxlCollector()._call_axl(context, "getCCMVersion", "<axl:getCCMVersion />")
@@ -200,7 +214,7 @@ class AxlCollectorTests(unittest.TestCase):
             )
 
             with patch(
-                "cisco_collab_health.collectors.axl.urllib.request.urlopen",
+                "cisco_collab_health.transport.soap.urllib.request.urlopen",
                 side_effect=[http_error, FakeResponse(GET_VERSION_RESPONSE)],
             ) as urlopen:
                 response = AxlCollector()._call_axl(
@@ -236,6 +250,51 @@ class AxlCollectorTests(unittest.TestCase):
         self.assertIn("CUCM:DB ver=14.0", first_request_text)
         self.assertIn("CUCM:DB ver=15.0", retry_request_text)
         self.assertIn("http://www.cisco.com/AXL/API/15.0", retry_request_text)
+
+    def test_axl_call_reuses_winning_schema_version(self) -> None:
+        http_error = urllib.error.HTTPError(
+            url="https://10.51.200.8:8443/axl/",
+            code=599,
+            msg="",
+            hdrs={"content-type": "text/html"},
+            fp=io.BytesIO(INCORRECT_AXL_VERSION_RESPONSE.encode("utf-8")),
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            store = ArtifactStore.create(Path(tmpdir), "lab")
+            context = CollectionContext(
+                publisher_ip="10.51.200.8",
+                gui_username="apiuser",
+                gui_password="secret",
+                artifact_store=store,
+            )
+            collector = AxlCollector()
+
+            with patch(
+                "cisco_collab_health.transport.soap.urllib.request.urlopen",
+                side_effect=[
+                    http_error,
+                    FakeResponse(GET_VERSION_RESPONSE),
+                    FakeResponse(LIST_PROCESS_NODE_RESPONSE),
+                ],
+            ) as urlopen:
+                collector._call_axl(context, "getCCMVersion", "<axl:getCCMVersion />")
+                http_error.close()
+                collector._call_axl(context, "listProcessNode", "<axl:listProcessNode />")
+
+            list_request = (
+                store.root
+                / "nodes"
+                / "10.51.200.8"
+                / "api"
+                / "axl"
+                / "listProcessNode"
+                / "request.txt"
+            )
+            list_request_text = list_request.read_text(encoding="utf-8")
+
+        self.assertEqual(urlopen.call_count, 3)
+        self.assertIn("CUCM:DB ver=15.0", list_request_text)
 
 
 if __name__ == "__main__":

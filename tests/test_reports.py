@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import unittest
 
-from cisco_collab_health.collectors.base import CollectionResult
+from cisco_collab_health.collectors.base import CollectionResult, CollectorError
 from cisco_collab_health.collectors.sample import SampleCollector
 from cisco_collab_health.engine import AssessmentEngine
 from cisco_collab_health.models.assessment import AssessmentReport
@@ -30,6 +30,8 @@ class ReportBuilderTests(unittest.TestCase):
 
         self.assertEqual(parsed["facts"]["cluster"]["name"], "alpha-lab")
         self.assertEqual(parsed["findings"][0]["severity"], "info")
+        self.assertEqual(parsed["findings"][0]["evidence"][0]["source"], "normalized_facts")
+        self.assertIn("collected_at", parsed["findings"][0]["evidence"][0])
 
     def test_executive_summary_contains_overview(self) -> None:
         payload = ExecutiveSummaryBuilder().build(self.report, "reports/example.html")
@@ -44,8 +46,9 @@ class ReportBuilderTests(unittest.TestCase):
         self.assertIn("<!doctype html>", payload)
         self.assertIn("Cisco Collaboration Health Assessment", payload)
         self.assertIn("Cluster identity collected", payload)
+        self.assertIn("Source: normalized_facts", payload)
 
-    def test_html_report_contains_collector_warnings(self) -> None:
+    def test_html_report_contains_collector_issues(self) -> None:
         report = AssessmentReport(
             facts=AssessmentFacts(),
             collector_results=[
@@ -53,6 +56,12 @@ class ReportBuilderTests(unittest.TestCase):
                     collector_name="axl",
                     facts=AssessmentFacts(),
                     warnings=["AXL getCCMVersion failed: HTTP 599"],
+                    errors=[
+                        CollectorError(
+                            message="simulated collector failure",
+                            exception_type="RuntimeError",
+                        )
+                    ],
                 )
             ],
             findings=[],
@@ -60,8 +69,9 @@ class ReportBuilderTests(unittest.TestCase):
 
         payload = HtmlReportBuilder().build(report)
 
-        self.assertIn("Collector Warnings", payload)
+        self.assertIn("Collector Issues", payload)
         self.assertIn("AXL getCCMVersion failed: HTTP 599", payload)
+        self.assertIn("RuntimeError: simulated collector failure", payload)
 
 
 if __name__ == "__main__":

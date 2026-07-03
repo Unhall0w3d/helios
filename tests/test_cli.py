@@ -43,6 +43,19 @@ class CliTests(unittest.TestCase):
 
         self.assertEqual(result, 130)
 
+    def test_skip_profile_runs_sample_collector(self) -> None:
+        output = io.StringIO()
+        with (
+            patch("cisco_collab_health.cli.StatusPrinter._should_color", return_value=False),
+            patch("cisco_collab_health.cli.sys.stdout", output),
+        ):
+            result = cli.main(["--skip-profile", "--no-html-report", "--no-artifacts", "--no-logs"])
+
+        self.assertEqual(result, 0)
+        self.assertIn("[INFO] Collectors enabled: sample", output.getvalue())
+        self.assertIn("Cluster: alpha-lab", output.getvalue())
+        self.assertIn("Nodes discovered: 2", output.getvalue())
+
     def test_value_error_returns_failure(self) -> None:
         with patch("cisco_collab_health.cli.AssessmentEngine.run", side_effect=ValueError("bad input")):
             result = cli.main(["--skip-profile", "--no-html-report", "--no-artifacts", "--no-logs"])

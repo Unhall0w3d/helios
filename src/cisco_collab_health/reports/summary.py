@@ -16,6 +16,7 @@ class ExecutiveSummaryBuilder:
         critical_count = severity_counts[FindingSeverity.CRITICAL]
         warning_count = severity_counts[FindingSeverity.WARNING]
         info_count = severity_counts[FindingSeverity.INFO]
+        collector_error_count = sum(len(result.errors) for result in report.collector_results)
 
         lines = [
             "Executive Summary",
@@ -39,6 +40,7 @@ class ExecutiveSummaryBuilder:
             [
                 f"Nodes discovered: {len(report.facts.nodes)}",
                 f"Findings: {critical_count} critical, {warning_count} warning, {info_count} info",
+                f"Collector errors: {collector_error_count}",
                 "",
                 "Highlights:",
             ]

@@ -16,7 +16,7 @@ class HtmlReportBuilder:
         severity_counts = Counter(finding.severity for finding in report.findings)
         cluster_section = self._cluster_section(report)
         node_rows = self._node_rows(report)
-        collector_warnings_section = self._collector_warnings_section(report)
+        collector_issues_section = self._collector_issues_section(report)
         finding_sections = "\n".join(self._finding_section(finding) for finding in report.findings)
 
         return f"""<!doctype html>
@@ -156,7 +156,7 @@ class HtmlReportBuilder:
         </tbody>
       </table>
     </section>
-    {collector_warnings_section}
+    {collector_issues_section}
     <section>
       <h2>Findings</h2>
       {finding_sections}
@@ -205,14 +205,23 @@ class HtmlReportBuilder:
             for node in report.facts.nodes
         )
 
-    def _collector_warnings_section(self, report: AssessmentReport) -> str:
+    def _collector_issues_section(self, report: AssessmentReport) -> str:
         rows = []
         for result in report.collector_results:
             for warning in result.warnings:
                 rows.append(
                     "<tr>"
                     f"<td>{escape(result.collector_name)}</td>"
+                    "<td>warning</td>"
                     f"<td>{escape(warning)}</td>"
+                    "</tr>"
+                )
+            for error in result.errors:
+                rows.append(
+                    "<tr>"
+                    f"<td>{escape(result.collector_name)}</td>"
+                    "<td>error</td>"
+                    f"<td>{escape(error.exception_type)}: {escape(error.message)}</td>"
                     "</tr>"
                 )
         if not rows:
@@ -220,9 +229,9 @@ class HtmlReportBuilder:
 
         return f"""
     <section>
-      <h2>Collector Warnings</h2>
+      <h2>Collector Issues</h2>
       <table>
-        <thead><tr><th>Collector</th><th>Warning</th></tr></thead>
+        <thead><tr><th>Collector</th><th>Type</th><th>Message</th></tr></thead>
         <tbody>
           {"".join(rows)}
         </tbody>
@@ -236,6 +245,7 @@ class HtmlReportBuilder:
         recommendation = ""
         if finding.recommendation:
             recommendation = f"<p><strong>Recommendation:</strong> {escape(finding.recommendation)}</p>"
+        evidence = self._evidence_list(finding)
 
         return f"""
       <article class="finding {severity}">
@@ -250,6 +260,33 @@ class HtmlReportBuilder:
         <ul class="facts">
           {facts}
         </ul>
+        {evidence}
         {recommendation}
       </article>
+"""
+
+    def _evidence_list(self, finding: HealthFinding) -> str:
+        if not finding.evidence:
+            return ""
+
+        items = []
+        for evidence in finding.evidence:
+            node = f" | Node: {escape(evidence.node)}" if evidence.node else ""
+            artifact = ""
+            if evidence.artifact_path:
+                artifact = f" | Artifact: {escape(str(evidence.artifact_path))}"
+            items.append(
+                "<li>"
+                f"Source: {escape(evidence.source)} | "
+                f"Operation: {escape(evidence.operation)}"
+                f"{node}{artifact} | "
+                f"Confidence: {escape(evidence.confidence)}"
+                "</li>"
+            )
+
+        return f"""
+        <p><strong>Evidence:</strong></p>
+        <ul class="facts">
+          {"".join(items)}
+        </ul>
 """

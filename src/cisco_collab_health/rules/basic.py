@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from cisco_collab_health.models.evidence import EvidenceRef
 from cisco_collab_health.models.facts import AssessmentFacts
 from cisco_collab_health.models.findings import (
     FindingSeverity,
@@ -29,7 +30,12 @@ class ClusterIdentityRule:
                         f"Cluster name: {facts.cluster.name}",
                     ],
                     reasoning="The assessment has enough identity data to anchor later findings.",
-                    evidence={"cluster_name": facts.cluster.name},
+                    evidence=[
+                        EvidenceRef(
+                            source="normalized_facts",
+                            operation="cluster_identity",
+                        )
+                    ],
                 )
             ]
 
@@ -99,6 +105,13 @@ class NodeReachabilityRule:
                     "or collection credential problems that require investigation."
                 ),
                 recommendation="Validate node reachability and distinguish service impact from collection failure.",
-                evidence={node.name: node.address for node in unreachable_nodes},
+                evidence=[
+                    EvidenceRef(
+                        source="normalized_facts",
+                        operation="node_reachability",
+                        node=node.name,
+                    )
+                    for node in unreachable_nodes
+                ],
             )
         ]

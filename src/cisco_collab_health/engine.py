@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from dataclasses import dataclass
 
-from cisco_collab_health.collectors.base import CollectionContext, Collector
+from cisco_collab_health.collectors.base import CollectionContext, CollectionResult, Collector, CollectorError
 from cisco_collab_health.models.assessment import AssessmentReport
 from cisco_collab_health.models.facts import AssessmentFacts
 from cisco_collab_health.rules.base import HealthRule
@@ -24,7 +24,19 @@ class AssessmentEngine:
         collector_results = []
 
         for collector in self.collectors:
-            result = collector.collect(collection_context)
+            try:
+                result = collector.collect(collection_context)
+            except Exception as exc:
+                result = CollectionResult(
+                    collector_name=getattr(collector, "name", collector.__class__.__name__),
+                    facts=AssessmentFacts(),
+                    errors=[
+                        CollectorError(
+                            message=str(exc),
+                            exception_type=exc.__class__.__name__,
+                        )
+                    ],
+                )
             collector_results.append(result)
             facts.merge(result.facts)
 

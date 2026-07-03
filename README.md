@@ -129,6 +129,15 @@ To choose an explicit artifact directory:
 ./helios.py --artifact-dir assessment_runs
 ```
 
+API request/response artifacts redact secret headers and password-like XML tags
+by default. To choose a different local artifact redaction mode:
+
+```bash
+./helios.py --artifact-redaction secrets
+./helios.py --artifact-redaction customer-data
+./helios.py --artifact-redaction none
+```
+
 To disable local artifact writing:
 
 ```bash
@@ -169,6 +178,16 @@ If a lab uses alternate API ports, override them at startup:
 ```bash
 ./helios.py --axl-port 9443 --risport-port 9444 --control-center-port 9445 --perfmon-port 9446
 ```
+
+By default, Helios allows CUCM self-signed or privately issued HTTPS
+certificates during alpha testing. To verify CUCM HTTPS certificates:
+
+```bash
+./helios.py --verify-tls
+./helios.py --verify-tls --ca-bundle /path/to/ca.pem
+```
+
+Use `--insecure` to explicitly keep certificate verification disabled.
 
 If you prefer installing Helios as a Python package during development, the
 `ccha` console command is also available after an editable install:
@@ -217,6 +236,12 @@ Use `--no-save-credentials` to avoid storing passwords for the current run:
 Helios writes local per-run artifacts for parser development, debugging, manual
 review, and future evidence traceability. These files are intentionally ignored
 by git and are separate from the human HTML files in `reports/`.
+
+Generated artifacts, troubleshooting logs, JSON reports, and HTML reports may
+contain customer-sensitive infrastructure data, including hostnames, IP
+addresses, device names, directory numbers, route patterns, CSS and partition
+names, user identifiers, and cluster topology. Do not commit or publish
+generated output from real customer environments.
 
 Default layout:
 
