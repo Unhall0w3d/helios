@@ -137,6 +137,47 @@ class AssessmentFactsTests(unittest.TestCase):
         self.assertEqual(facts.devices[0].description, "Lobby phone")
         self.assertEqual(facts.devices[0].device_pool, "Lobby")
 
+    def test_merge_preserves_richer_device_inventory_when_duplicate_is_sparse(self) -> None:
+        facts = AssessmentFacts(
+            devices=[
+                DeviceInventoryFact(
+                    name="SEP001122334455",
+                    description="Lobby phone",
+                    model="Cisco 8845",
+                    protocol="SIP",
+                    device_pool="Default",
+                    call_manager_group="Default",
+                    location="Hub_None",
+                    region="Default",
+                    configured_load="sip8845.14-2-1",
+                    source="AXL.listPhone.summary",
+                )
+            ]
+        )
+        other = AssessmentFacts(
+            devices=[
+                DeviceInventoryFact(
+                    name="sep001122334455",
+                    description=None,
+                    model=None,
+                    protocol=None,
+                    device_pool=None,
+                    call_manager_group=None,
+                    location=None,
+                    region=None,
+                    configured_load=None,
+                    source="AXL.listPhone.summary",
+                )
+            ]
+        )
+
+        facts.merge(other)
+
+        self.assertEqual(len(facts.devices), 1)
+        self.assertEqual(facts.devices[0].description, "Lobby phone")
+        self.assertEqual(facts.devices[0].model, "Cisco 8845")
+        self.assertEqual(facts.devices[0].configured_load, "sip8845.14-2-1")
+
     def test_merge_deduplicates_runtime_fact_types_by_stable_keys(self) -> None:
         facts = AssessmentFacts(
             registrations=[

@@ -36,6 +36,7 @@ class CollectionContext:
     risport_port: int = 8443
     control_center_port: int = 8443
     perfmon_port: int = 8443
+    collect_phone_inventory: bool = False
 
 
 @dataclass(frozen=True)

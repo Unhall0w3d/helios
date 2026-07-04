@@ -91,6 +91,17 @@ class PlatformCheckFact:
     source: str
 
 
+@dataclass(frozen=True)
+class CollectorIssueFact:
+    """Warning or error emitted by a collector during an assessment."""
+
+    collector_name: str
+    issue_type: str
+    message: str
+    exception_type: str | None = None
+    source: str = "collector_result"
+
+
 @dataclass
 class AssessmentFacts:
     """Container for normalized assessment facts."""
@@ -102,6 +113,7 @@ class AssessmentFacts:
     services: list[ServiceStatusFact] = field(default_factory=list)
     perf_counters: list[PerfCounterFact] = field(default_factory=list)
     platform_checks: list[PlatformCheckFact] = field(default_factory=list)
+    collector_issues: list[CollectorIssueFact] = field(default_factory=list)
 
     def add_node(self, node: CollaborationNode) -> None:
         """Add or merge a node observation by stable node identity."""
@@ -133,17 +145,33 @@ class AssessmentFacts:
             self.cluster = other.cluster
         for node in other.nodes:
             self.add_node(node)
-        _merge_by_key(self.devices, other.devices, _device_inventory_key)
-        _merge_by_key(self.registrations, other.registrations, _device_registration_key)
-        _merge_by_key(self.services, other.services, _service_status_key)
+        _merge_by_key(self.devices, other.devices, _device_inventory_key, _merge_device_inventory)
+        _merge_by_key(
+            self.registrations,
+            other.registrations,
+            _device_registration_key,
+            _merge_device_registration,
+        )
+        _merge_by_key(self.services, other.services, _service_status_key, _merge_service_status)
         _merge_by_key(self.perf_counters, other.perf_counters, _perf_counter_key)
-        _merge_by_key(self.platform_checks, other.platform_checks, _platform_check_key)
+        _merge_by_key(
+            self.platform_checks,
+            other.platform_checks,
+            _platform_check_key,
+            _merge_platform_check,
+        )
+        self.collector_issues.extend(other.collector_issues)
 
 
 T = TypeVar("T")
 
 
-def _merge_by_key(target: list[T], incoming: list[T], key_for: Callable[[T], object]) -> None:
+def _merge_by_key(
+    target: list[T],
+    incoming: list[T],
+    key_for: Callable[[T], object],
+    merge_item: Callable[[T, T], T] | None = None,
+) -> None:
     key_function = key_for
     existing_keys = {key_function(item): index for index, item in enumerate(target)}
     for item in incoming:
@@ -153,7 +181,8 @@ def _merge_by_key(target: list[T], incoming: list[T], key_for: Callable[[T], obj
             existing_keys[key] = len(target)
             target.append(item)
         else:
-            target[existing_index] = item
+            existing = target[existing_index]
+            target[existing_index] = merge_item(existing, item) if merge_item else item
 
 
 def _node_keys(node: CollaborationNode) -> set[str]:
@@ -187,6 +216,81 @@ def _merge_reachability(existing: bool | None, new: bool | None) -> bool | None:
     if existing is True or new is True:
         return True
     return None
+
+
+def _prefer(existing: T, incoming: T) -> T:
+    if incoming not in (None, "", [], {}):
+        return incoming
+    return existing
+
+
+def _merge_sources(existing: str, incoming: str) -> str:
+    sources = []
+    for source in (existing, incoming):
+        if source and source not in sources:
+            sources.append(source)
+    return ", ".join(sources)
+
+
+def _merge_device_inventory(
+    existing: DeviceInventoryFact,
+    incoming: DeviceInventoryFact,
+) -> DeviceInventoryFact:
+    return DeviceInventoryFact(
+        name=_prefer(existing.name, incoming.name),
+        description=_prefer(existing.description, incoming.description),
+        model=_prefer(existing.model, incoming.model),
+        protocol=_prefer(existing.protocol, incoming.protocol),
+        device_pool=_prefer(existing.device_pool, incoming.device_pool),
+        call_manager_group=_prefer(existing.call_manager_group, incoming.call_manager_group),
+        location=_prefer(existing.location, incoming.location),
+        region=_prefer(existing.region, incoming.region),
+        configured_load=_prefer(existing.configured_load, incoming.configured_load),
+        source=_merge_sources(existing.source, incoming.source),
+    )
+
+
+def _merge_device_registration(
+    existing: DeviceRegistrationFact,
+    incoming: DeviceRegistrationFact,
+) -> DeviceRegistrationFact:
+    return DeviceRegistrationFact(
+        name=_prefer(existing.name, incoming.name),
+        status=_prefer(existing.status, incoming.status),
+        registered_node=_prefer(existing.registered_node, incoming.registered_node),
+        ip_address=_prefer(existing.ip_address, incoming.ip_address),
+        model=_prefer(existing.model, incoming.model),
+        protocol=_prefer(existing.protocol, incoming.protocol),
+        source=_merge_sources(existing.source, incoming.source),
+    )
+
+
+def _merge_service_status(
+    existing: ServiceStatusFact,
+    incoming: ServiceStatusFact,
+) -> ServiceStatusFact:
+    return ServiceStatusFact(
+        node=_prefer(existing.node, incoming.node),
+        service_name=_prefer(existing.service_name, incoming.service_name),
+        activated=_prefer(existing.activated, incoming.activated),
+        status=_prefer(existing.status, incoming.status),
+        uptime_seconds=_prefer(existing.uptime_seconds, incoming.uptime_seconds),
+        source=_merge_sources(existing.source, incoming.source),
+    )
+
+
+def _merge_platform_check(
+    existing: PlatformCheckFact,
+    incoming: PlatformCheckFact,
+) -> PlatformCheckFact:
+    details = {**existing.details, **incoming.details}
+    return PlatformCheckFact(
+        node=_prefer(existing.node, incoming.node),
+        check_name=_prefer(existing.check_name, incoming.check_name),
+        status=_prefer(existing.status, incoming.status),
+        details=details,
+        source=_merge_sources(existing.source, incoming.source),
+    )
 
 
 def _device_inventory_key(fact: DeviceInventoryFact) -> str:

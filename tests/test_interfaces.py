@@ -41,8 +41,14 @@ class InterfaceProbeTests(unittest.TestCase):
         )
 
         self.assertEqual(result.publisher, "192.0.2.10")
-        self.assertEqual([check.name for check in result.connectivity], ["ping", "https_443", "https_8443"])
-        self.assertEqual(result.available_interfaces, ["axl", "risport70", "control_center", "perfmon"])
+        self.assertEqual(
+            [check.name for check in result.connectivity],
+            ["ping", "https_443", "https_8443"],
+        )
+        self.assertEqual(
+            result.available_interfaces,
+            ["axl", "risport70", "control_center", "perfmon"],
+        )
         self.assertFalse(result.connectivity[1].available)
         self.assertTrue(result.connectivity[2].available)
 
@@ -69,7 +75,10 @@ class InterfaceProbeTests(unittest.TestCase):
                 "https://192.0.2.10:9446/perfmonservice2/services/PerfmonService?wsdl",
             ],
         )
-        self.assertEqual(result.available_interfaces, ["axl", "risport70", "control_center", "perfmon"])
+        self.assertEqual(
+            result.available_interfaces,
+            ["axl", "risport70", "control_center", "perfmon"],
+        )
 
 
 if __name__ == "__main__":

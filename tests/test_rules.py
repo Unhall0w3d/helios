@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import unittest
 
-from cisco_collab_health.models.facts import AssessmentFacts, CollaborationNode
+from cisco_collab_health.models.facts import AssessmentFacts, CollaborationNode, CollectorIssueFact
 from cisco_collab_health.models.findings import FindingSeverity
-from cisco_collab_health.rules.basic import NodeReachabilityRule
+from cisco_collab_health.rules.basic import CollectorHealthRule, NodeReachabilityRule
 
 
 class NodeReachabilityRuleTests(unittest.TestCase):
@@ -27,6 +27,42 @@ class NodeReachabilityRuleTests(unittest.TestCase):
         self.assertEqual(len(findings), 1)
         self.assertEqual(findings[0].severity, FindingSeverity.CRITICAL)
         self.assertIn("cucm-sub-02", findings[0].facts[0])
+
+
+class CollectorHealthRuleTests(unittest.TestCase):
+    def test_warning_issue_creates_warning_finding(self) -> None:
+        findings = CollectorHealthRule().evaluate(
+            AssessmentFacts(
+                collector_issues=[
+                    CollectorIssueFact(
+                        collector_name="axl",
+                        issue_type="warning",
+                        message="phone inventory skipped",
+                    )
+                ]
+            )
+        )
+
+        self.assertEqual(len(findings), 1)
+        self.assertEqual(findings[0].severity, FindingSeverity.WARNING)
+        self.assertIn("axl: warning: phone inventory skipped", findings[0].facts[0])
+
+    def test_error_issue_creates_critical_finding(self) -> None:
+        findings = CollectorHealthRule().evaluate(
+            AssessmentFacts(
+                collector_issues=[
+                    CollectorIssueFact(
+                        collector_name="axl",
+                        issue_type="error",
+                        message="transport failed",
+                        exception_type="RuntimeError",
+                    )
+                ]
+            )
+        )
+
+        self.assertEqual(len(findings), 1)
+        self.assertEqual(findings[0].severity, FindingSeverity.CRITICAL)
 
 
 if __name__ == "__main__":

@@ -11,4 +11,6 @@ class CliCollector:
     name = "cli"
 
     def collect(self, context: CollectionContext) -> CollectionResult:
-        raise NotImplementedError("CLI fallback collection is not implemented in the alpha skeleton.")
+        raise NotImplementedError(
+            "CLI fallback collection is not implemented in the alpha skeleton."
+        )

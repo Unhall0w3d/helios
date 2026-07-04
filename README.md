@@ -26,7 +26,7 @@ This is not yet a production-ready assessment tool.
 Current capabilities:
 
 - Core pipeline contracts
-- Initial AXL collector for `getCCMVersion`, `listProcessNode`, and `listPhone`
+- Initial AXL collector for `getCCMVersion`, `listProcessNode`, and opt-in summary `listPhone`
 - AXL schema retry when CUCM reports that the requested AXL version is unsupported
 - Publisher preflight and interface reachability checks
 - Initial health rule runner for collected identity/node facts
@@ -134,7 +134,6 @@ by default. To choose a different local artifact redaction mode:
 
 ```bash
 ./helios.py --artifact-redaction secrets
-./helios.py --artifact-redaction customer-data
 ./helios.py --artifact-redaction none
 ```
 
@@ -172,6 +171,14 @@ no longer required:
 
 Future collectors will use preflight status to avoid running collectors for
 interfaces that are unavailable.
+
+AXL phone inventory uses `listPhone` summary data and is disabled by default to
+avoid unbounded full-cluster inventory requests on large systems. Enable it only
+for small lab clusters until bounded paging is implemented:
+
+```bash
+./helios.py --collect-phone-inventory
+```
 
 If a lab uses alternate API ports, override them at startup:
 

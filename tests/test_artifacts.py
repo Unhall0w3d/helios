@@ -33,7 +33,9 @@ class ArtifactStoreTests(unittest.TestCase):
             manifest_payload = json.loads(manifest.read_text(encoding="utf-8"))
 
         self.assertEqual(manifest_payload["profile_name"], "Lab Cluster")
-        self.assertTrue(str(preflight).endswith("nodes/192.0.2.10/preflight/publisher_preflight.json"))
+        self.assertTrue(
+            str(preflight).endswith("nodes/192.0.2.10/preflight/publisher_preflight.json")
+        )
         self.assertIn("utils_dbreplication_runtimestate.txt", str(command))
 
     def test_api_exchange_is_stored_by_node_interface_and_operation(self) -> None:
@@ -48,7 +50,9 @@ class ArtifactStoreTests(unittest.TestCase):
             )
 
         self.assertTrue(str(request).endswith("nodes/192.0.2.10/api/axl/getCCMVersion/request.txt"))
-        self.assertTrue(str(response).endswith("nodes/192.0.2.10/api/axl/getCCMVersion/response.txt"))
+        self.assertTrue(
+            str(response).endswith("nodes/192.0.2.10/api/axl/getCCMVersion/response.txt")
+        )
 
     def test_api_exchange_redacts_secret_headers_by_default(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -57,7 +61,10 @@ class ArtifactStoreTests(unittest.TestCase):
                 "192.0.2.10",
                 "axl",
                 "getCCMVersion",
-                request="POST /axl HTTP/1.1\nAuthorization: Basic abc123\n\n<password>secret</password>",
+                request=(
+                    "POST /axl HTTP/1.1\nAuthorization: Basic abc123\n\n"
+                    "<password>secret</password>"
+                ),
                 response="HTTP 200\nset-cookie: SESSION=abc123\n\n<token>secret</token>",
             )
 
@@ -70,6 +77,8 @@ class ArtifactStoreTests(unittest.TestCase):
         self.assertIn("<token><redacted></token>", response_text)
         self.assertNotIn("abc123", request_text)
         self.assertNotIn("abc123", response_text)
+        self.assertNotIn("secret", request_text)
+        self.assertNotIn("secret", response_text)
 
     def test_api_exchange_can_disable_redaction(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -88,7 +97,10 @@ class ArtifactStoreTests(unittest.TestCase):
     def test_log_bundle_contains_summary_report_and_artifact_index(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             artifact_store = ArtifactStore.create(Path(tmpdir) / "assessment_runs", "lab")
-            artifact_store.write_text("nodes/192.0.2.10/api/axl/getCCMVersion/response.txt", "<xml />")
+            artifact_store.write_text(
+                "nodes/192.0.2.10/api/axl/getCCMVersion/response.txt",
+                "<xml />",
+            )
             log_store = RunLogStore.create(Path(tmpdir) / "logs", "lab")
             html_report = Path(tmpdir) / "report.html"
             html_report.write_text("<html></html>", encoding="utf-8")

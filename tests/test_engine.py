@@ -7,7 +7,11 @@ import unittest
 from cisco_collab_health.collectors.base import CollectionContext
 from cisco_collab_health.collectors.sample import SampleCollector
 from cisco_collab_health.engine import AssessmentEngine
-from cisco_collab_health.rules.basic import ClusterIdentityRule, NodeReachabilityRule
+from cisco_collab_health.rules.basic import (
+    ClusterIdentityRule,
+    CollectorHealthRule,
+    NodeReachabilityRule,
+)
 
 
 class BrokenCollector:
@@ -47,8 +51,25 @@ class AssessmentEngineTests(unittest.TestCase):
         self.assertEqual(report.collector_results[0].collector_name, "broken")
         self.assertEqual(len(report.collector_results[0].errors), 1)
         self.assertEqual(report.collector_results[0].errors[0].exception_type, "RuntimeError")
-        self.assertEqual(report.collector_results[0].errors[0].message, "simulated collector failure")
+        self.assertEqual(
+            report.collector_results[0].errors[0].message,
+            "simulated collector failure",
+        )
+        self.assertEqual(len(report.facts.collector_issues), 1)
+        self.assertEqual(report.facts.collector_issues[0].issue_type, "error")
         self.assertEqual(report.facts.cluster.name, "alpha-lab")
+
+    def test_collector_health_rule_reports_collector_errors(self) -> None:
+        engine = AssessmentEngine(
+            collectors=[BrokenCollector(), SampleCollector()],
+            rules=[CollectorHealthRule()],
+        )
+
+        report = engine.run()
+
+        self.assertEqual(len(report.findings), 1)
+        self.assertEqual(report.findings[0].rule_id, "core.collector_health")
+        self.assertIn("broken: error", report.findings[0].facts[0])
 
 
 if __name__ == "__main__":

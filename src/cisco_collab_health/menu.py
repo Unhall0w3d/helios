@@ -116,7 +116,9 @@ def _menu_profile_action(
 
 def _menu_generate_report(status: StatusPrinter) -> None:
     status.warn("Report generation from existing artifacts is not implemented yet.")
-    status.info("Run a Health Assessment to generate the current Executive Summary and HTML report.")
+    status.info(
+        "Run a Health Assessment to generate the current Executive Summary and HTML report."
+    )
 
 
 def _menu_temp_options(

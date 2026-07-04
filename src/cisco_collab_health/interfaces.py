@@ -74,14 +74,24 @@ def default_cucm_probes(
 
     return [
         InterfaceProbe("axl", host, axl_port, "/axl/"),
-        InterfaceProbe("risport70", host, risport_port, "/realtimeservice2/services/RISService70?wsdl"),
+        InterfaceProbe(
+            "risport70",
+            host,
+            risport_port,
+            "/realtimeservice2/services/RISService70?wsdl",
+        ),
         InterfaceProbe(
             "control_center",
             host,
             control_center_port,
             "/controlcenterservice2/services/ControlCenterServices?wsdl",
         ),
-        InterfaceProbe("perfmon", host, perfmon_port, "/perfmonservice2/services/PerfmonService?wsdl"),
+        InterfaceProbe(
+            "perfmon",
+            host,
+            perfmon_port,
+            "/perfmonservice2/services/PerfmonService?wsdl",
+        ),
     ]
 
 
@@ -252,7 +262,11 @@ def _http_probe(
     request = urllib.request.Request(url, method="GET")
     ssl_context = build_ssl_context(context.tls) if url.startswith("https://") else None
     try:
-        with urllib.request.urlopen(request, timeout=timeout_seconds, context=ssl_context) as response:
+        with urllib.request.urlopen(
+            request,
+            timeout=timeout_seconds,
+            context=ssl_context,
+        ) as response:
             return 200 <= response.status < 500, f"HTTP {response.status}"
     except urllib.error.HTTPError as exc:
         return exc.code < 500, f"HTTP {exc.code}"

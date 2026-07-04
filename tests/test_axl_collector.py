@@ -12,6 +12,7 @@ from unittest.mock import patch
 from cisco_collab_health.artifacts import ArtifactStore
 from cisco_collab_health.collectors.axl import AxlCollector, AxlVersionPolicy
 from cisco_collab_health.collectors.base import CollectionContext
+from cisco_collab_health.transport.soap import SoapResponse
 
 
 GET_VERSION_RESPONSE = """<?xml version="1.0" encoding="UTF-8"?>
@@ -35,12 +36,12 @@ LIST_PROCESS_NODE_RESPONSE = """<?xml version="1.0" encoding="UTF-8"?>
     <ns:listProcessNodeResponse xmlns:ns="http://www.cisco.com/AXL/API/11.5">
       <return>
         <processNode>
-          <name>10.51.200.8</name>
+          <name>192.0.2.10</name>
           <description>CUCM Publisher</description>
           <nodeUsage>Publisher</nodeUsage>
         </processNode>
         <processNode>
-          <name>10.51.200.9</name>
+          <name>192.0.2.11</name>
           <description>CUCM Subscriber</description>
           <nodeUsage>Subscriber</nodeUsage>
         </processNode>
@@ -110,7 +111,9 @@ LIST_PHONE_RESPONSE = """<?xml version="1.0" encoding="UTF-8"?>
 
 INCORRECT_AXL_VERSION_RESPONSE = """<!-- custom Cisco error page --><html>
 <body>
-<div id="content-header">HTTP Status 599 - Incorrect axl version. Supported axl versions are 12.x, 14.0 and 15.0</div>
+<div id="content-header">
+HTTP Status 599 - Incorrect axl version. Supported axl versions are 12.x, 14.0 and 15.0
+</div>
 <p><b>Message:</b> Incorrect axl version. Supported axl versions are 12.x, 14.0 and 15.0</p>
 </body>
 </html>"""
@@ -134,6 +137,19 @@ class FakeResponse:
         return self.body.encode("utf-8")
 
 
+def soap_response(body: str, operation: str = "operation") -> SoapResponse:
+    return SoapResponse(
+        status=200,
+        reason="OK",
+        headers={},
+        body=body,
+        operation=operation,
+        interface="axl",
+        artifact_request="request",
+        artifact_response="response",
+    )
+
+
 class AxlCollectorTests(unittest.TestCase):
     def test_axl_version_policy_prefers_discovered_supported_version(self) -> None:
         policy = AxlVersionPolicy()
@@ -151,7 +167,7 @@ class AxlCollectorTests(unittest.TestCase):
 
     def test_axl_collector_normalizes_version_and_process_nodes(self) -> None:
         context = CollectionContext(
-            publisher_ip="10.51.200.8",
+            publisher_ip="192.0.2.10",
             gui_username="apiuser",
             gui_password="secret",
         )
@@ -159,36 +175,75 @@ class AxlCollectorTests(unittest.TestCase):
 
         with patch.object(
             collector,
-            "_call_axl",
-            side_effect=[GET_VERSION_RESPONSE, LIST_PROCESS_NODE_RESPONSE, LIST_PHONE_RESPONSE],
+            "_call_axl_response",
+            side_effect=[
+                soap_response(GET_VERSION_RESPONSE, "getCCMVersion"),
+                soap_response(LIST_PROCESS_NODE_RESPONSE, "listProcessNode"),
+            ],
+        ):
+            result = collector.collect(context)
+
+        self.assertEqual(len(result.warnings), 1)
+        self.assertIn("phone inventory skipped", result.warnings[0])
+        self.assertIsNotNone(result.facts.cluster)
+        self.assertEqual(result.facts.cluster.version, "14.0.1.10000-20")
+        self.assertEqual(result.facts.cluster.name, "192.0.2.10")
+        self.assertEqual(
+            [node.address for node in result.facts.nodes],
+            ["192.0.2.10", "192.0.2.11"],
+        )
+        self.assertEqual([node.role for node in result.facts.nodes], ["publisher", "subscriber"])
+        self.assertEqual(result.facts.devices, [])
+
+    def test_axl_collector_collects_phone_inventory_when_enabled(self) -> None:
+        context = CollectionContext(
+            publisher_ip="192.0.2.10",
+            gui_username="apiuser",
+            gui_password="secret",
+            collect_phone_inventory=True,
+        )
+        collector = AxlCollector()
+
+        with patch.object(
+            collector,
+            "_call_axl_response",
+            side_effect=[
+                soap_response(GET_VERSION_RESPONSE, "getCCMVersion"),
+                soap_response(LIST_PROCESS_NODE_RESPONSE, "listProcessNode"),
+                soap_response(LIST_PHONE_RESPONSE, "listPhone"),
+            ],
         ):
             result = collector.collect(context)
 
         self.assertEqual(result.warnings, [])
-        self.assertIsNotNone(result.facts.cluster)
-        self.assertEqual(result.facts.cluster.version, "14.0.1.10000-20")
-        self.assertEqual(result.facts.cluster.name, "10.51.200.8")
-        self.assertEqual([node.address for node in result.facts.nodes], ["10.51.200.8", "10.51.200.9"])
-        self.assertEqual([node.role for node in result.facts.nodes], ["publisher", "subscriber"])
-        self.assertEqual([device.name for device in result.facts.devices], ["SEP001122334455", "CSFALICE"])
+        self.assertEqual(
+            [evidence.operation for evidence in result.evidence],
+            ["getCCMVersion", "listProcessNode", "listPhone"],
+        )
+        self.assertEqual(
+            [device.name for device in result.facts.devices],
+            ["SEP001122334455", "CSFALICE"],
+        )
         self.assertEqual(result.facts.devices[0].device_pool, "Default")
         self.assertEqual(result.facts.devices[0].configured_load, "sip8845.14-2-1")
+        self.assertEqual(result.facts.devices[0].source, "AXL.listPhone.summary")
 
     def test_axl_collector_ignores_enterprise_wide_data_process_node(self) -> None:
         context = CollectionContext(
-            publisher_ip="10.51.200.8",
+            publisher_ip="192.0.2.10",
             gui_username="apiuser",
             gui_password="secret",
+            collect_phone_inventory=True,
         )
         collector = AxlCollector()
 
         with patch.object(
             collector,
-            "_call_axl",
+            "_call_axl_response",
             side_effect=[
-                GET_VERSION_RESPONSE,
-                LIST_PROCESS_NODE_WITH_ENTERPRISE_DATA_RESPONSE,
-                LIST_PHONE_RESPONSE,
+                soap_response(GET_VERSION_RESPONSE, "getCCMVersion"),
+                soap_response(LIST_PROCESS_NODE_WITH_ENTERPRISE_DATA_RESPONSE, "listProcessNode"),
+                soap_response(LIST_PHONE_RESPONSE, "listPhone"),
             ],
         ):
             result = collector.collect(context)
@@ -202,19 +257,20 @@ class AxlCollectorTests(unittest.TestCase):
 
     def test_axl_collector_warns_when_phone_inventory_fails(self) -> None:
         context = CollectionContext(
-            publisher_ip="10.51.200.8",
+            publisher_ip="192.0.2.10",
             gui_username="apiuser",
             gui_password="secret",
+            collect_phone_inventory=True,
         )
         collector = AxlCollector()
 
         with patch.object(
             collector,
-            "_call_axl",
+            "_call_axl_response",
             side_effect=[
-                GET_VERSION_RESPONSE,
-                LIST_PROCESS_NODE_RESPONSE,
-                "<not-xml",
+                soap_response(GET_VERSION_RESPONSE, "getCCMVersion"),
+                soap_response(LIST_PROCESS_NODE_RESPONSE, "listProcessNode"),
+                soap_response("<not-xml", "listPhone"),
             ],
         ):
             result = collector.collect(context)
@@ -222,8 +278,40 @@ class AxlCollectorTests(unittest.TestCase):
         self.assertEqual(result.facts.devices, [])
         self.assertIn("AXL listPhone failed", result.warnings[0])
 
+    def test_axl_collector_evidence_references_response_artifacts(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            store = ArtifactStore.create(Path(tmpdir), "lab")
+            context = CollectionContext(
+                publisher_ip="192.0.2.10",
+                gui_username="apiuser",
+                gui_password="secret",
+                artifact_store=store,
+            )
+
+            with patch(
+                "cisco_collab_health.transport.soap.urllib.request.urlopen",
+                side_effect=[
+                    FakeResponse(GET_VERSION_RESPONSE),
+                    FakeResponse(LIST_PROCESS_NODE_RESPONSE),
+                ],
+            ):
+                result = AxlCollector().collect(context)
+
+        self.assertEqual(
+            [evidence.operation for evidence in result.evidence],
+            ["getCCMVersion", "listProcessNode"],
+        )
+        self.assertTrue(result.evidence[0].artifact_path)
+        self.assertTrue(
+            str(result.evidence[0].artifact_path).endswith("getCCMVersion/response.txt")
+        )
+        self.assertTrue(result.evidence[1].artifact_path)
+        self.assertTrue(
+            str(result.evidence[1].artifact_path).endswith("listProcessNode/response.txt")
+        )
+
     def test_axl_collector_returns_warning_without_credentials(self) -> None:
-        result = AxlCollector().collect(CollectionContext(publisher_ip="10.51.200.8"))
+        result = AxlCollector().collect(CollectionContext(publisher_ip="192.0.2.10"))
 
         self.assertEqual(result.facts.nodes, [])
         self.assertIn("credentials are missing", result.warnings[0])
@@ -232,7 +320,7 @@ class AxlCollectorTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             store = ArtifactStore.create(Path(tmpdir), "lab")
             context = CollectionContext(
-                publisher_ip="10.51.200.8",
+                publisher_ip="192.0.2.10",
                 gui_username="apiuser",
                 gui_password="secret",
                 artifact_store=store,
@@ -244,11 +332,30 @@ class AxlCollectorTests(unittest.TestCase):
             ):
                 AxlCollector()._call_axl(context, "getCCMVersion", "<axl:getCCMVersion />")
 
-            request = store.root / "nodes" / "10.51.200.8" / "api" / "axl" / "getCCMVersion" / "request.txt"
-            response = store.root / "nodes" / "10.51.200.8" / "api" / "axl" / "getCCMVersion" / "response.txt"
+            request = (
+                store.root
+                / "nodes"
+                / "192.0.2.10"
+                / "api"
+                / "axl"
+                / "getCCMVersion"
+                / "request.txt"
+            )
+            response = (
+                store.root
+                / "nodes"
+                / "192.0.2.10"
+                / "api"
+                / "axl"
+                / "getCCMVersion"
+                / "response.txt"
+            )
             self.assertTrue(request.exists())
             self.assertTrue(response.exists())
-            self.assertIn("POST https://10.51.200.8:8443/axl/ HTTP/1.1", request.read_text(encoding="utf-8"))
+            self.assertIn(
+                "POST https://192.0.2.10:8443/axl/ HTTP/1.1",
+                request.read_text(encoding="utf-8"),
+            )
             self.assertNotIn("Authorization", request.read_text(encoding="utf-8"))
             self.assertIn("CUCM:DB ver=14.0", request.read_text(encoding="utf-8"))
             self.assertIn("http://www.cisco.com/AXL/API/14.0", request.read_text(encoding="utf-8"))
@@ -256,7 +363,7 @@ class AxlCollectorTests(unittest.TestCase):
 
     def test_axl_call_retries_with_highest_supported_version(self) -> None:
         http_error = urllib.error.HTTPError(
-            url="https://10.51.200.8:8443/axl/",
+            url="https://192.0.2.10:8443/axl/",
             code=599,
             msg="",
             hdrs={"content-type": "text/html"},
@@ -266,7 +373,7 @@ class AxlCollectorTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             store = ArtifactStore.create(Path(tmpdir), "lab")
             context = CollectionContext(
-                publisher_ip="10.51.200.8",
+                publisher_ip="192.0.2.10",
                 gui_username="apiuser",
                 gui_password="secret",
                 artifact_store=store,
@@ -286,7 +393,7 @@ class AxlCollectorTests(unittest.TestCase):
             first_request = (
                 store.root
                 / "nodes"
-                / "10.51.200.8"
+                / "192.0.2.10"
                 / "api"
                 / "axl"
                 / "getCCMVersion"
@@ -295,7 +402,7 @@ class AxlCollectorTests(unittest.TestCase):
             retry_request = (
                 store.root
                 / "nodes"
-                / "10.51.200.8"
+                / "192.0.2.10"
                 / "api"
                 / "axl"
                 / "getCCMVersion_retry_axl_15.0"
@@ -312,7 +419,7 @@ class AxlCollectorTests(unittest.TestCase):
 
     def test_axl_call_reuses_winning_schema_version(self) -> None:
         http_error = urllib.error.HTTPError(
-            url="https://10.51.200.8:8443/axl/",
+            url="https://192.0.2.10:8443/axl/",
             code=599,
             msg="",
             hdrs={"content-type": "text/html"},
@@ -322,7 +429,7 @@ class AxlCollectorTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             store = ArtifactStore.create(Path(tmpdir), "lab")
             context = CollectionContext(
-                publisher_ip="10.51.200.8",
+                publisher_ip="192.0.2.10",
                 gui_username="apiuser",
                 gui_password="secret",
                 artifact_store=store,
@@ -344,7 +451,7 @@ class AxlCollectorTests(unittest.TestCase):
             list_request = (
                 store.root
                 / "nodes"
-                / "10.51.200.8"
+                / "192.0.2.10"
                 / "api"
                 / "axl"
                 / "listProcessNode"

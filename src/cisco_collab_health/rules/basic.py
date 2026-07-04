@@ -73,7 +73,9 @@ class NodeReachabilityRule:
                         "Cluster health cannot be evaluated until the Publisher API or another "
                         "authoritative source returns cluster node inventory."
                     ),
-                    recommendation="Verify API reachability and collector warnings for cluster discovery.",
+                    recommendation=(
+                        "Verify API reachability and collector warnings for cluster discovery."
+                    ),
                 )
             ]
 
@@ -87,7 +89,8 @@ class NodeReachabilityRule:
                     recommendation_kind=RecommendationKind.INFORMATIONAL,
                     facts=[f"Nodes evaluated: {len(facts.nodes)}"],
                     reasoning=(
-                        "No collector reported an explicit unreachable status for any normalized node."
+                        "No collector reported an explicit unreachable status for any "
+                        "normalized node."
                     ),
                 )
             ]
@@ -101,10 +104,14 @@ class NodeReachabilityRule:
                 recommendation_kind=RecommendationKind.REQUIREMENT,
                 facts=[f"Unreachable nodes: {node_names}"],
                 reasoning=(
-                    "Unreachable collaboration nodes can indicate service disruption, network issues, "
+                    "Unreachable collaboration nodes can indicate service disruption, "
+                    "network issues, "
                     "or collection credential problems that require investigation."
                 ),
-                recommendation="Validate node reachability and distinguish service impact from collection failure.",
+                recommendation=(
+                    "Validate node reachability and distinguish service impact from "
+                    "collection failure."
+                ),
                 evidence=[
                     EvidenceRef(
                         source="normalized_facts",
@@ -112,6 +119,47 @@ class NodeReachabilityRule:
                         node=node.name,
                     )
                     for node in unreachable_nodes
+                ],
+            )
+        ]
+
+
+class CollectorHealthRule:
+    """Reports collector warnings and errors as assessment findings."""
+
+    rule_id = "core.collector_health"
+
+    def evaluate(self, facts: AssessmentFacts) -> list[HealthFinding]:
+        if not facts.collector_issues:
+            return []
+
+        has_error = any(issue.issue_type == "error" for issue in facts.collector_issues)
+        severity = FindingSeverity.CRITICAL if has_error else FindingSeverity.WARNING
+        return [
+            HealthFinding(
+                rule_id=self.rule_id,
+                title="One or more collectors reported issues",
+                severity=severity,
+                recommendation_kind=RecommendationKind.ENGINEERING_RECOMMENDATION,
+                facts=[
+                    f"{issue.collector_name}: {issue.issue_type}: {issue.message}"
+                    for issue in facts.collector_issues
+                ],
+                reasoning=(
+                    "Collector warnings or failures can make the assessment incomplete or reduce "
+                    "confidence in related findings."
+                ),
+                recommendation=(
+                    "Review collector warnings/errors and raw artifacts before relying on the "
+                    "assessment."
+                ),
+                evidence=[
+                    EvidenceRef(
+                        source=issue.source,
+                        operation="collector_health",
+                        confidence="high",
+                    )
+                    for issue in facts.collector_issues
                 ],
             )
         ]

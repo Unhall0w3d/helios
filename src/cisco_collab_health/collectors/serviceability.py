@@ -11,4 +11,6 @@ class ServiceabilityCollector:
     name = "serviceability"
 
     def collect(self, context: CollectionContext) -> CollectionResult:
-        raise NotImplementedError("Serviceability collection is not implemented in the alpha skeleton.")
+        raise NotImplementedError(
+            "Serviceability collection is not implemented in the alpha skeleton."
+        )

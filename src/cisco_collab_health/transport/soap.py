@@ -6,6 +6,7 @@ import base64
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
+from pathlib import Path
 
 from cisco_collab_health.collectors.base import CollectionContext
 from cisco_collab_health.transport.tls import build_ssl_context
@@ -19,11 +20,12 @@ class SoapRequest:
 
     endpoint: str
     body: str
-    namespace: str
     operation: str
     interface: str
     node: str
+    namespace: str | None = None
     action: str | None = None
+    namespace_prefix: str | None = None
     artifact_operation: str | None = None
 
 
@@ -35,8 +37,12 @@ class SoapResponse:
     reason: str | None
     headers: dict[str, str]
     body: str
+    operation: str
+    interface: str
     artifact_request: str
     artifact_response: str
+    request_artifact_path: Path | None = None
+    response_artifact_path: Path | None = None
 
 
 class SoapTransportError(RuntimeError):
@@ -46,11 +52,22 @@ class SoapTransportError(RuntimeError):
 class SoapHttpError(SoapTransportError):
     """Raised when an HTTP error response is returned."""
 
-    def __init__(self, *, status: int, reason: str, body: str, artifact_response: str) -> None:
+    def __init__(
+        self,
+        *,
+        status: int,
+        reason: str,
+        body: str,
+        artifact_response: str,
+        request_artifact_path: Path | None = None,
+        response_artifact_path: Path | None = None,
+    ) -> None:
         self.status = status
         self.reason = reason
         self.body = body
         self.artifact_response = artifact_response
+        self.request_artifact_path = request_artifact_path
+        self.response_artifact_path = response_artifact_path
         super().__init__(f"HTTP {status}: {reason}")
 
 
@@ -58,7 +75,11 @@ class SoapClient:
     """Sends SOAP requests with shared TLS, auth, and artifact behavior."""
 
     def send(self, request: SoapRequest, context: CollectionContext) -> SoapResponse:
-        envelope = soap_envelope(request.body, request.namespace)
+        envelope = soap_envelope(
+            request.body,
+            namespace=request.namespace,
+            namespace_prefix=request.namespace_prefix,
+        )
         headers = {
             "Content-Type": "text/xml; charset=utf-8",
         }
@@ -97,12 +118,19 @@ class SoapClient:
                 headers=exc.headers,
                 body=response_text,
             )
-            self._write_artifact(request, context, artifact_request, response_artifact)
+            request_path, response_path = self._write_artifact(
+                request,
+                context,
+                artifact_request,
+                response_artifact,
+            )
             raise SoapHttpError(
                 status=exc.code,
                 reason=str(exc.reason),
                 body=response_text,
                 artifact_response=response_artifact,
+                request_artifact_path=request_path,
+                response_artifact_path=response_path,
             ) from exc
         except urllib.error.URLError as exc:
             response_artifact = f"TRANSPORT ERROR\n{exc.reason}\n"
@@ -113,14 +141,23 @@ class SoapClient:
             self._write_artifact(request, context, artifact_request, response_artifact)
             raise SoapTransportError(str(exc)) from exc
 
-        self._write_artifact(request, context, artifact_request, response_artifact)
+        request_path, response_path = self._write_artifact(
+            request,
+            context,
+            artifact_request,
+            response_artifact,
+        )
         return SoapResponse(
             status=getattr(response, "status", None),
             reason=getattr(response, "reason", None),
             headers=dict(getattr(response, "headers", {}) or {}),
             body=response_text,
+            operation=request.operation,
+            interface=request.interface,
             artifact_request=artifact_request,
             artifact_response=response_artifact,
+            request_artifact_path=request_path,
+            response_artifact_path=response_path,
         )
 
     def _auth_headers(self, context: CollectionContext) -> dict[str, str]:
@@ -135,11 +172,11 @@ class SoapClient:
         context: CollectionContext,
         artifact_request: str,
         artifact_response: str,
-    ) -> None:
+    ) -> tuple[Path | None, Path | None]:
         store = context.artifact_store
         if store is None:
-            return
-        store.write_api_exchange(
+            return None, None
+        return store.write_api_exchange(
             request.node,
             request.interface,
             request.artifact_operation or request.operation,
@@ -148,9 +185,18 @@ class SoapClient:
         )
 
 
-def soap_envelope(body: str, namespace: str) -> str:
+def soap_envelope(
+    body: str,
+    *,
+    namespace: str | None = None,
+    namespace_prefix: str | None = None,
+) -> str:
+    namespace_declaration = ""
+    if namespace and namespace_prefix:
+        namespace_declaration = f' xmlns:{namespace_prefix}="{namespace}"'
+
     return f"""<?xml version="1.0" encoding="utf-8"?>
-<soapenv:Envelope xmlns:soapenv="{SOAP_NAMESPACE}" xmlns:axl="{namespace}">
+<soapenv:Envelope xmlns:soapenv="{SOAP_NAMESPACE}"{namespace_declaration}>
   <soapenv:Body>
     {body}
   </soapenv:Body>

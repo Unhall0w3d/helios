@@ -5,9 +5,14 @@ from __future__ import annotations
 from collections.abc import Iterable
 from dataclasses import dataclass
 
-from cisco_collab_health.collectors.base import CollectionContext, CollectionResult, Collector, CollectorError
+from cisco_collab_health.collectors.base import (
+    CollectionContext,
+    CollectionResult,
+    Collector,
+    CollectorError,
+)
 from cisco_collab_health.models.assessment import AssessmentReport
-from cisco_collab_health.models.facts import AssessmentFacts
+from cisco_collab_health.models.facts import AssessmentFacts, CollectorIssueFact
 from cisco_collab_health.rules.base import HealthRule
 
 
@@ -39,6 +44,23 @@ class AssessmentEngine:
                 )
             collector_results.append(result)
             facts.merge(result.facts)
+            for warning in result.warnings:
+                facts.collector_issues.append(
+                    CollectorIssueFact(
+                        collector_name=result.collector_name,
+                        issue_type="warning",
+                        message=warning,
+                    )
+                )
+            for error in result.errors:
+                facts.collector_issues.append(
+                    CollectorIssueFact(
+                        collector_name=result.collector_name,
+                        issue_type="error",
+                        message=error.message,
+                        exception_type=error.exception_type,
+                    )
+                )
 
         findings = []
         for rule in self.rules:

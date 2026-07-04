@@ -143,9 +143,12 @@ class HtmlReportBuilder:
       <div class="summary-grid">
         <div class="metric"><strong>{len(report.facts.nodes)}</strong><span>Nodes</span></div>
         <div class="metric"><strong>{len(report.facts.devices)}</strong><span>Devices</span></div>
-        <div class="metric"><strong>{severity_counts[FindingSeverity.CRITICAL]}</strong><span>Critical</span></div>
-        <div class="metric"><strong>{severity_counts[FindingSeverity.WARNING]}</strong><span>Warnings</span></div>
-        <div class="metric"><strong>{severity_counts[FindingSeverity.INFO]}</strong><span>Informational</span></div>
+        <div class="metric"><strong>{severity_counts[FindingSeverity.CRITICAL]}</strong>
+          <span>Critical</span></div>
+        <div class="metric"><strong>{severity_counts[FindingSeverity.WARNING]}</strong>
+          <span>Warnings</span></div>
+        <div class="metric"><strong>{severity_counts[FindingSeverity.INFO]}</strong>
+          <span>Informational</span></div>
       </div>
     </section>
     {cluster_section}
@@ -163,7 +166,8 @@ class HtmlReportBuilder:
       <table>
         <thead>
           <tr>
-            <th>Name</th><th>Model</th><th>Protocol</th><th>Device Pool</th><th>Location</th><th>Load</th>
+            <th>Name</th><th>Model</th><th>Protocol</th>
+            <th>Device Pool</th><th>Location</th><th>Load</th>
           </tr>
         </thead>
         <tbody>
@@ -277,7 +281,10 @@ class HtmlReportBuilder:
         facts = "\n".join(f"<li>{escape(fact)}</li>" for fact in finding.facts)
         recommendation = ""
         if finding.recommendation:
-            recommendation = f"<p><strong>Recommendation:</strong> {escape(finding.recommendation)}</p>"
+            escaped_recommendation = escape(finding.recommendation)
+            recommendation = (
+                f"<p><strong>Recommendation:</strong> {escaped_recommendation}</p>"
+            )
         evidence = self._evidence_list(finding)
 
         return f"""

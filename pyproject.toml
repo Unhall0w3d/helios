@@ -19,6 +19,12 @@ dev = ["pytest>=8", "ruff>=0.5", "mypy>=1.10"]
 
 [project.scripts]
 ccha = "cisco_collab_health.cli:main"
+helios = "cisco_collab_health.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/Unhall0w3d/helios"
+Repository = "https://github.com/Unhall0w3d/helios"
+Issues = "https://github.com/Unhall0w3d/helios/issues"
 
 [tool.setuptools.packages.find]
 where = ["src"]

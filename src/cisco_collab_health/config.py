@@ -71,7 +71,12 @@ def resolve_publisher(value: str) -> str:
         pass
 
     try:
-        results = socket.getaddrinfo(candidate, None, family=socket.AF_INET, type=socket.SOCK_STREAM)
+        results = socket.getaddrinfo(
+            candidate,
+            None,
+            family=socket.AF_INET,
+            type=socket.SOCK_STREAM,
+        )
     except socket.gaierror as exc:
         raise ValueError(f"Unable to resolve Publisher FQDN '{candidate}'.") from exc
 
@@ -177,7 +182,10 @@ def register_profile_name(profile_name: str, config_dir: Path | None = None) -> 
 def unregister_profile_name(profile_name: str, config_dir: Path | None = None) -> None:
     """Remove a profile name from the local registry."""
 
-    save_profile_names([name for name in load_profile_names(config_dir) if name != profile_name], config_dir)
+    save_profile_names(
+        [name for name in load_profile_names(config_dir) if name != profile_name],
+        config_dir,
+    )
 
 
 def save_profiles(profiles: dict[str, StoredProfile], config_dir: Path | None = None) -> Path:
@@ -254,11 +262,17 @@ def prompt_for_profile_name(
         return ProfileSelection(_prompt_new_profile_name(existing_names, input_func, output_func))
 
     while True:
-        choice = input_func("Existing profile found. Load existing profile? (Y/N): ").strip().lower()
+        choice = input_func(
+            "Existing profile found. Load existing profile? (Y/N): "
+        ).strip().lower()
         if choice == "n":
-            return ProfileSelection(_prompt_new_profile_name(existing_names, input_func, output_func))
+            return ProfileSelection(
+                _prompt_new_profile_name(existing_names, input_func, output_func)
+            )
         if choice == "y":
-            return ProfileSelection(_prompt_existing_profile_name(existing_names, input_func, output_func))
+            return ProfileSelection(
+                _prompt_existing_profile_name(existing_names, input_func, output_func)
+            )
         output_func("Enter Y to load an existing profile or N to create a new profile.")
 
 
@@ -359,7 +373,9 @@ def ensure_runtime_profile(
 
         runtime = prompt_for_profile(profile_name, input_func, getpass_func)
         runtime = _store_or_warn(runtime, store, save_credentials)
-        if save_credentials and not any("Unable to store encrypted profile" in warning for warning in runtime.warnings):
+        if save_credentials and not any(
+            "Unable to store encrypted profile" in warning for warning in runtime.warnings
+        ):
             register_profile_name(profile_name, config_dir)
         return runtime
 
@@ -464,7 +480,10 @@ def _load_or_prompt_secret(
 ) -> str:
     if store is not None:
         try:
-            stored_secret = store.get_password(KEYRING_SERVICE, credential_key(profile_name, credential_name))
+            stored_secret = store.get_password(
+                KEYRING_SERVICE,
+                credential_key(profile_name, credential_name),
+            )
             if stored_secret:
                 return stored_secret
         except Exception as exc:
@@ -480,7 +499,9 @@ def _store_or_warn(
 ) -> RuntimeProfile:
     warnings = list(runtime.warnings)
     if not save_credentials:
-        warnings.append("Credential saving disabled; passwords will be requested again on future runs.")
+        warnings.append(
+            "Credential saving disabled; passwords will be requested again on future runs."
+        )
         return RuntimeProfile(runtime.stored, runtime.gui_password, runtime.os_password, warnings)
 
     if store is None:
