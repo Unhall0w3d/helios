@@ -334,4 +334,7 @@ not affiliated with, endorsed by, or sponsored by Cisco.
 
 ## License
 
-This project is licensed under the MIT License. See [LICENSE](LICENSE).
+AletheiaUC is currently proprietary software. All rights reserved.
+
+This project is under private development and is not currently licensed for
+public use, redistribution, modification, or commercial use by third parties.

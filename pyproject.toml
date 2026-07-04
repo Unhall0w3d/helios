@@ -9,13 +9,13 @@ description = "AletheiaUC is a Cisco Collaboration health assessment tool focuse
 readme = "README.md"
 requires-python = ">=3.11"
 authors = [
-  { name = "AletheiaUC contributors" }
+  { name = "Kenneth Perry" }
 ]
 license = { file = "LICENSE" }
-dependencies = ["keyring>=25"]
+dependencies = ["keyring>=25", "defusedxml>=0.7"]
 
 [project.optional-dependencies]
-dev = ["pytest>=8", "ruff>=0.5", "mypy>=1.10"]
+dev = ["pytest>=8", "ruff>=0.5", "mypy>=1.10", "types-defusedxml>=0.7"]
 
 [project.scripts]
 aletheiauc = "cisco_collab_health.cli:main"

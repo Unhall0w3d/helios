@@ -21,6 +21,6 @@ def select_collectors(
         return []
 
     collectors: list[Collector] = []
-    if "axl" in preflight.available_interfaces:
+    if "axl" in preflight.transport_available_interfaces:
         collectors.append(AxlCollector())
     return collectors

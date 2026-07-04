@@ -10,7 +10,7 @@ import socket
 from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Protocol
+from typing import Protocol, cast
 
 APP_NAME = "cisco-collab-health"
 KEYRING_SERVICE = APP_NAME
@@ -222,7 +222,7 @@ def load_keyring() -> CredentialStore | None:
     except ImportError:
         return None
 
-    return keyring
+    return cast(CredentialStore, keyring)
 
 
 def credential_key(profile_name: str, credential_name: str) -> str:

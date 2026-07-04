@@ -3,19 +3,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Any, Protocol
 
 from cisco_collab_health.models.evidence import EvidenceRef
 from cisco_collab_health.models.facts import AssessmentFacts
-
-
-@dataclass(frozen=True)
-class TlsPolicy:
-    """TLS verification behavior for HTTPS probes and collectors."""
-
-    verify: bool = False
-    ca_bundle: Path | None = None
+from cisco_collab_health.transport.tls import TlsPolicy
 
 
 @dataclass(frozen=True)
@@ -57,6 +49,7 @@ class CollectionResult:
     warnings: list[str] = field(default_factory=list)
     errors: list[CollectorError] = field(default_factory=list)
     evidence: list[EvidenceRef] = field(default_factory=list)
+    notes: list[str] = field(default_factory=list)
 
 
 class Collector(Protocol):

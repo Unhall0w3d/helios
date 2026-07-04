@@ -2,12 +2,23 @@
 
 from __future__ import annotations
 
-import xml.etree.ElementTree as ET
+from collections.abc import Iterator
+from typing import Protocol
+
+from defusedxml import ElementTree as ET
 
 from cisco_collab_health.collectors.axl_errors import AxlCollectionError
 from cisco_collab_health.models.facts import CollaborationNode, DeviceInventoryFact
 
 PSEUDO_PROCESS_NODE_NAMES = {"enterprisewidedata"}
+
+
+class XmlElement(Protocol):
+    text: str | None
+    tag: str
+
+    def iter(self) -> Iterator["XmlElement"]:
+        """Iterate over this element and its descendants."""
 
 
 def parse_process_nodes(response_text: str, publisher_ip: str | None) -> list[CollaborationNode]:
@@ -82,17 +93,17 @@ def find_first_text(response_text: str, local_name: str) -> str | None:
     element = next(_iter_local_name(root, local_name), None)
     if element is None or element.text is None:
         return None
-    return element.text.strip()
+    return str(element.text).strip()
 
 
-def _child_text(element: ET.Element, local_name: str) -> str | None:
+def _child_text(element: XmlElement, local_name: str) -> str | None:
     child = next(_iter_local_name(element, local_name), None)
     if child is None or child.text is None:
         return None
-    return child.text.strip()
+    return str(child.text).strip()
 
 
-def _iter_local_name(element: ET.Element, local_name: str):
+def _iter_local_name(element: XmlElement, local_name: str) -> Iterator[XmlElement]:
     for child in element.iter():
         if child.tag.rsplit("}", 1)[-1] == local_name:
             yield child

@@ -66,9 +66,14 @@ class PreflightResult:
     interfaces: list[InterfaceStatus]
 
     @property
-    def available_interfaces(self) -> list[str]:
+    def transport_available_interfaces(self) -> list[str]:
         return [status.name for status in self.interfaces if status.transport_available]
 
+    @property
+    def available_interfaces(self) -> list[str]:
+        """Backward-compatible alias for transport_available_interfaces."""
+
+        return self.transport_available_interfaces
 
 def default_cucm_probes(
     host: str,

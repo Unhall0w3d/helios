@@ -59,6 +59,7 @@ class AxlCollector:
     def collect(self, context: CollectionContext) -> CollectionResult:
         warnings: list[str] = []
         evidence: list[EvidenceRef] = []
+        notes: list[str] = []
         facts = AssessmentFacts()
 
         if not context.publisher_ip:
@@ -117,7 +118,7 @@ class AxlCollector:
             except AxlCollectionError as exc:
                 warnings.append(f"AXL listPhone failed: {exc}")
         else:
-            warnings.append(
+            notes.append(
                 "AXL phone inventory skipped by default; use --collect-phone-inventory "
                 "for small lab clusters until bounded paging is implemented."
             )
@@ -134,6 +135,7 @@ class AxlCollector:
             facts=facts,
             warnings=warnings,
             evidence=evidence,
+            notes=notes,
         )
 
     def discover_nodes(self, context: CollectionContext) -> list[CollaborationNode]:
@@ -157,38 +159,49 @@ class AxlCollector:
             raise AxlCollectionError("GUI/API credentials are missing.")
 
         attempted_versions: set[str] = set()
-        candidates = self.version_policy.candidates()
+        candidates = list(self.version_policy.candidates())
         if self._winning_axl_version is not None:
-            candidates = (
+            candidates = [
                 self._winning_axl_version,
-                *tuple(version for version in candidates if version != self._winning_axl_version),
-            )
+                *[version for version in candidates if version != self._winning_axl_version],
+            ]
 
-        for axl_version in candidates:
+        last_error: Exception | None = None
+        while candidates:
+            axl_version = candidates.pop(0)
+            if axl_version in attempted_versions:
+                continue
+            artifact_operation = (
+                None
+                if not attempted_versions
+                else f"{operation}_retry_axl_{axl_version}"
+            )
             attempted_versions.add(axl_version)
             try:
-                response = self._send_axl_request(context, operation, body, axl_version)
-                self._winning_axl_version = axl_version
-                return response
-            except AxlVersionError as exc:
-                retry_version = self.version_policy.best_supported_version(
-                    exc.supported_versions,
-                    attempted_versions,
-                )
-                if retry_version is None:
-                    raise AxlCollectionError(str(exc)) from exc
-                attempted_versions.add(retry_version)
                 response = self._send_axl_request(
                     context,
                     operation,
                     body,
-                    retry_version,
-                    artifact_operation=f"{operation}_retry_axl_{retry_version}",
+                    axl_version,
+                    artifact_operation=artifact_operation,
                 )
-                self._winning_axl_version = retry_version
+                self._winning_axl_version = axl_version
                 return response
+            except AxlVersionError as exc:
+                last_error = exc
+                retry_version = self.version_policy.best_supported_version(
+                    exc.supported_versions,
+                    attempted_versions,
+                )
+                if retry_version and retry_version not in attempted_versions:
+                    if retry_version not in candidates:
+                        candidates.insert(0, retry_version)
 
-        raise AxlCollectionError("No AXL schema versions are available to try.")
+        attempted = ", ".join(sorted(attempted_versions)) or "none"
+        raise AxlCollectionError(
+            f"No supported AXL schema version succeeded for {operation}. "
+            f"Attempted versions: {attempted}. Last error: {last_error}"
+        )
 
     def _send_axl_request(
         self,
@@ -199,14 +212,18 @@ class AxlCollector:
         *,
         artifact_operation: str | None = None,
     ) -> SoapResponse:
-        endpoint = f"https://{context.publisher_ip}:{context.axl_port}/axl/"
+        publisher_ip = context.publisher_ip
+        if not publisher_ip:
+            raise AxlCollectionError("Publisher IP is missing.")
+
+        endpoint = f"https://{publisher_ip}:{context.axl_port}/axl/"
         request = SoapRequest(
             endpoint,
             body=body,
             namespace=f"http://www.cisco.com/AXL/API/{axl_version}",
             operation=operation,
             interface="axl",
-            node=context.publisher_ip,
+            node=publisher_ip,
             action=f'CUCM:DB ver={axl_version} "{operation}"',
             namespace_prefix="axl",
             artifact_operation=artifact_operation,

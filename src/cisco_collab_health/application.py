@@ -15,7 +15,7 @@ from cisco_collab_health.artifacts import (
     write_preflight_artifacts,
 )
 from cisco_collab_health.collector_registry import select_collectors
-from cisco_collab_health.collectors.base import CollectionContext, TlsPolicy
+from cisco_collab_health.collectors.base import CollectionContext
 from cisco_collab_health.config import RuntimeProfile
 from cisco_collab_health.engine import AssessmentEngine
 from cisco_collab_health.interfaces import PreflightResult, run_publisher_preflight
@@ -29,6 +29,7 @@ from cisco_collab_health.rules.basic import (
     NodeReachabilityRule,
 )
 from cisco_collab_health.status import StatusPrinter
+from cisco_collab_health.transport.tls import TlsPolicy
 
 
 def run_assessment(
@@ -326,7 +327,9 @@ def _print_preflight_status(preflight: PreflightResult, status: StatusPrinter) -
             detail = f" - {interface.reason}" if interface.reason else ""
             status.warn(f"{interface.name} authenticated operation: unavailable{detail}")
 
-    if preflight.available_interfaces:
-        status.info("Enabled interfaces: " + ", ".join(preflight.available_interfaces))
+    if preflight.transport_available_interfaces:
+        status.info(
+            "Enabled interfaces: " + ", ".join(preflight.transport_available_interfaces)
+        )
     else:
         status.warn("No Publisher API interfaces passed preflight")

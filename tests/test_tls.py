@@ -7,8 +7,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from cisco_collab_health.cli import _tls_policy_from_args, _validate_args, build_parser
-from cisco_collab_health.collectors.base import TlsPolicy
-from cisco_collab_health.transport.tls import build_ssl_context
+from cisco_collab_health.transport.tls import TlsPolicy, build_ssl_context
 
 
 class TlsPolicyTests(unittest.TestCase):

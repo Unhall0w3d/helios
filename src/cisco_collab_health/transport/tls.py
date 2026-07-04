@@ -3,8 +3,16 @@
 from __future__ import annotations
 
 import ssl
+from dataclasses import dataclass
+from pathlib import Path
 
-from cisco_collab_health.collectors.base import TlsPolicy
+
+@dataclass(frozen=True)
+class TlsPolicy:
+    """TLS verification behavior for HTTPS probes and collectors."""
+
+    verify: bool = False
+    ca_bundle: Path | None = None
 
 
 def build_ssl_context(policy: TlsPolicy) -> ssl.SSLContext:

@@ -48,7 +48,7 @@ class InterfaceProbeTests(unittest.TestCase):
             ["ping", "https_443", "https_8443"],
         )
         self.assertEqual(
-            result.available_interfaces,
+            result.transport_available_interfaces,
             ["axl", "risport70", "control_center", "perfmon"],
         )
         self.assertFalse(result.connectivity[1].available)
@@ -70,7 +70,7 @@ class InterfaceProbeTests(unittest.TestCase):
             perfmon_port=8446,
         )
 
-        self.assertEqual(result.available_interfaces, ["axl"])
+        self.assertEqual(result.transport_available_interfaces, ["axl"])
         self.assertTrue(result.interfaces[0].transport_available)
         self.assertFalse(result.interfaces[1].transport_available)
         self.assertEqual(result.interfaces[1].reason, "TCP connection failed.")
@@ -99,7 +99,7 @@ class InterfaceProbeTests(unittest.TestCase):
             ],
         )
         self.assertEqual(
-            result.available_interfaces,
+            result.transport_available_interfaces,
             ["axl", "risport70", "control_center", "perfmon"],
         )
 

@@ -13,7 +13,7 @@ from dataclasses import asdict, dataclass, is_dataclass
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
-from typing import Any
+from typing import Any, TextIO
 
 
 class ArtifactRedactionMode(str, Enum):
@@ -21,7 +21,6 @@ class ArtifactRedactionMode(str, Enum):
 
     NONE = "none"
     SECRETS = "secrets"
-    CUSTOMER_DATA = "customer-data"
 
 
 @dataclass(frozen=True)
@@ -142,7 +141,7 @@ class RunLogStore:
     def run_log_path(self) -> Path:
         return self.root / "run.log"
 
-    def open_run_log(self):
+    def open_run_log(self) -> TextIO:
         self.root.mkdir(parents=True, exist_ok=True)
         return self.run_log_path.open("a", encoding="utf-8")
 

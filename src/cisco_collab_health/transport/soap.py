@@ -7,7 +7,9 @@ import urllib.error
 import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
+from typing import cast
 
+from cisco_collab_health.artifacts import ArtifactStore
 from cisco_collab_health.collectors.base import CollectionContext
 from cisco_collab_health.transport.tls import build_ssl_context
 
@@ -176,13 +178,15 @@ class SoapClient:
         store = context.artifact_store
         if store is None:
             return None, None
-        return store.write_api_exchange(
+        artifact_store = cast(ArtifactStore, store)
+        paths: tuple[Path, Path] = artifact_store.write_api_exchange(
             request.node,
             request.interface,
             request.artifact_operation or request.operation,
             request=artifact_request,
             response=artifact_response,
         )
+        return paths
 
 
 def soap_envelope(

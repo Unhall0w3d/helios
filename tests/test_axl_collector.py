@@ -11,6 +11,7 @@ from unittest.mock import patch
 
 from cisco_collab_health.artifacts import ArtifactStore
 from cisco_collab_health.collectors.axl import AxlCollector, AxlVersionPolicy
+from cisco_collab_health.collectors.axl_errors import AxlCollectionError, AxlVersionError
 from cisco_collab_health.collectors.base import CollectionContext
 from cisco_collab_health.transport.soap import SoapResponse
 
@@ -183,8 +184,8 @@ class AxlCollectorTests(unittest.TestCase):
         ):
             result = collector.collect(context)
 
-        self.assertEqual(len(result.warnings), 1)
-        self.assertIn("phone inventory skipped", result.warnings[0])
+        self.assertEqual(result.warnings, [])
+        self.assertTrue(any("phone inventory skipped" in note for note in result.notes))
         self.assertIsNotNone(result.facts.cluster)
         self.assertEqual(result.facts.cluster.version, "14.0.1.10000-20")
         self.assertEqual(result.facts.cluster.name, "192.0.2.10")
@@ -416,6 +417,42 @@ class AxlCollectorTests(unittest.TestCase):
         self.assertIn("CUCM:DB ver=14.0", first_request_text)
         self.assertIn("CUCM:DB ver=15.0", retry_request_text)
         self.assertIn("http://www.cisco.com/AXL/API/15.0", retry_request_text)
+
+    def test_axl_call_raises_clean_error_when_supported_retry_version_fails(self) -> None:
+        context = CollectionContext(
+            publisher_ip="192.0.2.10",
+            gui_username="apiuser",
+            gui_password="secret",
+        )
+        collector = AxlCollector(
+            version_policy=AxlVersionPolicy(supported=("15.0", "14.0"))
+        )
+
+        with patch.object(
+            collector,
+            "_send_axl_request",
+            side_effect=[
+                AxlVersionError(
+                    attempted_version="14.0",
+                    supported_versions=["15.0"],
+                    response_summary="Incorrect axl version",
+                ),
+                AxlVersionError(
+                    attempted_version="15.0",
+                    supported_versions=["15.0"],
+                    response_summary="Incorrect axl version",
+                ),
+            ],
+        ) as send:
+            with self.assertRaises(AxlCollectionError) as exc:
+                collector._call_axl(context, "getCCMVersion", "<axl:getCCMVersion />")
+
+        self.assertEqual(
+            [call.args[3] for call in send.call_args_list],
+            ["14.0", "15.0"],
+        )
+        self.assertIn("No supported AXL schema version succeeded", str(exc.exception))
+        self.assertIn("Attempted versions: 14.0, 15.0", str(exc.exception))
 
     def test_axl_call_reuses_winning_schema_version(self) -> None:
         http_error = urllib.error.HTTPError(
