@@ -17,6 +17,10 @@ class ExecutiveSummaryBuilder:
         warning_count = severity_counts[FindingSeverity.WARNING]
         info_count = severity_counts[FindingSeverity.INFO]
         collector_error_count = sum(len(result.errors) for result in report.collector_results)
+        collector_note_count = sum(len(result.notes) for result in report.collector_results)
+        collector_evidence_count = sum(
+            len(result.evidence) for result in report.collector_results
+        )
 
         lines = [
             "Executive Summary",
@@ -40,6 +44,12 @@ class ExecutiveSummaryBuilder:
             [
                 f"Nodes discovered: {len(report.facts.nodes)}",
                 f"Devices inventoried: {len(report.facts.devices)}",
+                f"Registrations collected: {len(report.facts.registrations)}",
+                f"Services collected: {len(report.facts.services)}",
+                f"Perf counters collected: {len(report.facts.perf_counters)}",
+                f"Platform checks collected: {len(report.facts.platform_checks)}",
+                f"Collector notes: {collector_note_count}",
+                f"Collector evidence refs: {collector_evidence_count}",
                 f"Findings: {critical_count} critical, {warning_count} warning, {info_count} info",
                 f"Collector errors: {collector_error_count}",
                 "",

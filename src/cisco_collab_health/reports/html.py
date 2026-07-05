@@ -7,6 +7,7 @@ from html import escape
 
 from cisco_collab_health.models.assessment import AssessmentReport
 from cisco_collab_health.models.findings import FindingSeverity, HealthFinding
+from cisco_collab_health.reports.coverage import build_report_coverage
 
 
 class HtmlReportBuilder:
@@ -14,11 +15,29 @@ class HtmlReportBuilder:
 
     def build(self, report: AssessmentReport) -> str:
         severity_counts = Counter(finding.severity for finding in report.findings)
+        collector_note_count = sum(len(result.notes) for result in report.collector_results)
+        collector_issue_count = sum(
+            len(result.warnings) + len(result.errors) for result in report.collector_results
+        )
+        collector_evidence_count = sum(
+            len(result.evidence) for result in report.collector_results
+        )
         cluster_section = self._cluster_section(report)
         node_rows = self._node_rows(report)
         device_rows = self._device_rows(report)
+        device_model_rows = self._device_model_summary_rows(report)
+        coverage_section = self._coverage_section(report)
+        registration_rows = self._registration_rows(report)
+        registration_summary_rows = self._registration_summary_rows(report)
+        service_rows = self._service_rows(report)
+        perf_counter_rows = self._perf_counter_rows(report)
+        platform_check_rows = self._platform_check_rows(report)
         collector_issues_section = self._collector_issues_section(report)
+        collector_notes_section = self._collector_notes_section(report)
+        collector_evidence_section = self._collector_evidence_section(report)
         finding_sections = "\n".join(self._finding_section(finding) for finding in report.findings)
+        if not finding_sections:
+            finding_sections = "<p>No findings generated.</p>"
 
         return f"""<!doctype html>
 <html lang="en">
@@ -143,14 +162,25 @@ class HtmlReportBuilder:
       <div class="summary-grid">
         <div class="metric"><strong>{len(report.facts.nodes)}</strong><span>Nodes</span></div>
         <div class="metric"><strong>{len(report.facts.devices)}</strong><span>Devices</span></div>
+        <div class="metric"><strong>{len(report.facts.registrations)}</strong>
+          <span>Registrations</span></div>
+        <div class="metric"><strong>{len(report.facts.services)}</strong><span>Services</span></div>
+        <div class="metric"><strong>{len(report.facts.perf_counters)}</strong>
+          <span>Perf Counters</span></div>
+        <div class="metric"><strong>{len(report.facts.platform_checks)}</strong>
+          <span>Platform Checks</span></div>
         <div class="metric"><strong>{severity_counts[FindingSeverity.CRITICAL]}</strong>
           <span>Critical</span></div>
         <div class="metric"><strong>{severity_counts[FindingSeverity.WARNING]}</strong>
           <span>Warnings</span></div>
         <div class="metric"><strong>{severity_counts[FindingSeverity.INFO]}</strong>
           <span>Informational</span></div>
+        <div class="metric"><strong>{collector_note_count}</strong><span>Collector Notes</span></div>
+        <div class="metric"><strong>{collector_issue_count}</strong><span>Collector Issues</span></div>
+        <div class="metric"><strong>{collector_evidence_count}</strong><span>API Evidence</span></div>
       </div>
     </section>
+    {coverage_section}
     {cluster_section}
     <section>
       <h2>Discovered Nodes</h2>
@@ -162,7 +192,77 @@ class HtmlReportBuilder:
       </table>
     </section>
     <section>
-      <h2>Device Inventory</h2>
+      <h2>Device Inventory By Model</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Model</th><th>SIP</th><th>SCCP</th><th>Other</th><th>Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          {device_model_rows}
+        </tbody>
+      </table>
+    </section>
+    <section>
+      <h2>Device Registration Summary</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Category</th><th>Registered</th><th>Unregistered</th><th>Other</th><th>Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          {registration_summary_rows}
+        </tbody>
+      </table>
+    </section>
+    <section>
+      <h2>Services</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Node</th><th>Service</th><th>Activated</th><th>Status</th>
+            <th>Uptime Seconds</th><th>Source</th>
+          </tr>
+        </thead>
+        <tbody>
+          {service_rows}
+        </tbody>
+      </table>
+    </section>
+    <section>
+      <h2>Performance Counters</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Node</th><th>Object</th><th>Counter</th><th>Instance</th>
+            <th>Value</th><th>Samples</th><th>Source</th>
+          </tr>
+        </thead>
+        <tbody>
+          {perf_counter_rows}
+        </tbody>
+      </table>
+    </section>
+    <section>
+      <h2>Platform Checks</h2>
+      <table>
+        <thead><tr><th>Node</th><th>Check</th><th>Status</th><th>Details</th><th>Source</th></tr></thead>
+        <tbody>
+          {platform_check_rows}
+        </tbody>
+      </table>
+    </section>
+    {collector_issues_section}
+    {collector_notes_section}
+    {collector_evidence_section}
+    <section>
+      <h2>Findings</h2>
+      {finding_sections}
+    </section>
+    <section>
+      <h2>Detailed Device Inventory</h2>
       <table>
         <thead>
           <tr>
@@ -175,14 +275,47 @@ class HtmlReportBuilder:
         </tbody>
       </table>
     </section>
-    {collector_issues_section}
     <section>
-      <h2>Findings</h2>
-      {finding_sections}
+      <h2>Detailed Device Registration</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Name</th><th>Status</th><th>Registered Node</th><th>IP Address</th>
+            <th>Model</th><th>Protocol</th><th>Source</th>
+          </tr>
+        </thead>
+        <tbody>
+          {registration_rows}
+        </tbody>
+      </table>
     </section>
   </main>
 </body>
 </html>
+"""
+
+    def _coverage_section(self, report: AssessmentReport) -> str:
+        rows = "\n".join(
+            (
+                "<tr>"
+                f"<td>{escape(item.name)}</td>"
+                f"<td>{escape(item.status)}</td>"
+                f"<td>{item.count}</td>"
+                f"<td>{escape(item.detail)}</td>"
+                "</tr>"
+            )
+            for item in build_report_coverage(report)
+        )
+        return f"""
+    <section>
+      <h2>Collection Coverage</h2>
+      <table>
+        <thead><tr><th>Area</th><th>Status</th><th>Count</th><th>Detail</th></tr></thead>
+        <tbody>
+          {rows}
+        </tbody>
+      </table>
+    </section>
 """
 
     def _cluster_section(self, report: AssessmentReport) -> str:
@@ -242,6 +375,142 @@ class HtmlReportBuilder:
             for device in report.facts.devices
         )
 
+    def _device_model_summary_rows(self, report: AssessmentReport) -> str:
+        if not report.facts.devices:
+            return '<tr><td colspan="5">No device inventory facts collected.</td></tr>'
+
+        counts: dict[str, Counter[str]] = {}
+        for device in report.facts.devices:
+            model = device.model or "Unknown model"
+            protocol = _protocol_bucket(device.protocol)
+            counts.setdefault(model, Counter())[protocol] += 1
+
+        rows = []
+        for model in sorted(counts):
+            model_counts = counts[model]
+            sip_count = model_counts["SIP"]
+            sccp_count = model_counts["SCCP"]
+            other_count = model_counts["Other"]
+            total = sip_count + sccp_count + other_count
+            rows.append(
+                "<tr>"
+                f"<td>{escape(model)}</td>"
+                f"<td>{sip_count}</td>"
+                f"<td>{sccp_count}</td>"
+                f"<td>{other_count}</td>"
+                f"<td>{total}</td>"
+                "</tr>"
+            )
+        return "\n".join(rows)
+
+    def _registration_rows(self, report: AssessmentReport) -> str:
+        if not report.facts.registrations:
+            return '<tr><td colspan="7">No device registration facts collected.</td></tr>'
+
+        return "\n".join(
+            (
+                "<tr>"
+                f"<td>{escape(registration.name)}</td>"
+                f"<td>{escape(registration.status)}</td>"
+                f"<td>{escape(registration.registered_node or '')}</td>"
+                f"<td>{escape(registration.ip_address or '')}</td>"
+                f"<td>{escape(registration.model or '')}</td>"
+                f"<td>{escape(registration.protocol or '')}</td>"
+                f"<td>{escape(registration.source)}</td>"
+                "</tr>"
+            )
+            for registration in report.facts.registrations
+        )
+
+    def _registration_summary_rows(self, report: AssessmentReport) -> str:
+        if not report.facts.registrations:
+            return '<tr><td colspan="5">No device registration facts collected.</td></tr>'
+
+        counts: dict[str, Counter[str]] = {
+            "Phones": Counter(),
+            "Gateways/endpoints": Counter(),
+            "SIP trunks": Counter(),
+        }
+        for registration in report.facts.registrations:
+            category = _registration_category(
+                name=registration.name,
+                model=registration.model,
+                protocol=registration.protocol,
+            )
+            counts.setdefault(category, Counter())[_registration_status_bucket(registration.status)] += 1
+
+        rows = []
+        for category in ("Phones", "Gateways/endpoints", "SIP trunks"):
+            category_counts = counts[category]
+            registered_count = category_counts["registered"]
+            unregistered_count = category_counts["unregistered"]
+            other_count = category_counts["other"]
+            total = registered_count + unregistered_count + other_count
+            rows.append(
+                "<tr>"
+                f"<td>{escape(category)}</td>"
+                f"<td>{registered_count}</td>"
+                f"<td>{unregistered_count}</td>"
+                f"<td>{other_count}</td>"
+                f"<td>{total}</td>"
+                "</tr>"
+            )
+        return "\n".join(rows)
+
+    def _service_rows(self, report: AssessmentReport) -> str:
+        if not report.facts.services:
+            return '<tr><td colspan="6">No service status facts collected.</td></tr>'
+
+        return "\n".join(
+            (
+                "<tr>"
+                f"<td>{escape(service.node)}</td>"
+                f"<td>{escape(service.service_name)}</td>"
+                f"<td>{escape(str(service.activated))}</td>"
+                f"<td>{escape(service.status)}</td>"
+                f"<td>{escape(_format_optional_int(service.uptime_seconds))}</td>"
+                f"<td>{escape(service.source)}</td>"
+                "</tr>"
+            )
+            for service in report.facts.services
+        )
+
+    def _perf_counter_rows(self, report: AssessmentReport) -> str:
+        if not report.facts.perf_counters:
+            return '<tr><td colspan="7">No performance counter facts collected.</td></tr>'
+
+        return "\n".join(
+            (
+                "<tr>"
+                f"<td>{escape(counter.node)}</td>"
+                f"<td>{escape(counter.object_name)}</td>"
+                f"<td>{escape(counter.counter_name)}</td>"
+                f"<td>{escape(counter.instance or '')}</td>"
+                f"<td>{escape(str(counter.value))}</td>"
+                f"<td>{counter.sample_count}</td>"
+                f"<td>{escape(counter.source)}</td>"
+                "</tr>"
+            )
+            for counter in report.facts.perf_counters
+        )
+
+    def _platform_check_rows(self, report: AssessmentReport) -> str:
+        if not report.facts.platform_checks:
+            return '<tr><td colspan="5">No platform check facts collected.</td></tr>'
+
+        return "\n".join(
+            (
+                "<tr>"
+                f"<td>{escape(check.node)}</td>"
+                f"<td>{escape(check.check_name)}</td>"
+                f"<td>{escape(check.status)}</td>"
+                f"<td>{escape(_format_details(check.details))}</td>"
+                f"<td>{escape(check.source)}</td>"
+                "</tr>"
+            )
+            for check in report.facts.platform_checks
+        )
+
     def _collector_issues_section(self, report: AssessmentReport) -> str:
         rows = []
         for result in report.collector_results:
@@ -273,6 +542,77 @@ class HtmlReportBuilder:
           {"".join(rows)}
         </tbody>
       </table>
+    </section>
+"""
+
+    def _collector_notes_section(self, report: AssessmentReport) -> str:
+        rows = []
+        for result in report.collector_results:
+            for note in result.notes:
+                rows.append(
+                    "<tr>"
+                    f"<td>{escape(result.collector_name)}</td>"
+                    f"<td>{escape(note)}</td>"
+                    "</tr>"
+                )
+
+        if not rows:
+            body = '<p>No collector notes recorded.</p>'
+        else:
+            body = f"""
+      <table>
+        <thead><tr><th>Collector</th><th>Note</th></tr></thead>
+        <tbody>
+          {"".join(rows)}
+        </tbody>
+      </table>
+"""
+
+        return f"""
+    <section>
+      <h2>Collector Notes</h2>
+      {body}
+    </section>
+"""
+
+    def _collector_evidence_section(self, report: AssessmentReport) -> str:
+        rows = []
+        for result in report.collector_results:
+            for evidence in result.evidence:
+                artifact = str(evidence.artifact_path) if evidence.artifact_path else ""
+                rows.append(
+                    "<tr>"
+                    f"<td>{escape(result.collector_name)}</td>"
+                    f"<td>{escape(evidence.source)}</td>"
+                    f"<td>{escape(evidence.operation)}</td>"
+                    f"<td>{escape(evidence.node or '')}</td>"
+                    f"<td>{escape(artifact)}</td>"
+                    f"<td>{escape(evidence.confidence)}</td>"
+                    f"<td>{escape(evidence.parser or '')}</td>"
+                    "</tr>"
+                )
+
+        if not rows:
+            body = '<p>No collector evidence references recorded.</p>'
+        else:
+            body = f"""
+      <table>
+        <thead>
+          <tr>
+            <th>Collector</th><th>Source</th><th>Operation</th><th>Node</th>
+            <th>Artifact</th><th>Confidence</th><th>Parser</th>
+          </tr>
+        </thead>
+        <tbody>
+          {"".join(rows)}
+        </tbody>
+      </table>
+"""
+
+        return f"""
+    <section>
+      <h2>Collector Evidence</h2>
+      {body}
     </section>
 """
 
@@ -330,3 +670,48 @@ class HtmlReportBuilder:
           {"".join(items)}
         </ul>
 """
+
+
+def _format_details(details: dict[str, str]) -> str:
+    if not details:
+        return ""
+    return "; ".join(f"{key}: {value}" for key, value in sorted(details.items()))
+
+
+def _format_optional_int(value: int | None) -> str:
+    if value is None:
+        return ""
+    return str(value)
+
+
+def _protocol_bucket(protocol: str | None) -> str:
+    normalized_protocol = (protocol or "").strip().upper()
+    if normalized_protocol == "SIP":
+        return "SIP"
+    if normalized_protocol == "SCCP":
+        return "SCCP"
+    return "Other"
+
+
+def _registration_status_bucket(status: str) -> str:
+    normalized_status = status.strip().lower()
+    if normalized_status in {"registered", "registered/matched"}:
+        return "registered"
+    if normalized_status in {"unregistered", "rejected", "unknown", "not_found"}:
+        return "unregistered"
+    return "other"
+
+
+def _registration_category(name: str, model: str | None, protocol: str | None) -> str:
+    normalized_name = name.strip().lower()
+    normalized_model = (model or "").strip().lower()
+    normalized_protocol = (protocol or "").strip().lower()
+    combined = f"{normalized_name} {normalized_model} {normalized_protocol}"
+
+    if "trunk" in combined:
+        return "SIP trunks"
+    if normalized_protocol in {"h323", "h.323", "mgcp", "sccp gateway"}:
+        return "Gateways/endpoints"
+    if any(token in combined for token in ("gateway", "vg", "cube", "h323", "mgcp")):
+        return "Gateways/endpoints"
+    return "Phones"

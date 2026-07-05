@@ -38,6 +38,30 @@ after the scripting engine matures, but it is not a current concern.
 
 - [Branding and visual identity](docs/BRANDING.md)
 
+## Report-First Development Workflow
+
+AletheiaUC uses the generated report as the primary development feedback loop.
+When adding a collector operation:
+
+1. Capture raw artifact evidence.
+2. Parse the artifact into normalized facts.
+3. Add or update conservative health rules.
+4. Add or update the HTML report section that displays the facts.
+5. Verify JSON contains the normalized facts and evidence references needed for automation.
+6. Add fixture tests for parser, rules, JSON, summary, and HTML behavior.
+7. Verify a sample or fixture report visibly shows the new data.
+
+The current report renders executive metrics, collection coverage, cluster
+identity, discovered nodes, device inventory, device registration, services,
+performance counters, platform checks, collector issues, collector notes,
+collector evidence, and findings.
+
+Registration, service, performance, and platform sections are intentionally
+present before their real collectors are implemented. Empty sections, skipped
+scope, and not-yet-implemented coverage rows are expected to make missing data
+visible during review. Sample-mode data is synthetic and exists only to exercise
+the report layout.
+
 ## Status
 
 This is not yet a production-ready assessment tool.
