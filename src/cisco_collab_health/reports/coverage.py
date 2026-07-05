@@ -165,6 +165,13 @@ def _device_load_defaults_coverage(
             count=0,
             detail="AXL device defaults were skipped because phone inventory scope was skipped.",
         )
+    if _has_note(report, "listDeviceDefaults collection is temporarily disabled"):
+        return ReportCoverageItem(
+            name="Device load defaults",
+            status="skipped",
+            count=0,
+            detail="AXL device defaults are temporarily disabled pending live criteria validation.",
+        )
     return _count_coverage(
         "Device load defaults",
         default_count,

@@ -266,7 +266,6 @@ class AxlCollectorTests(unittest.TestCase):
                 soap_response(GET_VERSION_RESPONSE, "getCCMVersion"),
                 soap_response(LIST_PROCESS_NODE_RESPONSE, "listProcessNode"),
                 soap_response(LIST_PHONE_RESPONSE, "listPhone"),
-                soap_response(LIST_DEVICE_DEFAULTS_RESPONSE, "listDeviceDefaults"),
             ],
         ):
             result = collector.collect(context)
@@ -274,7 +273,7 @@ class AxlCollectorTests(unittest.TestCase):
         self.assertEqual(result.warnings, [])
         self.assertEqual(
             [evidence.operation for evidence in result.evidence],
-            ["getCCMVersion", "listProcessNode", "listPhone", "listDeviceDefaults"],
+            ["getCCMVersion", "listProcessNode", "listPhone"],
         )
         self.assertEqual(
             [device.name for device in result.facts.devices],
@@ -283,13 +282,9 @@ class AxlCollectorTests(unittest.TestCase):
         self.assertEqual(result.facts.devices[0].device_pool, "Default")
         self.assertEqual(result.facts.devices[0].configured_load, "sip8845.14-2-1")
         self.assertEqual(result.facts.devices[0].source, "AXL.listPhone.summary")
-        self.assertEqual(
-            [default.model for default in result.facts.device_load_defaults],
-            ["Cisco 8845", "Cisco 7945"],
-        )
-        self.assertEqual(
-            result.facts.device_load_defaults[0].default_load,
-            "sip8845.14-2-1",
+        self.assertEqual(result.facts.device_load_defaults, [])
+        self.assertTrue(
+            any("listDeviceDefaults collection is temporarily disabled" in note for note in result.notes)
         )
 
     def test_axl_collector_pages_phone_inventory_with_configured_bounds(self) -> None:
@@ -311,7 +306,6 @@ class AxlCollectorTests(unittest.TestCase):
                 soap_response(LIST_PROCESS_NODE_RESPONSE, "listProcessNode"),
                 soap_response(LIST_PHONE_RESPONSE, "listPhone"),
                 soap_response(LIST_PHONE_SECOND_PAGE_RESPONSE, "listPhone"),
-                soap_response(LIST_DEVICE_DEFAULTS_RESPONSE, "listDeviceDefaults"),
             ],
         ) as call:
             result = collector.collect(context)
@@ -328,6 +322,41 @@ class AxlCollectorTests(unittest.TestCase):
         self.assertIn('first="2" skip="0"', phone_bodies[0])
         self.assertIn('first="1" skip="2"', phone_bodies[1])
         self.assertTrue(any("maximum device limit" in note for note in result.notes))
+
+    def test_axl_collector_stops_phone_paging_on_duplicate_page(self) -> None:
+        context = CollectionContext(
+            publisher_ip="192.0.2.10",
+            gui_username="apiuser",
+            gui_password="secret",
+            collect_phone_inventory=True,
+            phone_inventory_page_size=2,
+            phone_inventory_max_devices=10,
+        )
+        collector = AxlCollector()
+
+        with patch.object(
+            collector,
+            "_call_axl_response",
+            side_effect=[
+                soap_response(GET_VERSION_RESPONSE, "getCCMVersion"),
+                soap_response(LIST_PROCESS_NODE_RESPONSE, "listProcessNode"),
+                soap_response(LIST_PHONE_RESPONSE, "listPhone"),
+                soap_response(LIST_PHONE_RESPONSE, "listPhone"),
+            ],
+        ) as call:
+            result = collector.collect(context)
+
+        self.assertEqual(
+            [device.name for device in result.facts.devices],
+            ["SEP001122334455", "CSFALICE"],
+        )
+        phone_calls = [
+            call_args
+            for call_args in call.call_args_list
+            if call_args.args[1] == "listPhone"
+        ]
+        self.assertEqual(len(phone_calls), 2)
+        self.assertTrue(any("duplicate device names" in note for note in result.notes))
 
     def test_axl_collector_stops_phone_paging_on_empty_page(self) -> None:
         context = CollectionContext(
@@ -347,13 +376,12 @@ class AxlCollectorTests(unittest.TestCase):
                 soap_response(GET_VERSION_RESPONSE, "getCCMVersion"),
                 soap_response(LIST_PROCESS_NODE_RESPONSE, "listProcessNode"),
                 soap_response(LIST_PHONE_EMPTY_RESPONSE, "listPhone"),
-                soap_response(LIST_DEVICE_DEFAULTS_RESPONSE, "listDeviceDefaults"),
             ],
         ):
             result = collector.collect(context)
 
         self.assertEqual(result.facts.devices, [])
-        self.assertEqual(len(result.facts.device_load_defaults), 2)
+        self.assertEqual(result.facts.device_load_defaults, [])
 
     def test_axl_collector_ignores_enterprise_wide_data_process_node(self) -> None:
         context = CollectionContext(
@@ -371,7 +399,6 @@ class AxlCollectorTests(unittest.TestCase):
                 soap_response(GET_VERSION_RESPONSE, "getCCMVersion"),
                 soap_response(LIST_PROCESS_NODE_WITH_ENTERPRISE_DATA_RESPONSE, "listProcessNode"),
                 soap_response(LIST_PHONE_RESPONSE, "listPhone"),
-                soap_response(LIST_DEVICE_DEFAULTS_RESPONSE, "listDeviceDefaults"),
             ],
         ):
             result = collector.collect(context)
@@ -399,13 +426,68 @@ class AxlCollectorTests(unittest.TestCase):
                 soap_response(GET_VERSION_RESPONSE, "getCCMVersion"),
                 soap_response(LIST_PROCESS_NODE_RESPONSE, "listProcessNode"),
                 soap_response("<not-xml", "listPhone"),
-                soap_response(LIST_DEVICE_DEFAULTS_RESPONSE, "listDeviceDefaults"),
             ],
         ):
             result = collector.collect(context)
 
         self.assertEqual(result.facts.devices, [])
         self.assertIn("AXL listPhone failed", result.warnings[0])
+
+    def test_axl_phone_inventory_writes_page_specific_artifacts(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            store = ArtifactStore.create(Path(tmpdir), "lab")
+            context = CollectionContext(
+                publisher_ip="192.0.2.10",
+                gui_username="apiuser",
+                gui_password="secret",
+                artifact_store=store,
+                collect_phone_inventory=True,
+                phone_inventory_page_size=2,
+                phone_inventory_max_devices=3,
+            )
+
+            with patch(
+                "cisco_collab_health.transport.soap.urllib.request.urlopen",
+                side_effect=[
+                    FakeResponse(GET_VERSION_RESPONSE),
+                    FakeResponse(LIST_PROCESS_NODE_RESPONSE),
+                    FakeResponse(LIST_PHONE_RESPONSE),
+                    FakeResponse(LIST_PHONE_SECOND_PAGE_RESPONSE),
+                ],
+            ):
+                result = AxlCollector().collect(context)
+
+            first_page = (
+                store.root
+                / "nodes"
+                / "192.0.2.10"
+                / "api"
+                / "axl"
+                / "listPhone_page_000000"
+                / "response.txt"
+            )
+            second_page = (
+                store.root
+                / "nodes"
+                / "192.0.2.10"
+                / "api"
+                / "axl"
+                / "listPhone_page_000002"
+                / "response.txt"
+            )
+
+            self.assertTrue(first_page.exists())
+            self.assertTrue(second_page.exists())
+            self.assertTrue(
+                str(result.evidence[2].artifact_path).endswith(
+                    "listPhone_page_000000/response.txt"
+                )
+            )
+            self.assertTrue(
+                str(result.evidence[3].artifact_path).endswith(
+                    "listPhone_page_000002/response.txt"
+                )
+            )
 
     def test_axl_collector_evidence_references_response_artifacts(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

@@ -221,8 +221,7 @@ interfaces that are unavailable.
 
 AXL phone inventory uses `listPhone` summary data and is disabled by default to
 avoid unnecessary full-cluster inventory requests on large systems. When enabled,
-collection uses bounded `first`/`skip` paging and also collects AXL device
-defaults for load comparison:
+collection uses bounded `first`/`skip` paging with duplicate-page detection:
 
 ```bash
 ./aletheiauc.py --collect-phone-inventory
@@ -233,6 +232,9 @@ Tune the inventory page size and maximum device count for lab/debug runs:
 ```bash
 ./aletheiauc.py --collect-phone-inventory --phone-inventory-page-size 500 --phone-inventory-max-devices 2000
 ```
+
+AXL device-default load collection is temporarily disabled until the correct
+CUCM 15 `listDeviceDefaults` search criteria are validated from live output.
 
 If a lab uses alternate API ports, override them at startup:
 

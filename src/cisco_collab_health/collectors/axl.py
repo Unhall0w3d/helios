@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from cisco_collab_health.collectors.axl_bodies import (
     get_ccm_version_body,
-    list_device_defaults_body,
     list_phone_body,
     list_process_node_body,
 )
@@ -12,7 +11,6 @@ from cisco_collab_health.collectors.axl_errors import AxlCollectionError, AxlVer
 from cisco_collab_health.collectors.axl_parsers import (
     cluster_name_from_nodes,
     find_first_text,
-    parse_device_load_defaults,
     parse_phone_inventory,
     parse_process_nodes,
 )
@@ -110,7 +108,10 @@ class AxlCollector:
 
         if context.collect_phone_inventory:
             self._collect_phone_inventory(context, facts, warnings, evidence, notes)
-            self._collect_device_load_defaults(context, facts, warnings, evidence)
+            notes.append(
+                "AXL listDeviceDefaults collection is temporarily disabled until the "
+                "CUCM 15 search criteria are validated from live output."
+            )
         else:
             notes.append(
                 "AXL phone inventory skipped by default; use --collect-phone-inventory "
@@ -148,16 +149,18 @@ class AxlCollector:
     ) -> None:
         page_size = max(1, context.phone_inventory_page_size)
         max_devices = max(1, context.phone_inventory_max_devices)
-        collected_count = 0
+        unique_device_names: set[str] = set()
         skip = 0
 
-        while collected_count < max_devices:
-            first = min(page_size, max_devices - collected_count)
+        while len(unique_device_names) < max_devices:
+            first = min(page_size, max_devices - len(unique_device_names))
+            artifact_operation = f"listPhone_page_{skip:06d}"
             try:
                 phone_response = self._call_axl_response(
                     context,
                     "listPhone",
                     list_phone_body(first=first, skip=skip),
+                    artifact_operation=artifact_operation,
                 )
             except AxlCollectionError as exc:
                 warnings.append(f"AXL listPhone failed: {exc}")
@@ -171,42 +174,32 @@ class AxlCollector:
                 return
             if not devices:
                 break
-            facts.devices.extend(devices)
-            collected_count += len(devices)
+
+            new_devices = []
+            for device in devices:
+                device_key = device.name.strip().lower()
+                if device_key in unique_device_names:
+                    continue
+                unique_device_names.add(device_key)
+                new_devices.append(device)
+
+            if not new_devices:
+                notes.append(
+                    "AXL listPhone paging returned only duplicate device names; stopping "
+                    "inventory paging because first/skip was not honored by the response."
+                )
+                break
+
+            facts.devices.extend(new_devices)
             if len(devices) < first:
                 break
             skip += len(devices)
 
-        if collected_count >= max_devices:
+        if len(unique_device_names) >= max_devices:
             notes.append(
                 "AXL phone inventory reached configured maximum device limit "
                 f"({max_devices}); increase --phone-inventory-max-devices if needed."
             )
-
-    def _collect_device_load_defaults(
-        self,
-        context: CollectionContext,
-        facts: AssessmentFacts,
-        warnings: list[str],
-        evidence: list[EvidenceRef],
-    ) -> None:
-        try:
-            defaults_response = self._call_axl_response(
-                context,
-                "listDeviceDefaults",
-                list_device_defaults_body(),
-            )
-        except AxlCollectionError as exc:
-            warnings.append(f"AXL listDeviceDefaults failed: {exc}")
-            return
-
-        evidence.append(_evidence_from_soap_response(defaults_response, context.publisher_ip))
-        try:
-            facts.device_load_defaults.extend(
-                parse_device_load_defaults(defaults_response.body)
-            )
-        except AxlCollectionError as exc:
-            warnings.append(f"AXL listDeviceDefaults failed: {exc}")
 
     def _call_axl(self, context: CollectionContext, operation: str, body: str) -> str:
         return self._call_axl_response(context, operation, body).body
@@ -216,6 +209,8 @@ class AxlCollector:
         context: CollectionContext,
         operation: str,
         body: str,
+        *,
+        artifact_operation: str | None = None,
     ) -> SoapResponse:
         if not context.publisher_ip:
             raise AxlCollectionError("Publisher IP is missing.")
@@ -235,11 +230,12 @@ class AxlCollector:
             axl_version = candidates.pop(0)
             if axl_version in attempted_versions:
                 continue
-            artifact_operation = (
+            retry_artifact_operation = (
                 None
                 if not attempted_versions
                 else f"{operation}_retry_axl_{axl_version}"
             )
+            request_artifact_operation = artifact_operation or retry_artifact_operation
             attempted_versions.add(axl_version)
             try:
                 response = self._send_axl_request(
@@ -247,7 +243,7 @@ class AxlCollector:
                     operation,
                     body,
                     axl_version,
-                    artifact_operation=artifact_operation,
+                    artifact_operation=request_artifact_operation,
                 )
                 self._winning_axl_version = axl_version
                 return response
