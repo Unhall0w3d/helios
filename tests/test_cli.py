@@ -78,6 +78,10 @@ class CliTests(unittest.TestCase):
                 [
                     "--skip-profile",
                     "--collect-phone-inventory",
+                    "--phone-inventory-page-size",
+                    "25",
+                    "--phone-inventory-max-devices",
+                    "100",
                     "--no-html-report",
                     "--no-artifacts",
                     "--no-logs",
@@ -87,6 +91,19 @@ class CliTests(unittest.TestCase):
         self.assertEqual(result, 130)
         self.assertEqual(len(contexts), 1)
         self.assertTrue(contexts[0].collect_phone_inventory)
+        self.assertEqual(contexts[0].phone_inventory_page_size, 25)
+        self.assertEqual(contexts[0].phone_inventory_max_devices, 100)
+
+    def test_phone_inventory_bounds_must_be_positive(self) -> None:
+        with self.assertRaises(SystemExit) as exc:
+            cli.main(["--skip-profile", "--phone-inventory-page-size", "0"])
+
+        self.assertEqual(exc.exception.code, 2)
+
+        with self.assertRaises(SystemExit) as exc:
+            cli.main(["--skip-profile", "--phone-inventory-max-devices", "0"])
+
+        self.assertEqual(exc.exception.code, 2)
 
     def test_value_error_returns_failure(self) -> None:
         with patch(

@@ -163,3 +163,63 @@ class CollectorHealthRule:
                 ],
             )
         ]
+
+
+class DeviceLoadRule:
+    """Reports devices with configured loads that differ from model defaults."""
+
+    rule_id = "inventory.device_loads"
+
+    def evaluate(self, facts: AssessmentFacts) -> list[HealthFinding]:
+        if not facts.devices or not facts.device_load_defaults:
+            return []
+
+        default_by_key = {
+            _model_protocol_key(default.model, default.protocol): default.default_load
+            for default in facts.device_load_defaults
+            if default.default_load
+        }
+        manual_loads = []
+        for device in facts.devices:
+            default_load = default_by_key.get(_model_protocol_key(device.model, device.protocol))
+            if not device.configured_load or not default_load:
+                continue
+            if device.configured_load.strip().lower() == default_load.strip().lower():
+                continue
+            manual_loads.append((device.name, device.configured_load, default_load))
+
+        if not manual_loads:
+            return []
+
+        return [
+            HealthFinding(
+                rule_id=self.rule_id,
+                title="One or more devices use configured manual loads",
+                severity=FindingSeverity.INFO,
+                recommendation_kind=RecommendationKind.INFORMATIONAL,
+                facts=[
+                    f"{name}: configured load {configured_load} differs from default {default_load}"
+                    for name, configured_load, default_load in manual_loads
+                ],
+                reasoning=(
+                    "Manual device loads can be intentional, but they should be visible during "
+                    "inventory review because they may affect upgrade behavior or model "
+                    "standardization."
+                ),
+                recommendation=(
+                    "Review manually configured loads and confirm they are intentional before "
+                    "upgrade or firmware standardization work."
+                ),
+                evidence=[
+                    EvidenceRef(
+                        source="normalized_facts",
+                        operation="device_load_defaults",
+                        confidence="medium",
+                    )
+                ],
+            )
+        ]
+
+
+def _model_protocol_key(model: str | None, protocol: str | None) -> tuple[str, str]:
+    return ((model or "").strip().lower(), (protocol or "").strip().lower())

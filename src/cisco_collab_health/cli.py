@@ -117,6 +117,18 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Opt in to AXL listPhone summary inventory collection for small lab clusters.",
     )
+    parser.add_argument(
+        "--phone-inventory-page-size",
+        type=int,
+        default=500,
+        help="AXL listPhone page size when --collect-phone-inventory is enabled.",
+    )
+    parser.add_argument(
+        "--phone-inventory-max-devices",
+        type=int,
+        default=2000,
+        help="Maximum phones to request through AXL listPhone in one run.",
+    )
     tls_group = parser.add_mutually_exclusive_group()
     tls_group.add_argument(
         "--verify-tls",
@@ -159,6 +171,10 @@ def main(argv: Sequence[str] | None = None) -> int:
 def _validate_args(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:
     if args.ca_bundle and not args.verify_tls:
         parser.error("--ca-bundle requires --verify-tls")
+    if args.phone_inventory_page_size < 1:
+        parser.error("--phone-inventory-page-size must be at least 1")
+    if args.phone_inventory_max_devices < 1:
+        parser.error("--phone-inventory-max-devices must be at least 1")
 
 
 def _run(args: argparse.Namespace, status: StatusPrinter) -> int:

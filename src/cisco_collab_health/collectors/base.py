@@ -29,6 +29,8 @@ class CollectionContext:
     control_center_port: int = 8443
     perfmon_port: int = 8443
     collect_phone_inventory: bool = False
+    phone_inventory_page_size: int = 500
+    phone_inventory_max_devices: int = 2000
 
 
 @dataclass(frozen=True)

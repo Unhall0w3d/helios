@@ -6,6 +6,7 @@ from collections import Counter
 from html import escape
 
 from cisco_collab_health.models.assessment import AssessmentReport
+from cisco_collab_health.models.facts import DeviceInventoryFact
 from cisco_collab_health.models.findings import FindingSeverity, HealthFinding
 from cisco_collab_health.reports.coverage import build_report_coverage
 
@@ -26,6 +27,7 @@ class HtmlReportBuilder:
         node_rows = self._node_rows(report)
         device_rows = self._device_rows(report)
         device_model_rows = self._device_model_summary_rows(report)
+        device_load_rows = self._device_load_summary_rows(report)
         coverage_section = self._coverage_section(report)
         registration_rows = self._registration_rows(report)
         registration_summary_rows = self._registration_summary_rows(report)
@@ -218,6 +220,20 @@ class HtmlReportBuilder:
       </table>
     </section>
     <section>
+      <h2>Device Load Summary</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Model</th><th>Protocol</th><th>Default Load</th>
+            <th>Devices</th><th>Manual Loads</th><th>Missing Loads</th><th>Unknown Default</th>
+          </tr>
+        </thead>
+        <tbody>
+          {device_load_rows}
+        </tbody>
+      </table>
+    </section>
+    <section>
       <h2>Services</h2>
       <table>
         <thead>
@@ -399,6 +415,38 @@ class HtmlReportBuilder:
                 f"<td>{sccp_count}</td>"
                 f"<td>{other_count}</td>"
                 f"<td>{total}</td>"
+                "</tr>"
+            )
+        return "\n".join(rows)
+
+    def _device_load_summary_rows(self, report: AssessmentReport) -> str:
+        if not report.facts.devices:
+            return '<tr><td colspan="7">No device inventory facts collected.</td></tr>'
+
+        default_by_key = {
+            _model_protocol_key(default.model, default.protocol): default.default_load
+            for default in report.facts.device_load_defaults
+        }
+        rows = []
+        for key, devices in _devices_by_model_protocol(report).items():
+            model, protocol = key
+            default_load = default_by_key.get(key)
+            manual_load_count = sum(
+                1
+                for device in devices
+                if _is_manual_load(device.configured_load, default_load)
+            )
+            missing_load_count = sum(1 for device in devices if not device.configured_load)
+            unknown_default_count = len(devices) if key not in default_by_key else 0
+            rows.append(
+                "<tr>"
+                f"<td>{escape(model)}</td>"
+                f"<td>{escape(protocol or '')}</td>"
+                f"<td>{escape(default_load or '')}</td>"
+                f"<td>{len(devices)}</td>"
+                f"<td>{manual_load_count}</td>"
+                f"<td>{missing_load_count}</td>"
+                f"<td>{unknown_default_count}</td>"
                 "</tr>"
             )
         return "\n".join(rows)
@@ -715,3 +763,25 @@ def _registration_category(name: str, model: str | None, protocol: str | None) -
     if any(token in combined for token in ("gateway", "vg", "cube", "h323", "mgcp")):
         return "Gateways/endpoints"
     return "Phones"
+
+
+def _devices_by_model_protocol(
+    report: AssessmentReport,
+) -> dict[tuple[str, str], list[DeviceInventoryFact]]:
+    grouped: dict[tuple[str, str], list[DeviceInventoryFact]] = {}
+    for device in report.facts.devices:
+        grouped.setdefault(
+            _model_protocol_key(device.model, device.protocol),
+            [],
+        ).append(device)
+    return dict(sorted(grouped.items(), key=lambda item: item[0]))
+
+
+def _model_protocol_key(model: str | None, protocol: str | None) -> tuple[str, str]:
+    return (model or "Unknown model", protocol or "")
+
+
+def _is_manual_load(configured_load: str | None, default_load: str | None) -> bool:
+    if not configured_load or not default_load:
+        return False
+    return configured_load.strip().lower() != default_load.strip().lower()

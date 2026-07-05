@@ -43,6 +43,16 @@ class DeviceInventoryFact:
 
 
 @dataclass(frozen=True)
+class DeviceLoadDefaultFact:
+    """Default firmware/load facts for one device model and protocol."""
+
+    model: str
+    protocol: str | None
+    default_load: str | None
+    source: str
+
+
+@dataclass(frozen=True)
 class DeviceRegistrationFact:
     """Runtime device registration facts from real-time sources."""
 
@@ -109,6 +119,7 @@ class AssessmentFacts:
     cluster: ClusterIdentity | None = None
     nodes: list[CollaborationNode] = field(default_factory=list)
     devices: list[DeviceInventoryFact] = field(default_factory=list)
+    device_load_defaults: list[DeviceLoadDefaultFact] = field(default_factory=list)
     registrations: list[DeviceRegistrationFact] = field(default_factory=list)
     services: list[ServiceStatusFact] = field(default_factory=list)
     perf_counters: list[PerfCounterFact] = field(default_factory=list)
@@ -146,6 +157,12 @@ class AssessmentFacts:
         for node in other.nodes:
             self.add_node(node)
         _merge_by_key(self.devices, other.devices, _device_inventory_key, _merge_device_inventory)
+        _merge_by_key(
+            self.device_load_defaults,
+            other.device_load_defaults,
+            _device_load_default_key,
+            _merge_device_load_default,
+        )
         _merge_by_key(
             self.registrations,
             other.registrations,
@@ -250,6 +267,18 @@ def _merge_device_inventory(
     )
 
 
+def _merge_device_load_default(
+    existing: DeviceLoadDefaultFact,
+    incoming: DeviceLoadDefaultFact,
+) -> DeviceLoadDefaultFact:
+    return DeviceLoadDefaultFact(
+        model=_prefer(existing.model, incoming.model),
+        protocol=_prefer(existing.protocol, incoming.protocol),
+        default_load=_prefer(existing.default_load, incoming.default_load),
+        source=_merge_sources(existing.source, incoming.source),
+    )
+
+
 def _merge_device_registration(
     existing: DeviceRegistrationFact,
     incoming: DeviceRegistrationFact,
@@ -295,6 +324,13 @@ def _merge_platform_check(
 
 def _device_inventory_key(fact: DeviceInventoryFact) -> str:
     return _normalize_node_key(fact.name)
+
+
+def _device_load_default_key(fact: DeviceLoadDefaultFact) -> tuple[str, str]:
+    return (
+        fact.model.strip().lower(),
+        (fact.protocol or "").strip().lower(),
+    )
 
 
 def _device_registration_key(fact: DeviceRegistrationFact) -> str:

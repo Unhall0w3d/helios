@@ -14,6 +14,7 @@ from cisco_collab_health.models.assessment import AssessmentReport
 from cisco_collab_health.models.facts import (
     AssessmentFacts,
     DeviceInventoryFact,
+    DeviceLoadDefaultFact,
     DeviceRegistrationFact,
     PerfCounterFact,
     PlatformCheckFact,
@@ -49,6 +50,7 @@ class ReportBuilderTests(unittest.TestCase):
         self.assertIn("Executive Summary", payload)
         self.assertIn("Nodes discovered: 2", payload)
         self.assertIn("Devices inventoried: 3", payload)
+        self.assertIn("Device load defaults collected: 3", payload)
         self.assertIn("Registrations collected: 5", payload)
         self.assertIn("Services collected: 3", payload)
         self.assertIn("Perf counters collected: 2", payload)
@@ -66,6 +68,7 @@ class ReportBuilderTests(unittest.TestCase):
         self.assertIn("Source: normalized_facts", payload)
         self.assertIn("Collection Coverage", payload)
         self.assertIn("Device Inventory By Model", payload)
+        self.assertIn("Device Load Summary", payload)
         self.assertIn("Device Registration Summary", payload)
         self.assertIn("Device Registration", payload)
         self.assertIn("Services", payload)
@@ -75,6 +78,7 @@ class ReportBuilderTests(unittest.TestCase):
         self.assertIn("Collector Evidence", payload)
         self.assertIn("SEP001122334455", payload)
         self.assertIn("Cisco 7945", payload)
+        self.assertIn("SCCP45.9-4-2SR4-3", payload)
         self.assertIn("Gateways/endpoints", payload)
         self.assertIn("SIP trunks", payload)
         self.assertIn("Cisco CallManager", payload)
@@ -108,6 +112,24 @@ class ReportBuilderTests(unittest.TestCase):
             payload,
         )
 
+    def test_html_report_summarizes_device_loads(self) -> None:
+        payload = HtmlReportBuilder().build(self.report)
+
+        self.assertIn(
+            (
+                "<tr><td>Cisco 8845</td><td>SIP</td><td>sip8845.14-2-1</td>"
+                "<td>1</td><td>0</td><td>0</td><td>0</td></tr>"
+            ),
+            payload,
+        )
+        self.assertIn(
+            (
+                "<tr><td>Cisco Unified Client Services Framework</td><td>SIP</td><td></td>"
+                "<td>1</td><td>0</td><td>1</td><td>0</td></tr>"
+            ),
+            payload,
+        )
+
     def test_html_report_summarizes_registration_categories(self) -> None:
         payload = HtmlReportBuilder().build(self.report)
 
@@ -134,6 +156,7 @@ class ReportBuilderTests(unittest.TestCase):
                 "Cluster identity",
                 "Cluster nodes",
                 "Device inventory",
+                "Device load defaults",
                 "Device registration",
                 "Services",
                 "Performance counters",
@@ -147,6 +170,7 @@ class ReportBuilderTests(unittest.TestCase):
         self.assertEqual(by_name["Cluster identity"].status, "collected")
         self.assertEqual(by_name["Cluster nodes"].status, "collected")
         self.assertEqual(by_name["Device inventory"].status, "collected")
+        self.assertEqual(by_name["Device load defaults"].status, "collected")
         self.assertEqual(by_name["Device registration"].status, "collected")
         self.assertEqual(by_name["Services"].status, "collected")
         self.assertEqual(by_name["Performance counters"].status, "collected")
@@ -163,6 +187,7 @@ class ReportBuilderTests(unittest.TestCase):
         by_name = {item.name: item for item in build_report_coverage(report)}
 
         self.assertEqual(by_name["Device registration"].status, "not_implemented")
+        self.assertEqual(by_name["Device load defaults"].status, "not_collected")
         self.assertEqual(by_name["Services"].status, "not_implemented")
         self.assertEqual(by_name["Performance counters"].status, "not_implemented")
         self.assertEqual(by_name["Platform checks"].status, "not_implemented")
@@ -183,6 +208,7 @@ class ReportBuilderTests(unittest.TestCase):
         by_name = {item.name: item for item in build_report_coverage(report)}
 
         self.assertEqual(by_name["Device inventory"].status, "skipped")
+        self.assertEqual(by_name["Device load defaults"].status, "skipped")
 
     def test_device_facts_win_over_skipped_device_note(self) -> None:
         report = AssessmentReport(
@@ -198,6 +224,14 @@ class ReportBuilderTests(unittest.TestCase):
                         location="HQ",
                         region="Default",
                         configured_load=None,
+                        source="fixture",
+                    )
+                ],
+                device_load_defaults=[
+                    DeviceLoadDefaultFact(
+                        model="Cisco 8845",
+                        protocol="SIP",
+                        default_load="sip8845.14-2-1",
                         source="fixture",
                     )
                 ],
@@ -226,6 +260,7 @@ class ReportBuilderTests(unittest.TestCase):
         )
 
         self.assertIn("No device registration facts collected.", payload)
+        self.assertIn("No device inventory facts collected.", payload)
         self.assertIn("No service status facts collected.", payload)
         self.assertIn("No performance counter facts collected.", payload)
         self.assertIn("No platform check facts collected.", payload)

@@ -110,6 +110,60 @@ LIST_PHONE_RESPONSE = """<?xml version="1.0" encoding="UTF-8"?>
 """
 
 
+LIST_PHONE_SECOND_PAGE_RESPONSE = """<?xml version="1.0" encoding="UTF-8"?>
+<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/">
+  <soapenv:Body>
+    <ns:listPhoneResponse xmlns:ns="http://www.cisco.com/AXL/API/14.0">
+      <return>
+        <phone uuid="{55555555-5555-5555-5555-555555555555}">
+          <name>SEP00AABBCCDDEE</name>
+          <description>Hallway phone</description>
+          <model>Cisco 7945</model>
+          <protocol>SCCP</protocol>
+          <devicePoolName>Default</devicePoolName>
+          <locationName>Hub_None</locationName>
+          <loadInformation>SCCP45.9-4-2SR4-3</loadInformation>
+        </phone>
+      </return>
+    </ns:listPhoneResponse>
+  </soapenv:Body>
+</soapenv:Envelope>
+"""
+
+
+LIST_PHONE_EMPTY_RESPONSE = """<?xml version="1.0" encoding="UTF-8"?>
+<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/">
+  <soapenv:Body>
+    <ns:listPhoneResponse xmlns:ns="http://www.cisco.com/AXL/API/14.0">
+      <return />
+    </ns:listPhoneResponse>
+  </soapenv:Body>
+</soapenv:Envelope>
+"""
+
+
+LIST_DEVICE_DEFAULTS_RESPONSE = """<?xml version="1.0" encoding="UTF-8"?>
+<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/">
+  <soapenv:Body>
+    <ns:listDeviceDefaultsResponse xmlns:ns="http://www.cisco.com/AXL/API/14.0">
+      <return>
+        <deviceDefault>
+          <model>Cisco 8845</model>
+          <protocol>SIP</protocol>
+          <loadInformation>sip8845.14-2-1</loadInformation>
+        </deviceDefault>
+        <deviceDefault>
+          <model>Cisco 7945</model>
+          <protocol>SCCP</protocol>
+          <loadInformation>SCCP45.9-4-2SR4-3</loadInformation>
+        </deviceDefault>
+      </return>
+    </ns:listDeviceDefaultsResponse>
+  </soapenv:Body>
+</soapenv:Envelope>
+"""
+
+
 INCORRECT_AXL_VERSION_RESPONSE = """<!-- custom Cisco error page --><html>
 <body>
 <div id="content-header">
@@ -212,6 +266,7 @@ class AxlCollectorTests(unittest.TestCase):
                 soap_response(GET_VERSION_RESPONSE, "getCCMVersion"),
                 soap_response(LIST_PROCESS_NODE_RESPONSE, "listProcessNode"),
                 soap_response(LIST_PHONE_RESPONSE, "listPhone"),
+                soap_response(LIST_DEVICE_DEFAULTS_RESPONSE, "listDeviceDefaults"),
             ],
         ):
             result = collector.collect(context)
@@ -219,7 +274,7 @@ class AxlCollectorTests(unittest.TestCase):
         self.assertEqual(result.warnings, [])
         self.assertEqual(
             [evidence.operation for evidence in result.evidence],
-            ["getCCMVersion", "listProcessNode", "listPhone"],
+            ["getCCMVersion", "listProcessNode", "listPhone", "listDeviceDefaults"],
         )
         self.assertEqual(
             [device.name for device in result.facts.devices],
@@ -228,6 +283,77 @@ class AxlCollectorTests(unittest.TestCase):
         self.assertEqual(result.facts.devices[0].device_pool, "Default")
         self.assertEqual(result.facts.devices[0].configured_load, "sip8845.14-2-1")
         self.assertEqual(result.facts.devices[0].source, "AXL.listPhone.summary")
+        self.assertEqual(
+            [default.model for default in result.facts.device_load_defaults],
+            ["Cisco 8845", "Cisco 7945"],
+        )
+        self.assertEqual(
+            result.facts.device_load_defaults[0].default_load,
+            "sip8845.14-2-1",
+        )
+
+    def test_axl_collector_pages_phone_inventory_with_configured_bounds(self) -> None:
+        context = CollectionContext(
+            publisher_ip="192.0.2.10",
+            gui_username="apiuser",
+            gui_password="secret",
+            collect_phone_inventory=True,
+            phone_inventory_page_size=2,
+            phone_inventory_max_devices=3,
+        )
+        collector = AxlCollector()
+
+        with patch.object(
+            collector,
+            "_call_axl_response",
+            side_effect=[
+                soap_response(GET_VERSION_RESPONSE, "getCCMVersion"),
+                soap_response(LIST_PROCESS_NODE_RESPONSE, "listProcessNode"),
+                soap_response(LIST_PHONE_RESPONSE, "listPhone"),
+                soap_response(LIST_PHONE_SECOND_PAGE_RESPONSE, "listPhone"),
+                soap_response(LIST_DEVICE_DEFAULTS_RESPONSE, "listDeviceDefaults"),
+            ],
+        ) as call:
+            result = collector.collect(context)
+
+        self.assertEqual(
+            [device.name for device in result.facts.devices],
+            ["SEP001122334455", "CSFALICE", "SEP00AABBCCDDEE"],
+        )
+        phone_bodies = [
+            call_args.args[2]
+            for call_args in call.call_args_list
+            if call_args.args[1] == "listPhone"
+        ]
+        self.assertIn('first="2" skip="0"', phone_bodies[0])
+        self.assertIn('first="1" skip="2"', phone_bodies[1])
+        self.assertTrue(any("maximum device limit" in note for note in result.notes))
+
+    def test_axl_collector_stops_phone_paging_on_empty_page(self) -> None:
+        context = CollectionContext(
+            publisher_ip="192.0.2.10",
+            gui_username="apiuser",
+            gui_password="secret",
+            collect_phone_inventory=True,
+            phone_inventory_page_size=2,
+            phone_inventory_max_devices=10,
+        )
+        collector = AxlCollector()
+
+        with patch.object(
+            collector,
+            "_call_axl_response",
+            side_effect=[
+                soap_response(GET_VERSION_RESPONSE, "getCCMVersion"),
+                soap_response(LIST_PROCESS_NODE_RESPONSE, "listProcessNode"),
+                soap_response(LIST_PHONE_EMPTY_RESPONSE, "listPhone"),
+                soap_response(LIST_DEVICE_DEFAULTS_RESPONSE, "listDeviceDefaults"),
+            ],
+        ):
+            result = collector.collect(context)
+
+        self.assertEqual(result.facts.devices, [])
+        self.assertEqual(len(result.facts.device_load_defaults), 2)
 
     def test_axl_collector_ignores_enterprise_wide_data_process_node(self) -> None:
         context = CollectionContext(
@@ -245,6 +371,7 @@ class AxlCollectorTests(unittest.TestCase):
                 soap_response(GET_VERSION_RESPONSE, "getCCMVersion"),
                 soap_response(LIST_PROCESS_NODE_WITH_ENTERPRISE_DATA_RESPONSE, "listProcessNode"),
                 soap_response(LIST_PHONE_RESPONSE, "listPhone"),
+                soap_response(LIST_DEVICE_DEFAULTS_RESPONSE, "listDeviceDefaults"),
             ],
         ):
             result = collector.collect(context)
@@ -272,6 +399,7 @@ class AxlCollectorTests(unittest.TestCase):
                 soap_response(GET_VERSION_RESPONSE, "getCCMVersion"),
                 soap_response(LIST_PROCESS_NODE_RESPONSE, "listProcessNode"),
                 soap_response("<not-xml", "listPhone"),
+                soap_response(LIST_DEVICE_DEFAULTS_RESPONSE, "listDeviceDefaults"),
             ],
         ):
             result = collector.collect(context)

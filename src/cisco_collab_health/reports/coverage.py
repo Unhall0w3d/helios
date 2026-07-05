@@ -38,6 +38,7 @@ def build_report_coverage(report: AssessmentReport) -> list[ReportCoverageItem]:
             not_collected_detail="No node inventory collection result is available.",
         ),
         _device_coverage(report, collection_ran),
+        _device_load_defaults_coverage(report, collection_ran),
         _not_yet_implemented_coverage(
             "Device registration",
             len(report.facts.registrations),
@@ -142,6 +143,35 @@ def _device_coverage(report: AssessmentReport, collection_ran: bool) -> ReportCo
         collected_detail="Device inventory facts were normalized.",
         empty_detail="Collection ran but no device inventory facts were normalized.",
         not_collected_detail="No device inventory collection result is available.",
+    )
+
+
+def _device_load_defaults_coverage(
+    report: AssessmentReport,
+    collection_ran: bool,
+) -> ReportCoverageItem:
+    default_count = len(report.facts.device_load_defaults)
+    if default_count:
+        return ReportCoverageItem(
+            name="Device load defaults",
+            status="collected",
+            count=default_count,
+            detail="Device default load facts were normalized.",
+        )
+    if _has_note(report, "phone inventory skipped"):
+        return ReportCoverageItem(
+            name="Device load defaults",
+            status="skipped",
+            count=0,
+            detail="AXL device defaults were skipped because phone inventory scope was skipped.",
+        )
+    return _count_coverage(
+        "Device load defaults",
+        default_count,
+        collection_ran=collection_ran,
+        collected_detail="Device default load facts were normalized.",
+        empty_detail="Collection ran but no device default load facts were normalized.",
+        not_collected_detail="No device default load collection result is available.",
     )
 
 

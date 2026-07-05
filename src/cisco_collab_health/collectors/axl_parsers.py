@@ -8,7 +8,11 @@ from typing import Protocol
 from defusedxml import ElementTree as ET
 
 from cisco_collab_health.collectors.axl_errors import AxlCollectionError
-from cisco_collab_health.models.facts import CollaborationNode, DeviceInventoryFact
+from cisco_collab_health.models.facts import (
+    CollaborationNode,
+    DeviceInventoryFact,
+    DeviceLoadDefaultFact,
+)
 
 PSEUDO_PROCESS_NODE_NAMES = {"enterprisewidedata"}
 
@@ -78,6 +82,28 @@ def parse_phone_inventory(response_text: str) -> list[DeviceInventoryFact]:
     return devices
 
 
+def parse_device_load_defaults(response_text: str) -> list[DeviceLoadDefaultFact]:
+    try:
+        root = ET.fromstring(response_text)
+    except ET.ParseError as exc:
+        raise AxlCollectionError(f"Unable to parse listDeviceDefaults response: {exc}") from exc
+
+    defaults: list[DeviceLoadDefaultFact] = []
+    for device_default in _iter_local_name(root, "deviceDefault"):
+        model = _child_text(device_default, "model")
+        if not model:
+            continue
+        defaults.append(
+            DeviceLoadDefaultFact(
+                model=model,
+                protocol=_child_text(device_default, "protocol"),
+                default_load=_child_text(device_default, "loadInformation"),
+                source="AXL.listDeviceDefaults",
+            )
+        )
+    return defaults
+
+
 def cluster_name_from_nodes(nodes: list[CollaborationNode], publisher_ip: str) -> str:
     publisher = next((node for node in nodes if node.role == "publisher"), None)
     if publisher:
@@ -100,7 +126,8 @@ def _child_text(element: XmlElement, local_name: str) -> str | None:
     child = next(_iter_local_name(element, local_name), None)
     if child is None or child.text is None:
         return None
-    return str(child.text).strip()
+    text = str(child.text).strip()
+    return text or None
 
 
 def _iter_local_name(element: XmlElement, local_name: str) -> Iterator[XmlElement]:

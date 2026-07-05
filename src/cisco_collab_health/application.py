@@ -26,6 +26,7 @@ from cisco_collab_health.reports.summary import ExecutiveSummaryBuilder
 from cisco_collab_health.rules.basic import (
     ClusterIdentityRule,
     CollectorHealthRule,
+    DeviceLoadRule,
     NodeReachabilityRule,
 )
 from cisco_collab_health.status import StatusPrinter
@@ -43,6 +44,8 @@ def run_assessment(
     context = CollectionContext(
         tls=tls_policy,
         collect_phone_inventory=args.collect_phone_inventory,
+        phone_inventory_page_size=args.phone_inventory_page_size,
+        phone_inventory_max_devices=args.phone_inventory_max_devices,
     )
     run_started = datetime.now()
     artifact_store: ArtifactStore | None = None
@@ -73,6 +76,8 @@ def run_assessment(
             control_center_port=args.control_center_port,
             perfmon_port=args.perfmon_port,
             collect_phone_inventory=args.collect_phone_inventory,
+            phone_inventory_page_size=args.phone_inventory_page_size,
+            phone_inventory_max_devices=args.phone_inventory_max_devices,
             tls=tls_policy,
         )
         artifact_store = _create_artifact_store(args, status, profile_name, run_started)
@@ -132,7 +137,12 @@ def run_assessment(
     status.stage("Running collectors")
     engine = AssessmentEngine(
         collectors=collectors,
-        rules=[ClusterIdentityRule(), NodeReachabilityRule(), CollectorHealthRule()],
+        rules=[
+            ClusterIdentityRule(),
+            NodeReachabilityRule(),
+            CollectorHealthRule(),
+            DeviceLoadRule(),
+        ],
     )
     report = engine.run(context)
     status.ok("Collectors completed")

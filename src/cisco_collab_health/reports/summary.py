@@ -44,6 +44,7 @@ class ExecutiveSummaryBuilder:
             [
                 f"Nodes discovered: {len(report.facts.nodes)}",
                 f"Devices inventoried: {len(report.facts.devices)}",
+                f"Device load defaults collected: {len(report.facts.device_load_defaults)}",
                 f"Registrations collected: {len(report.facts.registrations)}",
                 f"Services collected: {len(report.facts.services)}",
                 f"Perf counters collected: {len(report.facts.perf_counters)}",

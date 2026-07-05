@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from cisco_collab_health.collectors.axl_bodies import (
     get_ccm_version_body,
+    list_device_defaults_body,
     list_phone_body,
     list_process_node_body,
 )
@@ -11,6 +12,7 @@ from cisco_collab_health.collectors.axl_errors import AxlCollectionError, AxlVer
 from cisco_collab_health.collectors.axl_parsers import (
     cluster_name_from_nodes,
     find_first_text,
+    parse_device_load_defaults,
     parse_phone_inventory,
     parse_process_nodes,
 )
@@ -107,20 +109,12 @@ class AxlCollector:
             warnings.append(f"AXL listProcessNode failed: {exc}")
 
         if context.collect_phone_inventory:
-            try:
-                phone_response = self._call_axl_response(
-                    context,
-                    "listPhone",
-                    list_phone_body(),
-                )
-                evidence.append(_evidence_from_soap_response(phone_response, context.publisher_ip))
-                facts.devices.extend(parse_phone_inventory(phone_response.body))
-            except AxlCollectionError as exc:
-                warnings.append(f"AXL listPhone failed: {exc}")
+            self._collect_phone_inventory(context, facts, warnings, evidence, notes)
+            self._collect_device_load_defaults(context, facts, warnings, evidence)
         else:
             notes.append(
                 "AXL phone inventory skipped by default; use --collect-phone-inventory "
-                "for small lab clusters until bounded paging is implemented."
+                "to collect bounded listPhone inventory."
             )
 
         if facts.cluster is not None and facts.nodes:
@@ -143,6 +137,76 @@ class AxlCollector:
 
         response = self._call_axl(context, "listProcessNode", list_process_node_body())
         return parse_process_nodes(response, context.publisher_ip)
+
+    def _collect_phone_inventory(
+        self,
+        context: CollectionContext,
+        facts: AssessmentFacts,
+        warnings: list[str],
+        evidence: list[EvidenceRef],
+        notes: list[str],
+    ) -> None:
+        page_size = max(1, context.phone_inventory_page_size)
+        max_devices = max(1, context.phone_inventory_max_devices)
+        collected_count = 0
+        skip = 0
+
+        while collected_count < max_devices:
+            first = min(page_size, max_devices - collected_count)
+            try:
+                phone_response = self._call_axl_response(
+                    context,
+                    "listPhone",
+                    list_phone_body(first=first, skip=skip),
+                )
+            except AxlCollectionError as exc:
+                warnings.append(f"AXL listPhone failed: {exc}")
+                return
+
+            evidence.append(_evidence_from_soap_response(phone_response, context.publisher_ip))
+            try:
+                devices = parse_phone_inventory(phone_response.body)
+            except AxlCollectionError as exc:
+                warnings.append(f"AXL listPhone failed: {exc}")
+                return
+            if not devices:
+                break
+            facts.devices.extend(devices)
+            collected_count += len(devices)
+            if len(devices) < first:
+                break
+            skip += len(devices)
+
+        if collected_count >= max_devices:
+            notes.append(
+                "AXL phone inventory reached configured maximum device limit "
+                f"({max_devices}); increase --phone-inventory-max-devices if needed."
+            )
+
+    def _collect_device_load_defaults(
+        self,
+        context: CollectionContext,
+        facts: AssessmentFacts,
+        warnings: list[str],
+        evidence: list[EvidenceRef],
+    ) -> None:
+        try:
+            defaults_response = self._call_axl_response(
+                context,
+                "listDeviceDefaults",
+                list_device_defaults_body(),
+            )
+        except AxlCollectionError as exc:
+            warnings.append(f"AXL listDeviceDefaults failed: {exc}")
+            return
+
+        evidence.append(_evidence_from_soap_response(defaults_response, context.publisher_ip))
+        try:
+            facts.device_load_defaults.extend(
+                parse_device_load_defaults(defaults_response.body)
+            )
+        except AxlCollectionError as exc:
+            warnings.append(f"AXL listDeviceDefaults failed: {exc}")
 
     def _call_axl(self, context: CollectionContext, operation: str, body: str) -> str:
         return self._call_axl_response(context, operation, body).body

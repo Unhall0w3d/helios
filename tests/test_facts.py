@@ -8,6 +8,7 @@ from cisco_collab_health.models.facts import (
     AssessmentFacts,
     CollaborationNode,
     DeviceInventoryFact,
+    DeviceLoadDefaultFact,
     DeviceRegistrationFact,
     PerfCounterFact,
     PlatformCheckFact,
@@ -276,6 +277,37 @@ class AssessmentFactsTests(unittest.TestCase):
         self.assertEqual(facts.perf_counters[0].sample_count, 2)
         self.assertEqual(len(facts.platform_checks), 1)
         self.assertEqual(facts.platform_checks[0].status, "good")
+
+    def test_merge_deduplicates_device_load_defaults_by_model_and_protocol(self) -> None:
+        facts = AssessmentFacts(
+            device_load_defaults=[
+                DeviceLoadDefaultFact(
+                    model="Cisco 8845",
+                    protocol="SIP",
+                    default_load=None,
+                    source="AXL.listDeviceDefaults",
+                )
+            ]
+        )
+        other = AssessmentFacts(
+            device_load_defaults=[
+                DeviceLoadDefaultFact(
+                    model="cisco 8845",
+                    protocol="sip",
+                    default_load="sip8845.14-2-1",
+                    source="fixture",
+                )
+            ]
+        )
+
+        facts.merge(other)
+
+        self.assertEqual(len(facts.device_load_defaults), 1)
+        self.assertEqual(facts.device_load_defaults[0].default_load, "sip8845.14-2-1")
+        self.assertEqual(
+            facts.device_load_defaults[0].source,
+            "AXL.listDeviceDefaults, fixture",
+        )
 
 
 if __name__ == "__main__":
