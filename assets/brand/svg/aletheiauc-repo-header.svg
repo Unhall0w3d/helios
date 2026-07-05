@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 400" width="1600" height="400" role="img" aria-label="AletheiaUC repository header">
+<defs>
+<radialGradient id="horizon" cx="50%" cy="50%" r="60%"><stop offset="0%" stop-color="#FFC75E"/><stop offset="55%" stop-color="#FFB84D" stop-opacity="0.7"/><stop offset="100%" stop-color="#0A0F1E" stop-opacity="0"/></radialGradient>
+<linearGradient id="ucgrad" x1="0" x2="1"><stop offset="0" stop-color="#6A4CFF"/><stop offset="0.55" stop-color="#2F7CFF"/><stop offset="1" stop-color="#22D3EE"/></linearGradient>
+<filter id="glow"><feGaussianBlur stdDeviation="3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+</defs>
+<rect width="100%" height="100%" rx="28" fill="#0A0F1E"/>
+<g opacity="0.65" stroke="#2F7CFF" stroke-width="2" fill="none">
+<path d="M760 210 C900 100 1050 260 1190 130 S1470 170 1570 80"/>
+<path d="M900 300 C1040 180 1210 310 1530 210"/>
+</g>
+<g fill="#22D3EE" opacity="0.75"><circle cx="820" cy="180" r="5"/><circle cx="960" cy="130" r="5"/><circle cx="1080" cy="230" r="5"/><circle cx="1220" cy="125" r="5"/><circle cx="1400" cy="160" r="5"/><circle cx="1520" cy="210" r="5"/></g>
+<circle cx="1260" cy="310" r="120" fill="url(#horizon)" opacity="0.85"/>
+<path d="M920 335 Q1260 250 1590 335" fill="none" stroke="url(#ucgrad)" stroke-width="4" opacity="0.8"/>
+<g transform="translate(40,-20) scale(0.64)">
+
+<circle cx="256" cy="380" r="95" fill="url(#horizon)" opacity="0.95"/>
+<path d="M80 392 Q256 334 432 392" fill="none" stroke="url(#ucgrad)" stroke-width="5" opacity="0.85"/>
+<g filter="url(#glow)" stroke-linecap="round" stroke-linejoin="round">
+<path d="M256 82 L124 350 M256 82 L388 350 M176 250 L336 250" fill="none" stroke="url(#ucgrad)" stroke-width="10"/>
+<line x1="256" y1="82" x2="256" y2="360" stroke="#FFC75E" stroke-width="3" opacity="0.7"/>
+<circle cx="256" cy="82" r="18" fill="#FFC75E" stroke="#FFF2C8" stroke-width="4"/>
+<circle cx="202" cy="180" r="17" fill="#6A4CFF" stroke="#D9D1FF" stroke-width="3"/>
+<circle cx="310" cy="180" r="17" fill="#22D3EE" stroke="#D9FAFF" stroke-width="3"/>
+<circle cx="176" cy="250" r="17" fill="#6A4CFF" stroke="#D9D1FF" stroke-width="3"/>
+<circle cx="256" cy="250" r="17" fill="#22D3EE" stroke="#D9FAFF" stroke-width="3"/>
+<circle cx="336" cy="250" r="17" fill="#22D3EE" stroke="#D9FAFF" stroke-width="3"/>
+<circle cx="124" cy="350" r="17" fill="#6A4CFF" stroke="#D9D1FF" stroke-width="3"/>
+<circle cx="388" cy="350" r="17" fill="#22D3EE" stroke="#D9FAFF" stroke-width="3"/>
+</g>
+<path d="M190 398 L322 398" stroke="#E6E8F1" stroke-width="3" opacity="0.65"/>
+</g>
+<text x="390" y="150" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="82" fill="#E6E8F1">Aletheia<tspan fill="url(#ucgrad)">UC</tspan></text>
+<text x="394" y="210" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="22" letter-spacing="8" fill="#FFC75E">BRINGING UC HEALTH TO LIGHT</text>
+<text x="394" y="270" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="18" letter-spacing="4" fill="#22D3EE">ASSESS  •  DIAGNOSE  •  IMPROVE  •  OPTIMIZE</text>
+</svg>

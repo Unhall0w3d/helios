@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 420" width="1200" height="420" role="img" aria-label="AletheiaUC logo lockup">
+<defs>
+<radialGradient id="horizon" cx="50%" cy="50%" r="60%"><stop offset="0%" stop-color="#FFC75E"/><stop offset="55%" stop-color="#FFB84D" stop-opacity="0.7"/><stop offset="100%" stop-color="#0A0F1E" stop-opacity="0"/></radialGradient>
+<linearGradient id="ucgrad" x1="0" x2="1"><stop offset="0" stop-color="#6A4CFF"/><stop offset="0.55" stop-color="#2F7CFF"/><stop offset="1" stop-color="#22D3EE"/></linearGradient>
+<filter id="glow"><feGaussianBlur stdDeviation="3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+</defs>
+<rect width="100%" height="100%" fill="#0A0F1E"/>
+<g transform="translate(20,-50) scale(0.9)">
+
+<circle cx="256" cy="380" r="95" fill="url(#horizon)" opacity="0.95"/>
+<path d="M80 392 Q256 334 432 392" fill="none" stroke="url(#ucgrad)" stroke-width="5" opacity="0.85"/>
+<g filter="url(#glow)" stroke-linecap="round" stroke-linejoin="round">
+<path d="M256 82 L124 350 M256 82 L388 350 M176 250 L336 250" fill="none" stroke="url(#ucgrad)" stroke-width="10"/>
+<line x1="256" y1="82" x2="256" y2="360" stroke="#FFC75E" stroke-width="3" opacity="0.7"/>
+<circle cx="256" cy="82" r="18" fill="#FFC75E" stroke="#FFF2C8" stroke-width="4"/>
+<circle cx="202" cy="180" r="17" fill="#6A4CFF" stroke="#D9D1FF" stroke-width="3"/>
+<circle cx="310" cy="180" r="17" fill="#22D3EE" stroke="#D9FAFF" stroke-width="3"/>
+<circle cx="176" cy="250" r="17" fill="#6A4CFF" stroke="#D9D1FF" stroke-width="3"/>
+<circle cx="256" cy="250" r="17" fill="#22D3EE" stroke="#D9FAFF" stroke-width="3"/>
+<circle cx="336" cy="250" r="17" fill="#22D3EE" stroke="#D9FAFF" stroke-width="3"/>
+<circle cx="124" cy="350" r="17" fill="#6A4CFF" stroke="#D9D1FF" stroke-width="3"/>
+<circle cx="388" cy="350" r="17" fill="#22D3EE" stroke="#D9FAFF" stroke-width="3"/>
+</g>
+<path d="M190 398 L322 398" stroke="#E6E8F1" stroke-width="3" opacity="0.65"/>
+</g>
+<text x="460" y="175" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="104" fill="#E6E8F1">Aletheia<tspan fill="url(#ucgrad)">UC</tspan></text>
+<text x="464" y="245" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="28" letter-spacing="10" fill="#FFC75E">BRINGING UC HEALTH TO LIGHT</text>
+<text x="464" y="310" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="22" letter-spacing="6" fill="#22D3EE">ASSESS  •  DIAGNOSE  •  IMPROVE  •  OPTIMIZE</text>
+</svg>

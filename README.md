@@ -1,8 +1,21 @@
+<p align="center">
+  <img src="assets/brand/png/aletheiauc-readme-header.png" alt="AletheiaUC - Bringing UC Health to Light" width="100%">
+</p>
+
+<p align="center">
+  <strong>Bringing UC Health to Light</strong><br>
+  Assess · Diagnose · Improve · Optimize
+</p>
+
 # AletheiaUC
 
 An early alpha framework for assessing Cisco Collaboration environments.
 
 AletheiaUC was originally developed under the Helios working name.
+
+AletheiaUC is named from *Aletheia*, meaning truth, disclosure, or
+unconcealedness. For this tool, that means surfacing real UC system health
+through repeatable checks, transparent reporting, and actionable findings.
 
 The project is currently focused on Cisco Unified Communications Manager
 and CUCM Session Management Edition environments, with an initial target of
@@ -20,6 +33,10 @@ report builders present the results.
 
 The project is intentionally CLI/report focused. A GUI wrapper may be possible
 after the scripting engine matures, but it is not a current concern.
+
+## Documentation
+
+- [Branding and visual identity](docs/BRANDING.md)
 
 ## Status
 
