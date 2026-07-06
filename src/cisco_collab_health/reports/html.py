@@ -6,9 +6,18 @@ from collections import Counter
 from html import escape
 
 from cisco_collab_health.models.assessment import AssessmentReport
-from cisco_collab_health.models.facts import DeviceInventoryFact
+from cisco_collab_health.models.facts import DeviceInventoryFact, DeviceRegistrationFact
 from cisco_collab_health.models.findings import FindingSeverity, HealthFinding
 from cisco_collab_health.reports.coverage import build_report_coverage
+from cisco_collab_health.reports.formatting import (
+    display_bool,
+    display_details,
+    display_status_label,
+    display_text,
+)
+from cisco_collab_health.reports.reconciliation import (
+    build_inventory_runtime_reconciliation,
+)
 
 
 class HtmlReportBuilder:
@@ -23,6 +32,7 @@ class HtmlReportBuilder:
         collector_evidence_count = sum(
             len(result.evidence) for result in report.collector_results
         )
+        methodology_scope_section = self._methodology_scope_section(report)
         cluster_section = self._cluster_section(report)
         node_rows = self._node_rows(report)
         device_rows = self._device_rows(report)
@@ -31,6 +41,7 @@ class HtmlReportBuilder:
         coverage_section = self._coverage_section(report)
         registration_rows = self._registration_rows(report)
         registration_summary_rows = self._registration_summary_rows(report)
+        reconciliation_section = self._reconciliation_section(report)
         service_rows = self._service_rows(report)
         perf_counter_rows = self._perf_counter_rows(report)
         platform_check_rows = self._platform_check_rows(report)
@@ -182,10 +193,12 @@ class HtmlReportBuilder:
         <div class="metric"><strong>{collector_evidence_count}</strong><span>API Evidence</span></div>
       </div>
     </section>
+    {methodology_scope_section}
     {coverage_section}
     {cluster_section}
     <section>
       <h2>Discovered Nodes</h2>
+      {_source_caption("Discovered Nodes", report)}
       <table>
         <thead><tr><th>Name</th><th>Address</th><th>Role</th><th>Reachable</th></tr></thead>
         <tbody>
@@ -195,6 +208,7 @@ class HtmlReportBuilder:
     </section>
     <section>
       <h2>Device Inventory By Model</h2>
+      {_source_caption("Device Inventory By Model", report)}
       <table>
         <thead>
           <tr>
@@ -208,6 +222,7 @@ class HtmlReportBuilder:
     </section>
     <section>
       <h2>Device Registration Summary</h2>
+      {_source_caption("Device Registration Summary", report)}
       <table>
         <thead>
           <tr>
@@ -221,6 +236,7 @@ class HtmlReportBuilder:
     </section>
     <section>
       <h2>Device Load Summary</h2>
+      {_source_caption("Device Load Summary", report)}
       <table>
         <thead>
           <tr>
@@ -235,6 +251,7 @@ class HtmlReportBuilder:
     </section>
     <section>
       <h2>Services</h2>
+      {_source_caption("Services", report)}
       <table>
         <thead>
           <tr>
@@ -249,6 +266,7 @@ class HtmlReportBuilder:
     </section>
     <section>
       <h2>Performance Counters</h2>
+      {_source_caption("Performance Counters", report)}
       <table>
         <thead>
           <tr>
@@ -263,6 +281,7 @@ class HtmlReportBuilder:
     </section>
     <section>
       <h2>Platform Checks</h2>
+      {_source_caption("Platform Checks", report)}
       <table>
         <thead><tr><th>Node</th><th>Check</th><th>Status</th><th>Details</th><th>Source</th></tr></thead>
         <tbody>
@@ -273,12 +292,14 @@ class HtmlReportBuilder:
     {collector_issues_section}
     {collector_notes_section}
     {collector_evidence_section}
+    {reconciliation_section}
     <section>
       <h2>Findings</h2>
       {finding_sections}
     </section>
     <section>
       <h2>Detailed Device Inventory</h2>
+      {_source_caption("Detailed Device Inventory", report)}
       <table>
         <thead>
           <tr>
@@ -293,6 +314,7 @@ class HtmlReportBuilder:
     </section>
     <section>
       <h2>Detailed Device Registration</h2>
+      {_source_caption("Detailed Device Registration", report)}
       <table>
         <thead>
           <tr>
@@ -310,12 +332,66 @@ class HtmlReportBuilder:
 </html>
 """
 
+    def _methodology_scope_section(self, report: AssessmentReport) -> str:
+        collector_names = ", ".join(result.collector_name for result in report.collector_results)
+        if not collector_names:
+            collector_names = display_text(None)
+        collector_note_count = sum(len(result.notes) for result in report.collector_results)
+        collector_issue_count = sum(
+            len(result.warnings) + len(result.errors) for result in report.collector_results
+        )
+        collector_evidence_count = sum(
+            len(result.evidence) for result in report.collector_results
+        )
+        sample_mode = _is_sample_report(report)
+        synthetic_notice = ""
+        if sample_mode:
+            synthetic_notice = """
+      <p><strong>This report contains synthetic sample data generated by SampleCollector.</strong>
+      It is intended for layout and development validation only.</p>
+"""
+
+        rows = [
+            ("Report mode", "Synthetic sample" if sample_mode else "Assessment run"),
+            ("Synthetic data", "Yes" if sample_mode else "No"),
+            ("Collectors", collector_names),
+            ("Collector count", str(len(report.collector_results))),
+            ("Collector notes", str(collector_note_count)),
+            ("Collector evidence refs", str(collector_evidence_count)),
+            ("Collector issues", str(collector_issue_count)),
+            ("Findings", str(len(report.findings))),
+            ("Device inventory count", str(len(report.facts.devices))),
+            ("Registration count", str(len(report.facts.registrations))),
+            ("Services count", str(len(report.facts.services))),
+            ("Perf counter count", str(len(report.facts.perf_counters))),
+            ("Platform check count", str(len(report.facts.platform_checks))),
+            ("Artifacts enabled", "Not recorded"),
+            ("Artifact redaction mode", "Not recorded"),
+            ("TLS verification mode", "Not recorded"),
+            ("Phone inventory scope", "Not recorded"),
+        ]
+        rendered_rows = "".join(
+            f"<tr><th>{escape(name)}</th><td>{escape(value)}</td></tr>"
+            for name, value in rows
+        )
+        return f"""
+    <section>
+      <h2>Assessment Methodology and Scope</h2>
+      {synthetic_notice}
+      <table>
+        <tbody>
+          {rendered_rows}
+        </tbody>
+      </table>
+    </section>
+"""
+
     def _coverage_section(self, report: AssessmentReport) -> str:
         rows = "\n".join(
             (
                 "<tr>"
                 f"<td>{escape(item.name)}</td>"
-                f"<td>{escape(item.status)}</td>"
+                f"<td>{escape(display_status_label(item.status))}</td>"
                 f"<td>{item.count}</td>"
                 f"<td>{escape(item.detail)}</td>"
                 "</tr>"
@@ -336,9 +412,10 @@ class HtmlReportBuilder:
 
     def _cluster_section(self, report: AssessmentReport) -> str:
         if report.facts.cluster is None:
-            return """
+            return f"""
     <section>
       <h2>Cluster</h2>
+      {_source_caption("Cluster", report)}
       <p>Cluster identity was not collected.</p>
     </section>
 """
@@ -347,6 +424,7 @@ class HtmlReportBuilder:
         return f"""
     <section>
       <h2>Cluster</h2>
+      {_source_caption("Cluster", report)}
       <table>
         <tbody>
           <tr><th>Name</th><td>{escape(cluster.name)}</td></tr>
@@ -367,7 +445,7 @@ class HtmlReportBuilder:
                 f"<td>{escape(node.name)}</td>"
                 f"<td>{escape(node.address)}</td>"
                 f"<td>{escape(node.role)}</td>"
-                f"<td>{escape(str(node.reachable))}</td>"
+                f"<td>{escape(display_bool(node.reachable))}</td>"
                 "</tr>"
             )
             for node in report.facts.nodes
@@ -380,12 +458,12 @@ class HtmlReportBuilder:
         return "\n".join(
             (
                 "<tr>"
-                f"<td>{escape(device.name)}</td>"
-                f"<td>{escape(device.model or '')}</td>"
-                f"<td>{escape(device.protocol or '')}</td>"
-                f"<td>{escape(device.device_pool or '')}</td>"
-                f"<td>{escape(device.location or '')}</td>"
-                f"<td>{escape(device.configured_load or '')}</td>"
+                f"<td>{escape(display_text(device.name))}</td>"
+                f"<td>{escape(display_text(device.model))}</td>"
+                f"<td>{escape(display_text(device.protocol))}</td>"
+                f"<td>{escape(display_text(device.device_pool))}</td>"
+                f"<td>{escape(display_text(device.location))}</td>"
+                f"<td>{escape(display_text(device.configured_load))}</td>"
                 "</tr>"
             )
             for device in report.facts.devices
@@ -440,9 +518,9 @@ class HtmlReportBuilder:
             unknown_default_count = len(devices) if key not in default_by_key else 0
             rows.append(
                 "<tr>"
-                f"<td>{escape(model)}</td>"
-                f"<td>{escape(protocol or '')}</td>"
-                f"<td>{escape(default_load or '')}</td>"
+                f"<td>{escape(display_text(model))}</td>"
+                f"<td>{escape(display_text(protocol))}</td>"
+                f"<td>{escape(display_text(default_load))}</td>"
                 f"<td>{len(devices)}</td>"
                 f"<td>{manual_load_count}</td>"
                 f"<td>{missing_load_count}</td>"
@@ -458,13 +536,13 @@ class HtmlReportBuilder:
         return "\n".join(
             (
                 "<tr>"
-                f"<td>{escape(registration.name)}</td>"
-                f"<td>{escape(registration.status)}</td>"
-                f"<td>{escape(registration.registered_node or '')}</td>"
-                f"<td>{escape(registration.ip_address or '')}</td>"
-                f"<td>{escape(registration.model or '')}</td>"
-                f"<td>{escape(registration.protocol or '')}</td>"
-                f"<td>{escape(registration.source)}</td>"
+                f"<td>{escape(display_text(registration.name))}</td>"
+                f"<td>{escape(display_text(registration.status))}</td>"
+                f"<td>{escape(display_text(registration.registered_node))}</td>"
+                f"<td>{escape(display_text(registration.ip_address))}</td>"
+                f"<td>{escape(display_text(registration.model))}</td>"
+                f"<td>{escape(display_text(registration.protocol))}</td>"
+                f"<td>{escape(display_text(registration.source))}</td>"
                 "</tr>"
             )
             for registration in report.facts.registrations
@@ -514,9 +592,9 @@ class HtmlReportBuilder:
                 "<tr>"
                 f"<td>{escape(service.node)}</td>"
                 f"<td>{escape(service.service_name)}</td>"
-                f"<td>{escape(str(service.activated))}</td>"
+                f"<td>{escape(display_bool(service.activated))}</td>"
                 f"<td>{escape(service.status)}</td>"
-                f"<td>{escape(_format_optional_int(service.uptime_seconds))}</td>"
+                f"<td>{escape(display_text(service.uptime_seconds))}</td>"
                 f"<td>{escape(service.source)}</td>"
                 "</tr>"
             )
@@ -533,8 +611,8 @@ class HtmlReportBuilder:
                 f"<td>{escape(counter.node)}</td>"
                 f"<td>{escape(counter.object_name)}</td>"
                 f"<td>{escape(counter.counter_name)}</td>"
-                f"<td>{escape(counter.instance or '')}</td>"
-                f"<td>{escape(str(counter.value))}</td>"
+                f"<td>{escape(display_text(counter.instance))}</td>"
+                f"<td>{escape(display_text(counter.value))}</td>"
                 f"<td>{counter.sample_count}</td>"
                 f"<td>{escape(counter.source)}</td>"
                 "</tr>"
@@ -552,7 +630,7 @@ class HtmlReportBuilder:
                 f"<td>{escape(check.node)}</td>"
                 f"<td>{escape(check.check_name)}</td>"
                 f"<td>{escape(check.status)}</td>"
-                f"<td>{escape(_format_details(check.details))}</td>"
+                f"<td>{escape(display_details(check.details))}</td>"
                 f"<td>{escape(check.source)}</td>"
                 "</tr>"
             )
@@ -627,16 +705,16 @@ class HtmlReportBuilder:
         rows = []
         for result in report.collector_results:
             for evidence in result.evidence:
-                artifact = str(evidence.artifact_path) if evidence.artifact_path else ""
+                artifact = str(evidence.artifact_path) if evidence.artifact_path else None
                 rows.append(
                     "<tr>"
-                    f"<td>{escape(result.collector_name)}</td>"
-                    f"<td>{escape(evidence.source)}</td>"
-                    f"<td>{escape(evidence.operation)}</td>"
-                    f"<td>{escape(evidence.node or '')}</td>"
-                    f"<td>{escape(artifact)}</td>"
-                    f"<td>{escape(evidence.confidence)}</td>"
-                    f"<td>{escape(evidence.parser or '')}</td>"
+                    f"<td>{escape(display_text(result.collector_name))}</td>"
+                    f"<td>{escape(display_text(evidence.source))}</td>"
+                    f"<td>{escape(display_text(evidence.operation))}</td>"
+                    f"<td>{escape(display_text(evidence.node))}</td>"
+                    f"<td>{escape(display_text(artifact))}</td>"
+                    f"<td>{escape(display_text(evidence.confidence))}</td>"
+                    f"<td>{escape(display_text(evidence.parser))}</td>"
                     "</tr>"
                 )
 
@@ -663,6 +741,85 @@ class HtmlReportBuilder:
       {body}
     </section>
 """
+
+    def _reconciliation_section(self, report: AssessmentReport) -> str:
+        reconciliation = build_inventory_runtime_reconciliation(
+            report.facts.devices,
+            report.facts.registrations,
+        )
+        summary_rows = "".join(
+            f"<tr><th>{escape(name)}</th><td>{value}</td></tr>"
+            for name, value in (
+                ("Configured inventory devices", reconciliation.inventory_count),
+                ("Runtime registration records", reconciliation.runtime_count),
+                ("Matched devices", len(reconciliation.matched_names)),
+                ("Inventory-only devices", len(reconciliation.inventory_only)),
+                ("Runtime-only devices", len(reconciliation.runtime_only)),
+            )
+        )
+        inventory_only_rows = self._inventory_only_rows(reconciliation.inventory_only)
+        runtime_only_rows = self._runtime_only_rows(reconciliation.runtime_only)
+
+        return f"""
+    <section>
+      <h2>Inventory / Runtime Reconciliation</h2>
+      <p class="meta">Informational name-based comparison between configured inventory facts
+      and runtime registration facts. Differences are not health findings.</p>
+      <table>
+        <tbody>
+          {summary_rows}
+        </tbody>
+      </table>
+      <h3>Runtime-only Devices</h3>
+      <table>
+        <thead><tr><th>Name</th><th>Status</th><th>Registered Node</th><th>Model</th><th>Protocol</th><th>Source</th></tr></thead>
+        <tbody>
+          {runtime_only_rows}
+        </tbody>
+      </table>
+      <h3>Inventory-only Devices</h3>
+      <table>
+        <thead><tr><th>Name</th><th>Model</th><th>Protocol</th><th>Device Pool</th><th>Location</th><th>Source</th></tr></thead>
+        <tbody>
+          {inventory_only_rows}
+        </tbody>
+      </table>
+    </section>
+"""
+
+    def _runtime_only_rows(self, registrations: list[DeviceRegistrationFact]) -> str:
+        if not registrations:
+            return '<tr><td colspan="6">No runtime-only devices found.</td></tr>'
+        return "\n".join(
+            (
+                "<tr>"
+                f"<td>{escape(display_text(registration.name))}</td>"
+                f"<td>{escape(display_text(registration.status))}</td>"
+                f"<td>{escape(display_text(registration.registered_node))}</td>"
+                f"<td>{escape(display_text(registration.model))}</td>"
+                f"<td>{escape(display_text(registration.protocol))}</td>"
+                f"<td>{escape(display_text(registration.source))}</td>"
+                "</tr>"
+            )
+            for registration in registrations
+        )
+
+    def _inventory_only_rows(self, devices: list[DeviceInventoryFact]) -> str:
+        if not devices:
+            return '<tr><td colspan="6">No inventory-only devices found.</td></tr>'
+        return "\n".join(
+            (
+                "<tr>"
+                f"<td>{escape(display_text(device.name))}</td>"
+                f"<td>{escape(display_text(device.model))}</td>"
+                f"<td>{escape(display_text(device.protocol))}</td>"
+                f"<td>{escape(display_text(device.device_pool))}</td>"
+                f"<td>{escape(display_text(device.location))}</td>"
+                f"<td>{escape(display_text(device.source))}</td>"
+                "</tr>"
+            )
+            for device in devices
+        )
 
     def _finding_section(self, finding: HealthFinding) -> str:
         severity = escape(finding.severity.value)
@@ -720,18 +877,6 @@ class HtmlReportBuilder:
 """
 
 
-def _format_details(details: dict[str, str]) -> str:
-    if not details:
-        return ""
-    return "; ".join(f"{key}: {value}" for key, value in sorted(details.items()))
-
-
-def _format_optional_int(value: int | None) -> str:
-    if value is None:
-        return ""
-    return str(value)
-
-
 def _protocol_bucket(protocol: str | None) -> str:
     normalized_protocol = (protocol or "").strip().upper()
     if normalized_protocol == "SIP":
@@ -785,3 +930,39 @@ def _is_manual_load(configured_load: str | None, default_load: str | None) -> bo
     if not configured_load or not default_load:
         return False
     return configured_load.strip().lower() != default_load.strip().lower()
+
+
+def _is_sample_report(report: AssessmentReport) -> bool:
+    return any(result.collector_name == "sample" for result in report.collector_results)
+
+
+def _has_axl_evidence(report: AssessmentReport) -> bool:
+    return any(
+        evidence.source.upper() == "AXL"
+        for result in report.collector_results
+        for evidence in result.evidence
+    )
+
+
+def _source_caption(section_name: str, report: AssessmentReport) -> str:
+    if _is_sample_report(report):
+        return '<p class="meta">Source: SampleCollector synthetic fixture data.</p>'
+
+    axl_sections = {
+        "Cluster": "Source: AXL getCCMVersion and listProcessNode.",
+        "Discovered Nodes": "Source: AXL listProcessNode.",
+        "Device Inventory By Model": "Source: AXL listPhone summary inventory.",
+        "Device Load Summary": "Source: AXL listPhone summary inventory and device load default facts when collected.",
+        "Detailed Device Inventory": "Source: AXL listPhone summary inventory.",
+    }
+    planned_sections = {
+        "Device Registration Summary": "Source: RISPort70 SelectCmDeviceExt. Real collector not implemented yet.",
+        "Detailed Device Registration": "Source: RISPort70 SelectCmDeviceExt. Real collector not implemented yet.",
+        "Services": "Source: Control Center Services. Real collector not implemented yet.",
+        "Performance Counters": "Source: PerfMon. Real collector not implemented yet.",
+        "Platform Checks": "Source: SSH/CLI fallback. Real collector not implemented yet.",
+    }
+    if section_name in axl_sections and _has_axl_evidence(report):
+        return f'<p class="meta">{escape(axl_sections[section_name])}</p>'
+    caption = planned_sections.get(section_name, "Source: Not recorded.")
+    return f'<p class="meta">{escape(caption)}</p>'

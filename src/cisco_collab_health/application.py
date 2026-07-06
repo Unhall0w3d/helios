@@ -26,8 +26,13 @@ from cisco_collab_health.reports.summary import ExecutiveSummaryBuilder
 from cisco_collab_health.rules.basic import (
     ClusterIdentityRule,
     CollectorHealthRule,
+    DeviceInventorySummaryRule,
     DeviceLoadRule,
+    DeviceLoadSummaryRule,
     NodeReachabilityRule,
+    PlatformCheckSummaryRule,
+    RegistrationSummaryRule,
+    ServiceSummaryRule,
 )
 from cisco_collab_health.status import StatusPrinter
 from cisco_collab_health.transport.tls import TlsPolicy
@@ -142,6 +147,11 @@ def run_assessment(
             NodeReachabilityRule(),
             CollectorHealthRule(),
             DeviceLoadRule(),
+            DeviceInventorySummaryRule(),
+            RegistrationSummaryRule(),
+            ServiceSummaryRule(),
+            PlatformCheckSummaryRule(),
+            DeviceLoadSummaryRule(),
         ],
     )
     report = engine.run(context)

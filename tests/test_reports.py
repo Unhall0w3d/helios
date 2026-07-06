@@ -13,6 +13,7 @@ from cisco_collab_health.models.evidence import EvidenceRef
 from cisco_collab_health.models.assessment import AssessmentReport
 from cisco_collab_health.models.facts import (
     AssessmentFacts,
+    ClusterIdentity,
     DeviceInventoryFact,
     DeviceLoadDefaultFact,
     DeviceRegistrationFact,
@@ -21,8 +22,16 @@ from cisco_collab_health.models.facts import (
     ServiceStatusFact,
 )
 from cisco_collab_health.reports.coverage import build_report_coverage
+from cisco_collab_health.reports.formatting import (
+    display_bool,
+    display_status_label,
+    display_text,
+)
 from cisco_collab_health.reports.html import HtmlReportBuilder
 from cisco_collab_health.reports.json import JsonReportBuilder
+from cisco_collab_health.reports.reconciliation import (
+    build_inventory_runtime_reconciliation,
+)
 from cisco_collab_health.reports.summary import ExecutiveSummaryBuilder
 from cisco_collab_health.rules.basic import ClusterIdentityRule, NodeReachabilityRule
 
@@ -64,6 +73,9 @@ class ReportBuilderTests(unittest.TestCase):
 
         self.assertIn("<!doctype html>", payload)
         self.assertIn("AletheiaUC Assessment", payload)
+        self.assertIn("Assessment Methodology and Scope", payload)
+        self.assertIn("synthetic sample data", payload)
+        self.assertIn("SampleCollector synthetic fixture data", payload)
         self.assertIn("Cluster identity collected", payload)
         self.assertIn("Source: normalized_facts", payload)
         self.assertIn("Collection Coverage", payload)
@@ -76,6 +88,7 @@ class ReportBuilderTests(unittest.TestCase):
         self.assertIn("Platform Checks", payload)
         self.assertIn("Collector Notes", payload)
         self.assertIn("Collector Evidence", payload)
+        self.assertIn("Inventory / Runtime Reconciliation", payload)
         self.assertIn("SEP001122334455", payload)
         self.assertIn("Cisco 7945", payload)
         self.assertIn("SCCP45.9-4-2SR4-3", payload)
@@ -124,7 +137,7 @@ class ReportBuilderTests(unittest.TestCase):
         )
         self.assertIn(
             (
-                "<tr><td>Cisco Unified Client Services Framework</td><td>SIP</td><td></td>"
+                "<tr><td>Cisco Unified Client Services Framework</td><td>SIP</td><td>—</td>"
                 "<td>1</td><td>0</td><td>1</td><td>0</td></tr>"
             ),
             payload,
@@ -191,6 +204,135 @@ class ReportBuilderTests(unittest.TestCase):
         self.assertEqual(by_name["Services"].status, "not_implemented")
         self.assertEqual(by_name["Performance counters"].status, "not_implemented")
         self.assertEqual(by_name["Platform checks"].status, "not_implemented")
+
+    def test_display_formatters_render_report_friendly_values(self) -> None:
+        self.assertEqual(display_text(None), "—")
+        self.assertEqual(display_text("  "), "—")
+        self.assertEqual(display_text(42), "42")
+        self.assertEqual(display_bool(True), "Yes")
+        self.assertEqual(display_bool(False), "No")
+        self.assertEqual(display_bool(None), "—")
+        self.assertEqual(display_status_label("not_implemented"), "Not implemented")
+
+    def test_html_report_renders_friendly_statuses_and_empty_values(self) -> None:
+        payload = HtmlReportBuilder().build(self.report)
+
+        self.assertIn("<td>Collected</td>", payload)
+        self.assertIn("<td>Yes</td>", payload)
+        self.assertIn("<td>—</td>", payload)
+        self.assertNotIn("<td>True</td>", payload)
+        self.assertNotIn("<td>not_implemented</td>", payload)
+
+    def test_html_report_includes_axl_source_captions_when_evidence_exists(self) -> None:
+        report = AssessmentReport(
+            facts=AssessmentFacts(
+                cluster=ClusterIdentity(
+                    name="prod-cluster",
+                    product="Cisco Unified Communications Manager",
+                    version="15.0",
+                ),
+                devices=[
+                    DeviceInventoryFact(
+                        name="SEP001122334455",
+                        description=None,
+                        model="Cisco 8845",
+                        protocol="SIP",
+                        device_pool="Default",
+                        call_manager_group=None,
+                        location=None,
+                        region=None,
+                        configured_load=None,
+                        source="AXL.listPhone.summary",
+                    )
+                ],
+            ),
+            collector_results=[
+                CollectionResult(
+                    collector_name="axl",
+                    facts=AssessmentFacts(),
+                    evidence=[
+                        EvidenceRef(
+                            source="AXL",
+                            operation="listPhone",
+                            confidence="medium",
+                        )
+                    ],
+                )
+            ],
+            findings=[],
+        )
+
+        payload = HtmlReportBuilder().build(report)
+
+        self.assertIn("Source: AXL getCCMVersion and listProcessNode.", payload)
+        self.assertIn("Source: AXL listPhone summary inventory.", payload)
+        self.assertIn("Source: RISPort70 SelectCmDeviceExt", payload)
+
+    def test_inventory_runtime_reconciliation_matches_by_device_name(self) -> None:
+        reconciliation = build_inventory_runtime_reconciliation(
+            devices=[
+                DeviceInventoryFact(
+                    name="SEP001122334455",
+                    description=None,
+                    model="Cisco 8845",
+                    protocol="SIP",
+                    device_pool="Default",
+                    call_manager_group=None,
+                    location=None,
+                    region=None,
+                    configured_load=None,
+                    source="fixture",
+                ),
+                DeviceInventoryFact(
+                    name="CSFALICE",
+                    description=None,
+                    model="Cisco Unified Client Services Framework",
+                    protocol="SIP",
+                    device_pool="Softphone",
+                    call_manager_group=None,
+                    location=None,
+                    region=None,
+                    configured_load=None,
+                    source="fixture",
+                ),
+            ],
+            registrations=[
+                DeviceRegistrationFact(
+                    name="sep001122334455",
+                    status="registered",
+                    registered_node="cucm-pub-01",
+                    ip_address="192.0.2.50",
+                    model="Cisco 8845",
+                    protocol="SIP",
+                    source="fixture",
+                ),
+                DeviceRegistrationFact(
+                    name="HQ-VG01",
+                    status="registered",
+                    registered_node="cucm-pub-01",
+                    ip_address="192.0.2.60",
+                    model="Cisco VG Gateway",
+                    protocol="MGCP",
+                    source="fixture",
+                ),
+            ],
+        )
+
+        self.assertEqual(reconciliation.matched_names, ["sep001122334455"])
+        self.assertEqual([device.name for device in reconciliation.inventory_only], ["CSFALICE"])
+        self.assertEqual(
+            [registration.name for registration in reconciliation.runtime_only],
+            ["HQ-VG01"],
+        )
+
+    def test_html_reconciliation_section_is_informational_only(self) -> None:
+        payload = HtmlReportBuilder().build(self.report)
+
+        self.assertIn("Runtime-only Devices", payload)
+        self.assertIn("HQ-VG01", payload)
+        self.assertIn("ITSP-SIP-TRUNK", payload)
+        self.assertIn("Differences are not health findings.", payload)
+        self.assertNotIn("inventory.runtime_reconciliation", payload)
 
     def test_axl_skipped_phone_inventory_note_marks_devices_skipped(self) -> None:
         report = AssessmentReport(

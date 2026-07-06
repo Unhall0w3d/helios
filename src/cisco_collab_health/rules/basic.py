@@ -223,3 +223,173 @@ class DeviceLoadRule:
 
 def _model_protocol_key(model: str | None, protocol: str | None) -> tuple[str, str]:
     return ((model or "").strip().lower(), (protocol or "").strip().lower())
+
+
+class DeviceInventorySummaryRule:
+    """Summarizes configured device inventory facts."""
+
+    rule_id = "cucm.device_inventory_summary"
+
+    def evaluate(self, facts: AssessmentFacts) -> list[HealthFinding]:
+        if not facts.devices:
+            return []
+
+        models = {device.model for device in facts.devices if device.model}
+        sip_count = sum(
+            1 for device in facts.devices if _protocol_key(device.protocol) == "sip"
+        )
+        sccp_count = sum(
+            1 for device in facts.devices if _protocol_key(device.protocol) == "sccp"
+        )
+        return [
+            _info_finding(
+                rule_id=self.rule_id,
+                title="Device inventory collected",
+                facts=[
+                    f"Devices evaluated: {len(facts.devices)}",
+                    f"Models observed: {len(models)}",
+                    f"SIP devices: {sip_count}",
+                    f"SCCP devices: {sccp_count}",
+                ],
+                operation="device_inventory_summary",
+            )
+        ]
+
+
+class RegistrationSummaryRule:
+    """Summarizes runtime registration facts."""
+
+    rule_id = "cucm.registration_summary"
+
+    def evaluate(self, facts: AssessmentFacts) -> list[HealthFinding]:
+        if not facts.registrations:
+            return []
+
+        registered = 0
+        unregistered = 0
+        other = 0
+        for registration in facts.registrations:
+            status = registration.status.strip().lower()
+            if status == "registered":
+                registered += 1
+            elif status == "unregistered":
+                unregistered += 1
+            else:
+                other += 1
+        return [
+            _info_finding(
+                rule_id=self.rule_id,
+                title="Device registration data collected",
+                facts=[
+                    f"Registration records: {len(facts.registrations)}",
+                    f"Registered: {registered}",
+                    f"Unregistered: {unregistered}",
+                    f"Other: {other}",
+                ],
+                operation="registration_summary",
+            )
+        ]
+
+
+class ServiceSummaryRule:
+    """Summarizes service status facts."""
+
+    rule_id = "cucm.service_summary"
+
+    def evaluate(self, facts: AssessmentFacts) -> list[HealthFinding]:
+        if not facts.services:
+            return []
+
+        started = sum(
+            1 for service in facts.services if service.status.strip().lower() == "started"
+        )
+        non_started = len(facts.services) - started
+        return [
+            _info_finding(
+                rule_id=self.rule_id,
+                title="Service status data collected",
+                facts=[
+                    f"Services evaluated: {len(facts.services)}",
+                    f"Started services: {started}",
+                    f"Non-started services: {non_started}",
+                ],
+                operation="service_summary",
+            )
+        ]
+
+
+class PlatformCheckSummaryRule:
+    """Summarizes platform check facts."""
+
+    rule_id = "cucm.platform_check_summary"
+
+    def evaluate(self, facts: AssessmentFacts) -> list[HealthFinding]:
+        if not facts.platform_checks:
+            return []
+
+        statuses = sorted({check.status for check in facts.platform_checks if check.status})
+        status_text = ", ".join(statuses) if statuses else "none"
+        return [
+            _info_finding(
+                rule_id=self.rule_id,
+                title="Platform check data collected",
+                facts=[
+                    f"Platform checks evaluated: {len(facts.platform_checks)}",
+                    f"Status values observed: {status_text}",
+                ],
+                operation="platform_check_summary",
+            )
+        ]
+
+
+class DeviceLoadSummaryRule:
+    """Summarizes device load facts."""
+
+    rule_id = "cucm.device_load_summary"
+
+    def evaluate(self, facts: AssessmentFacts) -> list[HealthFinding]:
+        if not facts.devices and not facts.device_load_defaults:
+            return []
+
+        with_configured_load = sum(1 for device in facts.devices if device.configured_load)
+        missing_configured_load = len(facts.devices) - with_configured_load
+        return [
+            _info_finding(
+                rule_id=self.rule_id,
+                title="Device load data collected",
+                facts=[
+                    f"Device load defaults: {len(facts.device_load_defaults)}",
+                    f"Devices with configured loads: {with_configured_load}",
+                    f"Devices missing configured loads: {missing_configured_load}",
+                ],
+                operation="device_load_summary",
+            )
+        ]
+
+
+def _info_finding(
+    *,
+    rule_id: str,
+    title: str,
+    facts: list[str],
+    operation: str,
+) -> HealthFinding:
+    return HealthFinding(
+        rule_id=rule_id,
+        title=title,
+        severity=FindingSeverity.INFO,
+        recommendation_kind=RecommendationKind.INFORMATIONAL,
+        facts=facts,
+        reasoning="Collected facts are summarized for assessment review.",
+        evidence=[
+            EvidenceRef(
+                source="normalized_facts",
+                operation=operation,
+                confidence="medium",
+            )
+        ],
+    )
+
+
+def _protocol_key(protocol: str | None) -> str:
+    return (protocol or "").strip().lower()

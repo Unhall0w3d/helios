@@ -38,10 +38,12 @@ after the scripting engine matures, but it is not a current concern.
 
 - [Branding and visual identity](docs/BRANDING.md)
 
-## Report-First Development Workflow
+## Report-Integrated Development Workflow
 
-AletheiaUC uses the generated report as the primary development feedback loop.
-When adding a collector operation:
+AletheiaUC develops reporting alongside data collection and parsing. When adding
+a collector operation, the feature is not considered complete until raw evidence
+is captured, data is parsed into normalized facts, relevant rules are evaluated,
+and the HTML/JSON reports visibly expose the new data.
 
 1. Capture raw artifact evidence.
 2. Parse the artifact into normalized facts.
