@@ -348,11 +348,10 @@ class DeviceLoadSummaryRule:
     rule_id = "cucm.device_load_summary"
 
     def evaluate(self, facts: AssessmentFacts) -> list[HealthFinding]:
-        if not facts.devices and not facts.device_load_defaults:
+        if not facts.device_load_defaults:
             return []
 
         with_configured_load = sum(1 for device in facts.devices if device.configured_load)
-        missing_configured_load = len(facts.devices) - with_configured_load
         return [
             _info_finding(
                 rule_id=self.rule_id,
@@ -360,7 +359,6 @@ class DeviceLoadSummaryRule:
                 facts=[
                     f"Device load defaults: {len(facts.device_load_defaults)}",
                     f"Devices with configured loads: {with_configured_load}",
-                    f"Devices missing configured loads: {missing_configured_load}",
                 ],
                 operation="device_load_summary",
             )

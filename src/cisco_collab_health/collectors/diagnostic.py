@@ -3,11 +3,19 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
+from typing import Any, Iterator
 from xml.sax.saxutils import escape
+
+from defusedxml import ElementTree as ET
 
 from cisco_collab_health.collectors.base import CollectionResult
 from cisco_collab_health.models.evidence import EvidenceRef
-from cisco_collab_health.models.facts import AssessmentFacts
+from cisco_collab_health.models.facts import (
+    AssessmentFacts,
+    DeviceRegistrationFact,
+    PerfCounterFact,
+    ServiceStatusFact,
+)
 from cisco_collab_health.models.runtime import CollectionContext
 from cisco_collab_health.transport.http import CapturedHttpClient, CapturedHttpError
 from cisco_collab_health.transport.soap import (
@@ -64,15 +72,15 @@ class DiagnosticCaptureCollector:
         self._capture_wsdls(context, nodes, evidence, warnings)
 
         if "risport70" in self.available_interfaces:
-            self._capture_risport(context, evidence, warnings)
+            self._capture_risport(context, facts, evidence, warnings)
         if "control_center" in self.available_interfaces:
-            self._capture_control_center(context, nodes, evidence, warnings)
+            self._capture_control_center(context, nodes, facts, evidence, warnings)
         if "perfmon" in self.available_interfaces:
-            self._capture_perfmon(context, nodes, evidence, warnings)
+            self._capture_perfmon(context, nodes, facts, evidence, warnings)
 
         notes.append(
-            "Diagnostic capture is raw, bounded discovery evidence; responses are not yet "
-            "treated as normalized health facts."
+            "Diagnostic capture retains raw evidence and normalizes supported RISPort, "
+            "Control Center, and PerfMon responses."
         )
         notes.append(
             f"Diagnostic node scope: {len(nodes)} node(s). RISPort device cap: "
@@ -159,6 +167,7 @@ class DiagnosticCaptureCollector:
     def _capture_risport(
         self,
         context: CollectionContext,
+        facts: AssessmentFacts,
         evidence: list[EvidenceRef],
         warnings: list[str],
     ) -> None:
@@ -193,7 +202,7 @@ class DiagnosticCaptureCollector:
             <ast:DownloadStatus>Any</ast:DownloadStatus>
           </ast:CmSelectionCriteria>
         </ast:{operation}>"""
-        self._capture_soap(
+        response = self._capture_soap(
             context,
             node=context.publisher_ip,
             endpoint=(
@@ -206,11 +215,14 @@ class DiagnosticCaptureCollector:
             evidence=evidence,
             warnings=warnings,
         )
+        if response is not None:
+            facts.registrations.extend(_parse_risport_registrations(response.body))
 
     def _capture_control_center(
         self,
         context: CollectionContext,
         nodes: tuple[str, ...],
+        facts: AssessmentFacts,
         evidence: list[EvidenceRef],
         warnings: list[str],
     ) -> None:
@@ -232,7 +244,7 @@ class DiagnosticCaptureCollector:
                 "/controlcenterservice2/services/ControlCenterServices"
             )
             for operation, body in operations:
-                self._capture_soap(
+                response = self._capture_soap(
                     context,
                     node=node,
                     endpoint=endpoint,
@@ -242,11 +254,14 @@ class DiagnosticCaptureCollector:
                     evidence=evidence,
                     warnings=warnings,
                 )
+                if response is not None and operation == "soapGetServiceStatus":
+                    facts.services.extend(_parse_service_status(response.body, node))
 
     def _capture_perfmon(
         self,
         context: CollectionContext,
         nodes: tuple[str, ...],
+        facts: AssessmentFacts,
         evidence: list[EvidenceRef],
         warnings: list[str],
     ) -> None:
@@ -257,7 +272,7 @@ class DiagnosticCaptureCollector:
                 f"https://{node}:{context.perfmon_port}"
                 "/perfmonservice2/services/PerfmonService"
             )
-            self._capture_soap(
+            discovery = self._capture_soap(
                 context,
                 node=node,
                 endpoint=endpoint,
@@ -271,6 +286,8 @@ class DiagnosticCaptureCollector:
                 evidence=evidence,
                 warnings=warnings,
             )
+            if discovery is None:
+                continue
             for object_name in baseline_objects:
                 artifact_operation = "perfmonCollectCounterData_" + _safe_operation(object_name)
                 body = (
@@ -279,7 +296,7 @@ class DiagnosticCaptureCollector:
                     f"<ast:Object>{object_name}</ast:Object>"
                     "</ast:perfmonCollectCounterData>"
                 )
-                self._capture_soap(
+                response = self._capture_soap(
                     context,
                     node=node,
                     endpoint=endpoint,
@@ -290,6 +307,10 @@ class DiagnosticCaptureCollector:
                     evidence=evidence,
                     warnings=warnings,
                 )
+                if response is not None:
+                    facts.perf_counters.extend(
+                        _parse_perf_counters(response.body, node, object_name)
+                    )
 
     def _capture_soap(
         self,
@@ -303,7 +324,7 @@ class DiagnosticCaptureCollector:
         evidence: list[EvidenceRef],
         warnings: list[str],
         artifact_operation: str | None = None,
-    ) -> None:
+    ) -> SoapResponse | None:
         request = SoapRequest(
             endpoint=endpoint,
             body=body,
@@ -319,8 +340,9 @@ class DiagnosticCaptureCollector:
             response = self.soap_client.send(request, context)
         except SoapTransportError as exc:
             warnings.append(f"{interface} {operation} failed on {node}: {exc}")
-            return
+            return None
         evidence.append(_soap_evidence(response, node))
+        return response
 
 
 def _soap_evidence(response: SoapResponse, node: str) -> EvidenceRef:
@@ -336,3 +358,108 @@ def _soap_evidence(response: SoapResponse, node: str) -> EvidenceRef:
 
 def _safe_operation(value: str) -> str:
     return "_".join(value.lower().split())
+
+
+def _parse_risport_registrations(response_text: str) -> list[DeviceRegistrationFact]:
+    root = _xml_root(response_text)
+    if root is None:
+        return []
+    registrations = []
+    for cm_node in _elements(root, "CmNodes"):
+        for node_item in _direct_children(cm_node, "item"):
+            node_name = _child_text(node_item, "Name")
+            for devices in _direct_children(node_item, "CmDevices"):
+                for device in _direct_children(devices, "item"):
+                    name = _child_text(device, "Name")
+                    status = _child_text(device, "Status")
+                    if not name or not status:
+                        continue
+                    ip_address = None
+                    ip_container = next(iter(_direct_children(device, "IPAddress")), None)
+                    if ip_container is not None:
+                        ip_item = next(iter(_direct_children(ip_container, "item")), None)
+                        if ip_item is not None:
+                            ip_address = _child_text(ip_item, "IP")
+                    registrations.append(DeviceRegistrationFact(
+                        name=name, status=status, registered_node=node_name,
+                        ip_address=ip_address, model=_child_text(device, "Model"),
+                        protocol=_child_text(device, "Protocol"),
+                        source="RISPort70.selectCmDeviceExt",
+                    ))
+    return registrations
+
+
+def _parse_service_status(response_text: str, node: str) -> list[ServiceStatusFact]:
+    root = _xml_root(response_text)
+    if root is None:
+        return []
+    facts = []
+    for container in _elements(root, "ServiceInfoList"):
+        for item in _direct_children(container, "item"):
+            name = _child_text(item, "ServiceName")
+            status = _child_text(item, "ServiceStatus")
+            if not name or not status:
+                continue
+            uptime_text = _child_text(item, "UpTime")
+            try:
+                uptime = int(uptime_text) if uptime_text and int(uptime_text) >= 0 else None
+            except ValueError:
+                uptime = None
+            facts.append(ServiceStatusFact(
+                node=node, service_name=name, activated=None, status=status,
+                uptime_seconds=uptime, source="ControlCenter.soapGetServiceStatus",
+            ))
+    return facts
+
+
+def _parse_perf_counters(response_text: str, node: str, object_name: str) -> list[PerfCounterFact]:
+    root = _xml_root(response_text)
+    if root is None:
+        return []
+    facts = []
+    for item in _elements(root, "perfmonCollectCounterDataReturn"):
+        name = _child_text(item, "Name")
+        value = _child_text(item, "Value")
+        status = _child_text(item, "CStatus")
+        if not name or value is None or status not in {"0", "1"}:
+            continue
+        try:
+            parsed_value: float | int | str = int(value)
+        except ValueError:
+            try:
+                parsed_value = float(value)
+            except ValueError:
+                parsed_value = value
+        facts.append(PerfCounterFact(
+            node=node, object_name=object_name, counter_name=name.split("\\")[-1],
+            instance=None, value=parsed_value, sample_count=1,
+            source="PerfMon.perfmonCollectCounterData",
+        ))
+    return facts
+
+
+def _xml_root(response_text: str) -> Any | None:
+    try:
+        return ET.fromstring(response_text)
+    except ET.ParseError:
+        return None
+
+
+def _local_name(element: Any) -> str:
+    return str(element.tag).rsplit("}", 1)[-1]
+
+
+def _elements(root: Any, name: str) -> Iterator[Any]:
+    return (element for element in root.iter() if _local_name(element) == name)
+
+
+def _direct_children(element: Any, name: str) -> Iterator[Any]:
+    return (child for child in element if _local_name(child) == name)
+
+
+def _child_text(element: Any, name: str) -> str | None:
+    child = next(_direct_children(element, name), None)
+    if child is None or child.text is None:
+        return None
+    text = child.text.strip()
+    return text or None

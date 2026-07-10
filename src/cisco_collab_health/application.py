@@ -164,6 +164,18 @@ def run_assessment(
         ],
     )
     report = engine.run(context)
+    report = replace(
+        report,
+        runtime_metadata={
+            "profile_name": profile_name,
+            "publisher": context.publisher_ip,
+            "artifacts_enabled": artifact_store is not None,
+            "artifact_redaction": args.artifact_redaction if artifact_store else None,
+            "tls_verification": tls_policy.verify,
+            "phone_inventory_enabled": context.collect_phone_inventory or context.diagnostic_capture,
+            "diagnostic_capture": context.diagnostic_capture,
+        },
+    )
     status.ok("Collectors completed")
     for collector_result in report.collector_results:
         for warning in collector_result.warnings:

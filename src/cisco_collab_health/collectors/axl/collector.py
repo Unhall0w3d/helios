@@ -329,11 +329,18 @@ class AxlCollector:
                     )
                     break
                 captured += record_count
+                if record_count > first:
+                    notes.append(
+                        f"Diagnostic AXL {operation} returned {record_count} records despite "
+                        f"a requested page size of {first}; CUCM did not enforce the page limit."
+                    )
+                    break
                 if record_count < first:
                     break
+            scope = "server-unbounded response" if captured > max_records else "bounded"
             notes.append(
                 f"Diagnostic AXL {operation} captured up to {captured} record(s), "
-                f"bounded at {max_records}."
+                f"{scope} at {max_records}."
             )
 
     def _call_axl(self, context: CollectionContext, operation: str, body: str) -> str:

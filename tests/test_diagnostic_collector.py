@@ -5,7 +5,12 @@ from __future__ import annotations
 import unittest
 from pathlib import Path
 
-from cisco_collab_health.collectors.diagnostic import DiagnosticCaptureCollector
+from cisco_collab_health.collectors.diagnostic import (
+    DiagnosticCaptureCollector,
+    _parse_perf_counters,
+    _parse_risport_registrations,
+    _parse_service_status,
+)
 from cisco_collab_health.models.runtime import CollectionContext
 from cisco_collab_health.transport.http import CapturedHttpResponse
 from cisco_collab_health.transport.soap import SoapResponse
@@ -50,6 +55,26 @@ class FakeSoapClient:
 
 
 class DiagnosticCaptureCollectorTests(unittest.TestCase):
+    def test_parsers_normalize_risport_serviceability_and_perfmon_data(self) -> None:
+        risport = """<Envelope><CmNodes><item><Name>sub-1</Name><CmDevices><item>
+        <Name>SEP001</Name><Status>Registered</Status><Model>683</Model><Protocol>SIP</Protocol>
+        <IPAddress><item><IP>192.0.2.50</IP></item></IPAddress>
+        </item></CmDevices></item></CmNodes></Envelope>"""
+        services = """<Envelope><ServiceInfoList><item><ServiceName>Cisco CallManager</ServiceName>
+        <ServiceStatus>Started</ServiceStatus><UpTime>123</UpTime></item></ServiceInfoList></Envelope>"""
+        perfmon = """<Envelope><perfmonCollectCounterDataReturn><Name>\\sub-1\\Processor\\% CPU Time</Name>
+        <Value>17</Value><CStatus>0</CStatus></perfmonCollectCounterDataReturn></Envelope>"""
+
+        registrations = _parse_risport_registrations(risport)
+        service_facts = _parse_service_status(services, "sub-1")
+        perf_facts = _parse_perf_counters(perfmon, "sub-1", "Processor")
+
+        self.assertEqual(registrations[0].name, "SEP001")
+        self.assertEqual(registrations[0].ip_address, "192.0.2.50")
+        self.assertEqual(service_facts[0].uptime_seconds, 123)
+        self.assertEqual(perf_facts[0].counter_name, "% CPU Time")
+        self.assertEqual(perf_facts[0].value, 17)
+
     def test_capture_queries_all_discovered_nodes_with_bounded_operations(self) -> None:
         http = FakeHttpClient()
         soap = FakeSoapClient()

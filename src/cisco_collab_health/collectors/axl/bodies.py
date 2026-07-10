@@ -42,6 +42,7 @@ def list_device_defaults_body() -> str:
     return """<axl:listDeviceDefaults>
       <searchCriteria>
         <model>%</model>
+        <protocol>%</protocol>
       </searchCriteria>
       <returnedTags>
         <model />

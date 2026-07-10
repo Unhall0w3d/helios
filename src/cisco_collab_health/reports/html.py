@@ -61,14 +61,14 @@ class HtmlReportBuilder:
   <style>
     :root {{
       color-scheme: light;
-      --bg: #f6f7f9;
+      --bg: #f4f6fb;
       --panel: #ffffff;
-      --text: #1d2733;
-      --muted: #5f6b7a;
-      --line: #d9dee7;
+      --text: #101a2d;
+      --muted: #526079;
+      --line: #d7ddee;
       --critical: #b42318;
       --warning: #b54708;
-      --info: #175cd3;
+      --info: #2f7cff;
     }}
     body {{
       margin: 0;
@@ -78,7 +78,7 @@ class HtmlReportBuilder:
       line-height: 1.45;
     }}
     header {{
-      background: #202a37;
+      background: linear-gradient(120deg, #0a0f1e, #172554 68%, #302166);
       color: white;
       padding: 28px 32px;
     }}
@@ -88,7 +88,7 @@ class HtmlReportBuilder:
     }}
     header p {{
       margin: 0;
-      color: #d5dce8;
+      color: #cdd9ff;
     }}
     main {{
       max-width: 1120px;
@@ -100,7 +100,8 @@ class HtmlReportBuilder:
       padding: 22px;
       background: var(--panel);
       border: 1px solid var(--line);
-      border-radius: 8px;
+      border-radius: 12px;
+      box-shadow: 0 8px 24px rgba(15, 23, 42, 0.05);
     }}
     h2 {{
       margin: 0 0 16px;
@@ -118,8 +119,8 @@ class HtmlReportBuilder:
     .metric {{
       padding: 14px;
       border: 1px solid var(--line);
-      border-radius: 8px;
-      background: #fbfcfe;
+      border-radius: 10px;
+      background: linear-gradient(145deg, #ffffff, #f5f8ff);
     }}
     .metric strong {{
       display: block;
@@ -345,6 +346,7 @@ class HtmlReportBuilder:
             len(result.evidence) for result in report.collector_results
         )
         sample_mode = _is_sample_report(report)
+        metadata = report.runtime_metadata
         synthetic_notice = ""
         if sample_mode:
             synthetic_notice = """
@@ -366,10 +368,13 @@ class HtmlReportBuilder:
             ("Services count", str(len(report.facts.services))),
             ("Perf counter count", str(len(report.facts.perf_counters))),
             ("Platform check count", str(len(report.facts.platform_checks))),
-            ("Artifacts enabled", "Not recorded"),
-            ("Artifact redaction mode", "Not recorded"),
-            ("TLS verification mode", "Not recorded"),
-            ("Phone inventory scope", "Not recorded"),
+            ("Profile", display_text(metadata.get("profile_name"))),
+            ("Publisher", display_text(metadata.get("publisher"))),
+            ("Artifacts enabled", "Yes" if metadata.get("artifacts_enabled") else "No"),
+            ("Artifact redaction mode", display_text(metadata.get("artifact_redaction"))),
+            ("TLS verification mode", "Enabled" if metadata.get("tls_verification") else "Disabled"),
+            ("Phone inventory scope", "Enabled" if metadata.get("phone_inventory_enabled") else "Skipped"),
+            ("Diagnostic capture", "Enabled" if metadata.get("diagnostic_capture") else "Disabled"),
         ]
         rendered_rows = "".join(
             f"<tr><th>{escape(name)}</th><td>{escape(value)}</td></tr>"
@@ -746,6 +751,13 @@ class HtmlReportBuilder:
 """
 
     def _reconciliation_section(self, report: AssessmentReport) -> str:
+        if not report.facts.registrations:
+            return """
+    <section>
+      <h2>Inventory / Runtime Reconciliation</h2>
+      <p class="meta">Unavailable: no normalized runtime registration facts were collected.</p>
+    </section>
+"""
         reconciliation = build_inventory_runtime_reconciliation(
             report.facts.devices,
             report.facts.registrations,
