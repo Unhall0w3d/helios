@@ -56,13 +56,9 @@ and the HTML/JSON reports visibly expose the new data.
 The current report renders executive metrics, collection coverage, cluster
 identity, discovered nodes, device inventory, device registration, services,
 performance counters, platform checks, collector issues, collector notes,
-collector evidence, and findings.
-
-Registration, service, performance, and platform sections are intentionally
-present before their real collectors are implemented. Empty sections, skipped
-scope, and not-yet-implemented coverage rows are expected to make missing data
-visible during review. Sample-mode data is synthetic and exists only to exercise
-the report layout.
+collector evidence, reconciliation, and findings. Empty, skipped, unavailable,
+and not-yet-implemented states are deliberately distinct. Sample-mode data is
+synthetic and exists only to exercise the report layout.
 
 ## Status
 
@@ -71,16 +67,23 @@ This is not yet a production-ready assessment tool.
 Current capabilities:
 
 - Core pipeline contracts
-- Initial AXL collector for `getCCMVersion`, `listProcessNode`, opt-in summary `listPhone`, `listDevicePool` inventory enrichment, and `listDeviceDefaults`
+- AXL collector for `getCCMVersion`, `listProcessNode`, opt-in summary `listPhone`, and `listDevicePool` inventory enrichment
+- Scoped `listDeviceDefaults` collection using exact model/protocol pairs observed in inventory, with one artifact per request
 - AXL schema retry when CUCM reports that the requested AXL version is unsupported
 - Publisher preflight and interface reachability checks
-- Initial health rule runner for collected identity/node facts
+- Read-only diagnostic capture with normalized RISPort70 registration, Control Center service-status, and PerfMon counter facts
+- Conservative summary rules for collected inventory, runtime registration, service, and device-load facts
 - Terminal Executive Summary output
 - Styled HTML report builder
 - JSON output for development and automation
-- Placeholder RISPort, Serviceability, and CLI fallback collectors
+- Raw evidence capture, normalized artifacts, and per-attempt API accounting
 
-The current real API implementation is limited to initial AXL collection.
+The current production-oriented API implementation is AXL plus the bounded
+diagnostic capture path. RISPort70, Control Center, and PerfMon facts are
+normalized only when `--diagnostic-capture` is enabled; they are not yet
+independent baseline collectors with full policy/threshold coverage. CLI
+platform checks remain unimplemented.
+
 AXL requests start with schema version `14.0`. If CUCM returns an
 `Incorrect axl version` response that lists supported versions, AletheiaUC
 selects the highest mutually supported schema version, retries with that
@@ -165,10 +168,10 @@ Progress is shown with bracketed status messages such as `[STAGE]`, `[OK]`,
 `[WARN]`, and `[INFO]`. Raw command or API output should be stored as evidence
 for parsing/reporting rather than streamed directly to the terminal.
 
-Run tests with the standard library:
+Run the complete test suite:
 
 ```bash
-PYTHONPATH=src python -m unittest discover -s tests
+PYTHONPATH=src python -m pytest -q
 ```
 
 To run a framework smoke test without prompting for connection details:
@@ -251,8 +254,13 @@ included. Prefix-based collection may be added later as a fallback for oversized
 clusters, but expected Cisco prefixes are not treated as the authoritative
 inventory boundary.
 
-When phone inventory is enabled, AletheiaUC also collects `listDeviceDefaults`
-to normalize model/protocol default loads for the same run.
+When phone inventory is enabled, AletheiaUC queries `listDeviceDefaults` for
+the exact model/protocol pairs observed in that inventory. This avoids CUCM 15
+rejecting a broad wildcard search. A response can cover more than one requested
+pair; collection stops once all observed pairs are covered. Each request and
+response has a separate artifact path. If no default facts are available, the
+report marks load comparison unavailable rather than inferring missing or
+manual loads.
 
 ## Diagnostic Capture Mode
 
@@ -275,9 +283,14 @@ adds raw request/response evidence for:
   SIP trunks, route patterns, partitions, CSSes, route groups/lists, translation
   patterns, media resources, and lines
 
-All diagnostic calls are read-only. They are retained as raw evidence and are
-not yet treated as normalized health facts. Unsupported operations and
-authentication failures are also captured as artifacts and collector warnings.
+All diagnostic calls are read-only. Supported RISPort70, Control Center, and
+PerfMon responses are normalized into registration, service-status, and
+performance-counter facts and displayed in HTML/JSON. The remaining bounded
+AXL configuration discovery is currently retained as raw evidence for future
+parser work. Diagnostic facts are snapshots: they support conservative
+collection summaries and reconciliation, not full service policy or performance
+threshold findings. Unsupported operations and authentication failures are
+captured as artifacts and collector warnings.
 
 Diagnostic collection can produce large, customer-sensitive output. Keep the
 default bounds unless you are deliberately testing a lab with known capacity:
@@ -290,8 +303,10 @@ default bounds unless you are deliberately testing a lab with known capacity:
 ```
 
 `--diagnostic-max-devices` is limited to the documented RISPort maximum of
-2,000. `--diagnostic-axl-max-records` is a per-operation cap; the result is a
-diagnostic sample, not a claim of complete configuration inventory.
+2,000. `--diagnostic-axl-max-records` is a per-operation cap; CUCM can return
+more than the requested AXL page size, in which case AletheiaUC records an
+explicit server-unbounded note and preserves the response. Diagnostic capture
+is evidence-oriented and is not a claim of complete configuration inventory.
 
 If a lab uses alternate API ports, override them at startup:
 
