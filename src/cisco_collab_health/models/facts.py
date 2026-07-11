@@ -106,6 +106,7 @@ class ConfigurationObjectFact:
     name: str
     details: dict[str, str]
     source: str
+    uuid: str | None = None
 
 
 @dataclass(frozen=True)
@@ -450,6 +451,7 @@ def _merge_configuration_object(
         name=_prefer(existing.name, incoming.name),
         details={**existing.details, **incoming.details},
         source=_merge_sources(existing.source, incoming.source),
+        uuid=_prefer(existing.uuid, incoming.uuid),
     )
 
 

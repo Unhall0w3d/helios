@@ -258,7 +258,7 @@ class AxlCollectorTests(unittest.TestCase):
         self.assertEqual(facts[0].details["partition"], "PT-PSTN")
 
     def test_diagnostic_axl_parser_normalizes_nested_memberships(self) -> None:
-        response = """<Envelope><return><routeList><name>PSTN-RL</name><members>
+        response = """<Envelope><return><routeList uuid="{ABC}"><name>PSTN-RL</name><members>
         <member><routeGroupName>PRIMARY-RG</routeGroupName></member>
         <member><routeGroupName>BACKUP-RG</routeGroupName></member>
         </members></routeList></return></Envelope>"""
@@ -268,6 +268,7 @@ class AxlCollectorTests(unittest.TestCase):
         )
 
         self.assertEqual(facts[0].details["route_groups"], "PRIMARY-RG, BACKUP-RG")
+        self.assertEqual(facts[0].uuid, "{ABC}")
 
     def test_diagnostic_axl_body_builds_nested_returned_tags(self) -> None:
         body = diagnostic_list_body(

@@ -74,7 +74,8 @@ Current capabilities:
 - Per-node UC Certificate Management REST snapshots using OS read credentials
 - PEM/X.509 identity and trust parsing with SHA-256 deduplication, validity, key,
   signer, AKI/SKI, and best-available chain metadata
-- Active 60-day expiry and mandatory `phone-sast-trust` / `phone-vpn-trust` assessment policy
+- Active 60-day expiry policy for every returned identity and trust certificate,
+  including `phone-sast-trust` and `phone-vpn-trust` when those optional stores exist
 - Automatic encrypted-profile upgrade when legacy profiles lack OS/SSH credentials
 - Explicit encrypted marker prevents API credentials from being mistaken for Platform/CLI credentials
 - AXL schema retry when CUCM reports that the requested AXL version is unsupported

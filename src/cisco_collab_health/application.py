@@ -421,5 +421,3 @@ def _print_interface_validation_status(
         if authenticated:
             operations = ", ".join(sorted({item.operation for item in authenticated}))
             status.ok(f"{interface} authenticated read: {operations}")
-    else:
-        status.warn("No Publisher API interfaces passed preflight")

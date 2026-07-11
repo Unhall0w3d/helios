@@ -36,9 +36,6 @@ from cisco_collab_health.transport.soap import (
 
 AST_NAMESPACE = "http://schemas.cisco.com/ast/soap"
 
-MANDATORY_TRUST_STORES = {"phone-sast-trust", "phone-vpn-trust"}
-
-
 def parse_certificate_snapshot(payload: str, node: str) -> list[CertificateFact]:
     """Defensively normalize certificate metadata from Cisco's versioned JSON."""
 

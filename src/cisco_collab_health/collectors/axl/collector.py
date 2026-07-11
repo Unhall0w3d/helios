@@ -401,8 +401,8 @@ class AxlCollector:
                 enriched.append(fact)
                 continue
             operation, tags = specification
-            key_fields = {"name": fact.name}
-            if fact.object_type == "RoutePattern":
+            key_fields = {"uuid": fact.uuid} if fact.uuid else {"name": fact.name}
+            if fact.object_type == "RoutePattern" and not fact.uuid:
                 key_fields = {"pattern": fact.name}
                 partition = fact.details.get("partition")
                 if partition:

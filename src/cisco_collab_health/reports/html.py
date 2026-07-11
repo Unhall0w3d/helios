@@ -444,7 +444,7 @@ class HtmlReportBuilder:
     <section>
       <h2>Certificate Validity and Trust</h2>
       <p class="meta">Source: per-node UC Certificate Management REST snapshots. Detail is limited to expired,
-      60-day expiry-window, and mandatory phone trust-store certificates.</p>
+      and 60-day expiry-window certificates. Optional trust stores are evaluated when present.</p>
       <div class="table-scroll"><table>
         <thead><tr><th>Node</th><th>Certificate</th><th>Service/Store</th><th>Kind</th>
         <th>Expires</th><th>Days</th><th>Signing</th><th>Intermediate</th><th>Root</th><th>Chain</th></tr></thead>
@@ -1115,16 +1115,14 @@ class HtmlReportBuilder:
         )
 
     def _certificate_rows(self, report: AssessmentReport) -> str:
-        mandatory = ("phone-sast-trust", "phone-vpn-trust")
         selected = [
             item for item in report.facts.certificates
             if (item.days_remaining is not None and item.days_remaining <= 60)
-            or any(name in " ".join(filter(None, (item.name, item.store, item.service))).lower() for name in mandatory)
         ]
         if not report.facts.certificates:
             return '<tr><td colspan="10">Certificate metadata was not collected.</td></tr>'
         if not selected:
-            return '<tr><td colspan="10">No expired or 60-day certificates found; mandatory phone trust stores were not returned.</td></tr>'
+            return '<tr><td colspan="10">No expired or 60-day certificates found.</td></tr>'
         grouped: dict[object, list[CertificateFact]] = {}
         for item in selected:
             key = item.fingerprint_sha256 or (item.subject, item.serial_number, item.valid_until, item.name)

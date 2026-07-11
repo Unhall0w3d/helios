@@ -57,7 +57,7 @@ class FirmwareDownloadRuleTests(unittest.TestCase):
 
 
 class CertificateValidityRuleTests(unittest.TestCase):
-    def test_expired_certificate_and_missing_mandatory_trust_are_reported(self) -> None:
+    def test_expired_certificate_is_reported_without_missing_store_warning(self) -> None:
         fact = CertificateFact(
             node="pub", name="CallManager.pem", service="CallManager", store=None,
             certificate_kind="identity", subject="CN=pub", issuer="CN=pub", serial_number="1",
@@ -70,7 +70,8 @@ class CertificateValidityRuleTests(unittest.TestCase):
         findings = CertificateValidityRule().evaluate(AssessmentFacts(certificates=[fact]))
 
         self.assertEqual(findings[0].severity, FindingSeverity.CRITICAL)
-        self.assertTrue(any(item.rule_id.endswith("mandatory_trust_coverage") for item in findings))
+        self.assertEqual(len(findings), 1)
+        self.assertIn("CallManager.pem [CallManager] on pub", findings[0].facts[0])
 
     def test_download_failure_with_intended_active_load_is_informational(self) -> None:
         facts = AssessmentFacts(

@@ -168,6 +168,7 @@ def parse_configuration_objects(
                 name=name,
                 details=details,
                 source=f"AXL.{operation}",
+                uuid=str(getattr(element, "attrib", {}).get("uuid", "")).strip() or None,
             )
         )
     return facts
