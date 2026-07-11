@@ -6,6 +6,7 @@ import unittest
 
 from cisco_collab_health.models.facts import (
     AssessmentFacts,
+    CertificateFact,
     CollaborationNode,
     CollectorIssueFact,
     DeviceInventoryFact,
@@ -17,6 +18,7 @@ from cisco_collab_health.models.facts import (
 from cisco_collab_health.models.findings import FindingSeverity
 from cisco_collab_health.rules.basic import (
     CollectorHealthRule,
+    CertificateValidityRule,
     DeviceInventorySummaryRule,
     DeviceLoadRule,
     DeviceLoadSummaryRule,
@@ -52,6 +54,23 @@ class FirmwareDownloadRuleTests(unittest.TestCase):
         self.assertEqual(len(findings), 1)
         self.assertEqual(findings[0].severity, FindingSeverity.WARNING)
         self.assertIn("File Not Found: 1", findings[0].facts)
+
+
+class CertificateValidityRuleTests(unittest.TestCase):
+    def test_expired_certificate_and_missing_mandatory_trust_are_reported(self) -> None:
+        fact = CertificateFact(
+            node="pub", name="CallManager.pem", service="CallManager", store=None,
+            certificate_kind="identity", subject="CN=pub", issuer="CN=pub", serial_number="1",
+            valid_from=None, valid_until="2026-01-01T00:00:00Z", days_remaining=-1,
+            self_signed=True, key_type="RSA", key_size="2048", signature_algorithm="SHA256",
+            subject_key_identifier=None, authority_key_identifier=None, intermediate=None,
+            root="CN=pub", chain_status="self-signed", source="fixture",
+        )
+
+        findings = CertificateValidityRule().evaluate(AssessmentFacts(certificates=[fact]))
+
+        self.assertEqual(findings[0].severity, FindingSeverity.CRITICAL)
+        self.assertTrue(any(item.rule_id.endswith("mandatory_trust_coverage") for item in findings))
 
     def test_download_failure_with_intended_active_load_is_informational(self) -> None:
         facts = AssessmentFacts(

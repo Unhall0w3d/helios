@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections import Counter
 
 from cisco_collab_health.models.evidence import EvidenceRef
-from cisco_collab_health.models.facts import AssessmentFacts, DeviceRegistrationFact
+from cisco_collab_health.models.facts import AssessmentFacts, CertificateFact, DeviceRegistrationFact
 from cisco_collab_health.models.findings import (
     FindingSeverity,
     HealthFinding,
@@ -450,6 +450,63 @@ class ServiceRuntimeRule:
                 evidence=[EvidenceRef(source="ControlCenter", operation="soapGetServiceStatus", confidence="high")],
             )
         ]
+
+
+class CertificateValidityRule:
+    """Report expired/60-day certificates and mandatory phone trust stores."""
+
+    rule_id = "security.certificate_validity"
+    mandatory = {"phone-sast-trust", "phone-vpn-trust"}
+
+    def evaluate(self, facts: AssessmentFacts) -> list[HealthFinding]:
+        if not facts.certificates:
+            return []
+        expired = [item for item in facts.certificates if item.days_remaining is not None and item.days_remaining < 0]
+        soon = [item for item in facts.certificates if item.days_remaining is not None and 0 <= item.days_remaining <= 60]
+        observed = {
+            value.lower() for item in facts.certificates
+            for value in (item.name, item.store, item.service) if value
+        }
+        missing = sorted(name for name in self.mandatory if not any(name in value for value in observed))
+        findings = []
+        if expired:
+            findings.append(_certificate_finding(
+                f"{self.rule_id}.expired", "One or more certificates are expired",
+                FindingSeverity.CRITICAL, expired,
+            ))
+        if soon:
+            findings.append(_certificate_finding(
+                f"{self.rule_id}.expiring", "One or more certificates expire within 60 days",
+                FindingSeverity.WARNING, soon,
+            ))
+        if missing:
+            findings.append(HealthFinding(
+                rule_id=f"{self.rule_id}.mandatory_trust_coverage",
+                title="Mandatory phone trust-store coverage is incomplete",
+                severity=FindingSeverity.WARNING,
+                recommendation_kind=RecommendationKind.ENGINEERING_RECOMMENDATION,
+                facts=[f"Not observed: {name}" for name in missing],
+                reasoning="phone-sast-trust and phone-vpn-trust must always be reviewed.",
+                recommendation="Verify the Certificate Management API trust snapshot or use read-only CLI fallback.",
+                evidence=[EvidenceRef(source="CertificateManagementREST", operation="snapshot_server")],
+            ))
+        return findings
+
+
+def _certificate_finding(
+    rule_id: str, title: str, severity: FindingSeverity, certificates: list[CertificateFact],
+) -> HealthFinding:
+    return HealthFinding(
+        rule_id=rule_id, title=title, severity=severity,
+        recommendation_kind=RecommendationKind.ENGINEERING_RECOMMENDATION,
+        facts=[
+            f"{item.node} / {item.service or item.store or item.name}: {item.days_remaining} days remaining"
+            for item in certificates
+        ],
+        reasoning="Certificate expiration can disrupt secured CUCM services and trust relationships.",
+        recommendation="Renew or replace affected certificates and validate the issuer chain before expiration.",
+        evidence=[EvidenceRef(source="CertificateManagementREST", operation="snapshot_server", confidence="high")],
+    )
 
 
 class PlatformCheckSummaryRule:

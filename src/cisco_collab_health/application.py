@@ -26,6 +26,7 @@ from cisco_collab_health.reports.json import JsonReportBuilder
 from cisco_collab_health.reports.summary import ExecutiveSummaryBuilder
 from cisco_collab_health.rules.basic import (
     ClusterIdentityRule,
+    CertificateValidityRule,
     CollectorHealthRule,
     ConfigurationInventorySummaryRule,
     DeviceInventorySummaryRule,
@@ -157,6 +158,7 @@ def run_assessment(
         collectors=collectors,
         rules=[
             ClusterIdentityRule(),
+            CertificateValidityRule(),
             NodeReachabilityRule(),
             CollectorHealthRule(),
             DeviceLoadRule(),

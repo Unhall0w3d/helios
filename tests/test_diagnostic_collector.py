@@ -12,6 +12,7 @@ from cisco_collab_health.collectors.diagnostic import (
     _parse_risport_registrations,
     _parse_service_catalog,
     _parse_service_status,
+    parse_certificate_snapshot,
 )
 from cisco_collab_health.models.runtime import CollectionContext
 from cisco_collab_health.transport.http import CapturedHttpResponse
@@ -57,6 +58,21 @@ class FakeSoapClient:
 
 
 class DiagnosticCaptureCollectorTests(unittest.TestCase):
+    def test_certificate_snapshot_normalizes_expiry_signing_and_chain(self) -> None:
+        payload = """{"certificates":[
+          {"certificateName":"Root CA","service":"tomcat-trust","subject":"CN=Root",
+           "issuer":"CN=Root","notAfter":"2030-01-01T00:00:00Z"},
+          {"certificateName":"node.pem","service":"tomcat","subject":"CN=node",
+           "issuer":"CN=Root","notAfter":"2030-01-01T00:00:00Z"}
+        ]}"""
+
+        facts = parse_certificate_snapshot(payload, "node1")
+
+        self.assertEqual(len(facts), 2)
+        self.assertTrue(facts[0].self_signed)
+        self.assertEqual(facts[1].chain_status, "complete")
+        self.assertEqual(facts[1].root, "CN=Root")
+
     def test_parsers_normalize_risport_serviceability_and_perfmon_data(self) -> None:
         risport = """<Envelope><CmNodes><item><Name>sub-1</Name><CmDevices><item>
         <Name>SEP001</Name><Status>Registered</Status><Model>683</Model><Protocol>SIP</Protocol>

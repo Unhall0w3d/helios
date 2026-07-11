@@ -143,6 +143,33 @@ class CollectorIssueFact:
     source: str = "collector_result"
 
 
+@dataclass(frozen=True)
+class CertificateFact:
+    """Normalized identity or trust certificate metadata."""
+
+    node: str
+    name: str
+    service: str | None
+    store: str | None
+    certificate_kind: str
+    subject: str | None
+    issuer: str | None
+    serial_number: str | None
+    valid_from: str | None
+    valid_until: str | None
+    days_remaining: int | None
+    self_signed: bool | None
+    key_type: str | None
+    key_size: str | None
+    signature_algorithm: str | None
+    subject_key_identifier: str | None
+    authority_key_identifier: str | None
+    intermediate: str | None
+    root: str | None
+    chain_status: str | None
+    source: str
+
+
 @dataclass
 class AssessmentFacts:
     """Container for normalized assessment facts."""
@@ -157,6 +184,7 @@ class AssessmentFacts:
     configuration_objects: list[ConfigurationObjectFact] = field(default_factory=list)
     platform_checks: list[PlatformCheckFact] = field(default_factory=list)
     collector_issues: list[CollectorIssueFact] = field(default_factory=list)
+    certificates: list[CertificateFact] = field(default_factory=list)
 
     def add_node(self, node: CollaborationNode) -> None:
         """Add or merge a node observation by stable node identity."""
@@ -221,6 +249,11 @@ class AssessmentFacts:
             other.platform_checks,
             _platform_check_key,
             _merge_platform_check,
+        )
+        _merge_by_key(
+            self.certificates,
+            other.certificates,
+            lambda item: (item.node.lower(), item.name.lower(), (item.store or "").lower()),
         )
         self.collector_issues.extend(other.collector_issues)
 

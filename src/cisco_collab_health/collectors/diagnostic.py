@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, replace
+from datetime import UTC, datetime
 from time import sleep as default_sleep
 from typing import Any, Iterator
 from xml.sax.saxutils import escape
@@ -14,6 +16,7 @@ from cisco_collab_health.collectors.base import CollectionResult
 from cisco_collab_health.models.evidence import EvidenceRef
 from cisco_collab_health.models.facts import (
     AssessmentFacts,
+    CertificateFact,
     DeviceRegistrationFact,
     PerfCounterFact,
     ServiceStatusFact,
@@ -28,6 +31,114 @@ from cisco_collab_health.transport.soap import (
 )
 
 AST_NAMESPACE = "http://schemas.cisco.com/ast/soap"
+
+MANDATORY_TRUST_STORES = {"phone-sast-trust", "phone-vpn-trust"}
+
+
+def parse_certificate_snapshot(payload: str, node: str) -> list[CertificateFact]:
+    """Defensively normalize certificate metadata from Cisco's versioned JSON."""
+
+    document = json.loads(payload)
+    candidates = [item for item in _walk_json(document) if _looks_like_certificate(item)]
+    facts = []
+    for item in candidates:
+        name = _json_value(item, "name", "certificateName", "certName", "alias")
+        service = _json_value(item, "service", "serviceName", "certificatePurpose", "type")
+        store = _json_value(item, "store", "storeName", "trustStore", "category")
+        if not name:
+            name = service or store
+        if not name:
+            continue
+        subject = _json_value(item, "subject", "subjectName", "subjectDN")
+        issuer = _json_value(item, "issuer", "issuerName", "issuerDN")
+        valid_until = _json_value(item, "validUntil", "notAfter", "expiryDate", "expiresOn")
+        kind = "trust" if "trust" in " ".join(filter(None, (name, service, store))).lower() else "identity"
+        facts.append(CertificateFact(
+            node=node, name=name, service=service, store=store, certificate_kind=kind,
+            subject=subject, issuer=issuer,
+            serial_number=_json_value(item, "serialNumber", "serial"),
+            valid_from=_json_value(item, "validFrom", "notBefore"), valid_until=valid_until,
+            days_remaining=_days_remaining(valid_until),
+            self_signed=(subject == issuer if subject and issuer else None),
+            key_type=_json_value(item, "keyType", "publicKeyAlgorithm"),
+            key_size=_json_value(item, "keySize", "keyLength"),
+            signature_algorithm=_json_value(item, "signatureAlgorithm", "signatureAlg"),
+            subject_key_identifier=_json_value(item, "subjectKeyIdentifier", "ski"),
+            authority_key_identifier=_json_value(item, "authorityKeyIdentifier", "aki"),
+            intermediate=None, root=None, chain_status=None,
+            source="CertificateManagementREST.snapshot_server",
+        ))
+    return _resolve_certificate_chains(facts)
+
+
+def _walk_json(value: Any) -> Iterator[dict[str, Any]]:
+    if isinstance(value, dict):
+        yield value
+        for child in value.values():
+            yield from _walk_json(child)
+    elif isinstance(value, list):
+        for child in value:
+            yield from _walk_json(child)
+
+
+def _looks_like_certificate(item: dict[str, Any]) -> bool:
+    keys = {key.lower() for key in item}
+    return bool(keys & {"notafter", "validuntil", "expirydate", "expireson"}) and bool(
+        keys & {"name", "certificatename", "certname", "service", "servicename", "alias"}
+    )
+
+
+def _json_value(item: dict[str, Any], *aliases: str) -> str | None:
+    normalized = {key.lower(): value for key, value in item.items()}
+    for alias in aliases:
+        value = normalized.get(alias.lower())
+        if value is not None and not isinstance(value, (dict, list)):
+            text = str(value).strip()
+            if text:
+                return text
+    return None
+
+
+def _days_remaining(value: str | None) -> int | None:
+    if not value:
+        return None
+    text = value.replace("Z", "+00:00")
+    try:
+        expires = datetime.fromisoformat(text)
+    except ValueError:
+        for pattern in ("%Y-%m-%d %H:%M:%S", "%b %d %H:%M:%S %Y %Z"):
+            try:
+                expires = datetime.strptime(value, pattern).replace(tzinfo=UTC)
+                break
+            except ValueError:
+                continue
+        else:
+            return None
+    if expires.tzinfo is None:
+        expires = expires.replace(tzinfo=UTC)
+    return (expires.astimezone(UTC).date() - datetime.now(UTC).date()).days
+
+
+def _resolve_certificate_chains(facts: list[CertificateFact]) -> list[CertificateFact]:
+    by_subject = {fact.subject: fact for fact in facts if fact.subject}
+    resolved = []
+    for fact in facts:
+        if fact.self_signed:
+            resolved.append(replace(fact, root=fact.subject, chain_status="self-signed"))
+            continue
+        issuer = by_subject.get(fact.issuer) if fact.issuer else None
+        if issuer is None:
+            resolved.append(replace(fact, chain_status="unresolved"))
+        elif issuer.self_signed:
+            resolved.append(replace(fact, root=issuer.subject, chain_status="complete"))
+        else:
+            root = by_subject.get(issuer.issuer) if issuer.issuer else None
+            resolved.append(replace(
+                fact, intermediate=issuer.subject,
+                root=root.subject if root and root.self_signed else None,
+                chain_status="complete" if root and root.self_signed else "incomplete",
+            ))
+    return resolved
 
 
 class DiagnosticCaptureCollector:
@@ -74,6 +185,7 @@ class DiagnosticCaptureCollector:
 
         nodes = tuple(dict.fromkeys(context.discovered_nodes or (context.publisher_ip,)))
         self._capture_wsdls(context, nodes, evidence, warnings)
+        self._capture_certificates(context, nodes, facts, evidence, warnings)
 
         if "risport70" in self.available_interfaces:
             self._capture_risport(context, facts, evidence, warnings)
@@ -84,7 +196,7 @@ class DiagnosticCaptureCollector:
 
         notes.append(
             "Diagnostic capture retains raw evidence and normalizes supported RISPort, "
-            "Control Center, and PerfMon responses."
+            "Control Center, PerfMon, and Certificate Management REST responses."
         )
         notes.append(
             f"Diagnostic node scope: {len(nodes)} node(s). RISPort device cap: "
@@ -98,6 +210,37 @@ class DiagnosticCaptureCollector:
             notes=notes,
             status_flags=status_flags,
         )
+
+    def _capture_certificates(
+        self,
+        context: CollectionContext,
+        nodes: tuple[str, ...],
+        facts: AssessmentFacts,
+        evidence: list[EvidenceRef],
+        warnings: list[str],
+    ) -> None:
+        if not context.os_username or not context.os_password:
+            return
+        for node in nodes:
+            endpoint = f"https://{node}/platformcom/api/v1/certmgr/config/snapshot/server"
+            try:
+                response = self.http_client.get(
+                    endpoint, context, node=node, interface="certificate_management",
+                    operation="snapshot_server", credential_kind="os",
+                )
+            except CapturedHttpError as exc:
+                warnings.append(f"Certificate Management API failed on {node}: {exc}")
+                continue
+            evidence.append(EvidenceRef(
+                source="CertificateManagementREST", operation="snapshot_server", node=node,
+                artifact_path=response.response_artifact_path,
+                parser="cisco_collab_health.collectors.diagnostic.parse_certificate_snapshot",
+                confidence="high",
+            ))
+            try:
+                facts.certificates.extend(parse_certificate_snapshot(response.body, node))
+            except (json.JSONDecodeError, ValueError) as exc:
+                warnings.append(f"Certificate snapshot parsing failed on {node}: {exc}")
 
     def _capture_wsdls(
         self,

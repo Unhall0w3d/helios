@@ -75,6 +75,7 @@ class HtmlReportBuilder:
         service_deployment_rows = self._service_deployment_rows(report)
         configuration_rows = self._configuration_rows(report)
         platform_check_rows = self._platform_check_rows(report)
+        certificate_rows = self._certificate_rows(report)
         collector_issues_section = self._collector_issues_section(report)
         collector_notes_section = self._collector_notes_section(report)
         collector_evidence_section = self._collector_evidence_section(report)
@@ -439,6 +440,16 @@ class HtmlReportBuilder:
           <tbody>{configuration_rows}</tbody>
         </table>
       </details>
+    </section>
+    <section>
+      <h2>Certificate Validity and Trust</h2>
+      <p class="meta">Source: per-node UC Certificate Management REST snapshots. Detail is limited to expired,
+      60-day expiry-window, and mandatory phone trust-store certificates.</p>
+      <div class="table-scroll"><table>
+        <thead><tr><th>Node</th><th>Certificate</th><th>Service/Store</th><th>Kind</th>
+        <th>Expires</th><th>Days</th><th>Signing</th><th>Intermediate</th><th>Root</th><th>Chain</th></tr></thead>
+        <tbody>{certificate_rows}</tbody>
+      </table></div>
     </section>
     <section>
       <h2>Platform Checks</h2>
@@ -1101,6 +1112,33 @@ class HtmlReportBuilder:
                 "</tr>"
             )
             for check in report.facts.platform_checks
+        )
+
+    def _certificate_rows(self, report: AssessmentReport) -> str:
+        mandatory = ("phone-sast-trust", "phone-vpn-trust")
+        selected = [
+            item for item in report.facts.certificates
+            if (item.days_remaining is not None and item.days_remaining <= 60)
+            or any(name in " ".join(filter(None, (item.name, item.store, item.service))).lower() for name in mandatory)
+        ]
+        if not report.facts.certificates:
+            return '<tr><td colspan="10">Certificate metadata was not collected.</td></tr>'
+        if not selected:
+            return '<tr><td colspan="10">No expired or 60-day certificates found; mandatory phone trust stores were not returned.</td></tr>'
+        return "\n".join(
+            "<tr>"
+            f"<td>{escape(self._identifier(item.node, 'Node'))}</td>"
+            f"<td>{escape('Certificate' if self.customer_safe else display_text(item.name))}</td>"
+            f"<td>{escape(display_text(item.service or item.store))}</td>"
+            f"<td>{escape(item.certificate_kind)}</td>"
+            f"<td>{escape(display_text(item.valid_until))}</td>"
+            f"<td>{escape(display_text(item.days_remaining))}</td>"
+            f"<td>{'Self-signed' if item.self_signed else 'CA-signed' if item.self_signed is False else 'Unknown'}</td>"
+            f"<td>{escape('Omitted' if self.customer_safe and item.intermediate else display_text(item.intermediate))}</td>"
+            f"<td>{escape('Omitted' if self.customer_safe and item.root else display_text(item.root))}</td>"
+            f"<td>{escape(display_text(item.chain_status))}</td>"
+            "</tr>"
+            for item in selected
         )
 
     def _collector_issues_section(self, report: AssessmentReport) -> str:

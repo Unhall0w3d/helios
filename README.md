@@ -71,6 +71,9 @@ Current capabilities:
 - Bounded `executeSQLQuery` collection of configured-model Device Defaults and firmware facts
 - Inventory-only summaries by model and device pool
 - Diagnostic dial-plan relationships for route-pattern destinations, route-list/route-group membership, and CSS partitions
+- Per-node UC Certificate Management REST snapshots using OS read credentials
+- Certificate expiry, signing, and chain analysis with a 60-day warning window
+- Mandatory review coverage for `phone-sast-trust` and `phone-vpn-trust`
 - AXL schema retry when CUCM reports that the requested AXL version is unsupported
 - Publisher preflight and interface reachability checks
 - Read-only diagnostic capture with normalized RISPort70 registration, Control Center service-status, and PerfMon counter facts
@@ -320,6 +323,7 @@ Diagnostic capture automatically includes the bounded AXL phone inventory and
 adds raw request/response evidence for:
 
 - Supported-interface WSDL retrieval on every discovered node
+- Per-node `/platformcom/api/v1/certmgr/config/snapshot/server` certificate metadata
 - RISPort70 `selectCmDeviceExt` registration snapshot using the AXL device list
   (or a bounded wildcard `selectCmDevice` fallback if AXL inventory is unavailable)
 - Control Center `getProductInformationList` and `soapGetServiceStatus` on every discovered node

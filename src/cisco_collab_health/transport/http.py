@@ -42,10 +42,12 @@ class CapturedHttpClient:
         node: str,
         interface: str,
         operation: str,
+        credential_kind: str = "gui",
     ) -> CapturedHttpResponse:
         started_at = datetime.now(UTC)
         started_clock = monotonic()
-        headers = self._auth_headers(context)
+        headers = self._auth_headers(context, credential_kind)
+        headers["Accept"] = "application/json"
         artifact_request = f"GET {endpoint} HTTP/1.1\n\n"
         request = urllib.request.Request(endpoint, headers=headers, method="GET")
 
@@ -121,10 +123,12 @@ class CapturedHttpClient:
         )
         return CapturedHttpResponse(status, reason, body, response_path)
 
-    def _auth_headers(self, context: CollectionContext) -> dict[str, str]:
-        if not context.gui_username or not context.gui_password:
+    def _auth_headers(self, context: CollectionContext, credential_kind: str) -> dict[str, str]:
+        username = context.os_username if credential_kind == "os" else context.gui_username
+        password = context.os_password if credential_kind == "os" else context.gui_password
+        if not username or not password:
             return {}
-        value = f"{context.gui_username}:{context.gui_password}".encode()
+        value = f"{username}:{password}".encode()
         return {"Authorization": "Basic " + base64.b64encode(value).decode("ascii")}
 
     def _write_artifacts(
