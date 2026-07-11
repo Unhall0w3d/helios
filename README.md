@@ -74,6 +74,7 @@ Current capabilities:
 - Per-node UC Certificate Management REST snapshots using OS read credentials
 - Certificate expiry, signing, and chain analysis with a 60-day warning window
 - Mandatory review coverage for `phone-sast-trust` and `phone-vpn-trust`
+- Automatic encrypted-profile upgrade when legacy profiles lack OS/SSH credentials
 - AXL schema retry when CUCM reports that the requested AXL version is unsupported
 - Publisher preflight and interface reachability checks
 - Read-only diagnostic capture with normalized RISPort70 registration, Control Center service-status, and PerfMon counter facts

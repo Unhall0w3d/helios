@@ -83,6 +83,27 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(runtime.gui_password, "gui-secret")
         self.assertEqual(runtime.os_password, "os-secret")
 
+    def test_legacy_encrypted_profile_prompts_for_and_persists_os_credentials(self) -> None:
+        store = FakeCredentialStore()
+        store.set_password(
+            KEYRING_SERVICE,
+            profile_secret_key("lab"),
+            '{"publisher_input":"192.0.2.10","publisher_ip":"192.0.2.10",'
+            '"gui_username":"admin","gui_password":"gui-secret"}',
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            runtime = ensure_runtime_profile(
+                "lab", config_dir=Path(tmpdir), input_func=lambda prompt: "osreader",
+                getpass_func=lambda prompt: "os-secret", credential_store=store,
+            )
+
+        self.assertEqual(runtime.stored.os_username, "osreader")
+        self.assertEqual(runtime.os_password, "os-secret")
+        payload = store.get_password(KEYRING_SERVICE, profile_secret_key("lab")) or ""
+        self.assertIn('"os_username": "osreader"', payload)
+        self.assertIn('"os_password": "os-secret"', payload)
+
     def test_keyring_backed_profile_registers_profile_name(self) -> None:
         store = FakeCredentialStore()
         inputs = iter(["192.0.2.10", "admin", "osadmin"])

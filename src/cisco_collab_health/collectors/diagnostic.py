@@ -229,7 +229,13 @@ class DiagnosticCaptureCollector:
                     operation="snapshot_server", credential_kind="os",
                 )
             except CapturedHttpError as exc:
-                warnings.append(f"Certificate Management API failed on {node}: {exc}")
+                detail = str(exc)
+                if "HTTP 401" in detail:
+                    detail += (
+                        " (CMPlatform Realm rejected the stored OS credentials; verify the "
+                        "profile or use a read-only privilege-0 platform account)"
+                    )
+                warnings.append(f"Certificate Management API failed on {node}: {detail}")
                 continue
             evidence.append(EvidenceRef(
                 source="CertificateManagementREST", operation="snapshot_server", node=node,

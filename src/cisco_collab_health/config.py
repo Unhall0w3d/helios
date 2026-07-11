@@ -8,7 +8,7 @@ import json
 import os
 import socket
 from collections.abc import Callable
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 from typing import Protocol, cast
 
@@ -128,7 +128,7 @@ def load_profiles(config_dir: Path | None = None) -> dict[str, StoredProfile]:
             publisher_input=data["publisher_input"],
             publisher_ip=data["publisher_ip"],
             gui_username=data["gui_username"],
-            os_username=data["os_username"],
+            os_username=data.get("os_username", ""),
         )
         for name, data in profiles.items()
     }
@@ -367,9 +367,11 @@ def ensure_runtime_profile(
             delete_profile_credentials(profile_name, store)
             unregister_profile_name(profile_name, config_dir)
 
-        runtime = _load_runtime_profile_from_store(profile_name, store)
+        runtime = _load_runtime_profile_from_store(
+            profile_name, store, input_func=input_func, getpass_func=getpass_func
+        )
         if runtime is not None:
-            return runtime
+            return _store_or_warn(runtime, store, save_credentials)
 
         runtime = prompt_for_profile(profile_name, input_func, getpass_func)
         runtime = _store_or_warn(runtime, store, save_credentials)
@@ -393,6 +395,13 @@ def ensure_runtime_profile(
         return _store_or_warn(runtime, store, save_credentials)
 
     warnings: list[str] = []
+    if not stored.os_username:
+        os_username = input_func("CUCM OS/SSH username (required for platform APIs): ").strip()
+        if not os_username:
+            raise ValueError("CUCM OS/SSH username cannot be empty.")
+        stored = replace(stored, os_username=os_username)
+        profiles[profile_name] = stored
+        save_profiles(profiles, config_dir)
     gui_password = _load_or_prompt_secret(
         store,
         profile_name,
@@ -447,6 +456,9 @@ def select_or_create_runtime_profile(
 def _load_runtime_profile_from_store(
     profile_name: str,
     store: CredentialStore,
+    *,
+    input_func: Callable[[str], str],
+    getpass_func: Callable[[str], str],
 ) -> RuntimeProfile | None:
     try:
         payload = store.get_password(KEYRING_SERVICE, profile_secret_key(profile_name))
@@ -457,16 +469,30 @@ def _load_runtime_profile_from_store(
         return None
 
     data = json.loads(payload)
+    os_username = str(data.get("os_username") or "").strip()
+    os_password = str(data.get("os_password") or "")
+    warnings = []
+    if not os_username:
+        os_username = input_func(
+            "CUCM OS/SSH username (required for platform APIs): "
+        ).strip()
+        if not os_username:
+            raise ValueError("CUCM OS/SSH username cannot be empty.")
+        warnings.append("OS/SSH credentials were added to the encrypted profile.")
+    if not os_password:
+        os_password = getpass_func(f"CUCM OS/SSH password for {os_username}: ")
+        warnings.append("OS/SSH credentials were added to the encrypted profile.")
     return RuntimeProfile(
         stored=StoredProfile(
             name=profile_name,
             publisher_input=data["publisher_input"],
             publisher_ip=data["publisher_ip"],
             gui_username=data["gui_username"],
-            os_username=data["os_username"],
+            os_username=os_username,
         ),
         gui_password=data["gui_password"],
-        os_password=data["os_password"],
+        os_password=os_password,
+        warnings=list(dict.fromkeys(warnings)),
     )
 
 
