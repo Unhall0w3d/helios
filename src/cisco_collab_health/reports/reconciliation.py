@@ -17,6 +17,14 @@ class InventoryRuntimeReconciliation:
     inventory_only: list[DeviceInventoryFact]
     runtime_only: list[DeviceRegistrationFact]
 
+    @property
+    def known_non_runtime(self) -> list[DeviceInventoryFact]:
+        return [device for device in self.inventory_only if _is_known_non_runtime(device)]
+
+    @property
+    def registration_capable_or_unclassified(self) -> list[DeviceInventoryFact]:
+        return [device for device in self.inventory_only if not _is_known_non_runtime(device)]
+
 
 def build_inventory_runtime_reconciliation(
     devices: list[DeviceInventoryFact],
@@ -45,3 +53,9 @@ def build_inventory_runtime_reconciliation(
 
 def _normalize_name(name: str) -> str:
     return name.strip().lower()
+
+
+def _is_known_non_runtime(device: DeviceInventoryFact) -> bool:
+    """Conservatively recognize configuration templates that never register to RIS."""
+
+    return (device.model or "").strip().lower() == "universal device template"

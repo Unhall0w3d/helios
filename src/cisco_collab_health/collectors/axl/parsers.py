@@ -98,32 +98,35 @@ def parse_device_load_defaults(response_text: str) -> list[DeviceLoadDefaultFact
     try:
         root = ET.fromstring(response_text)
     except ET.ParseError as exc:
-        raise AxlCollectionError(f"Unable to parse listDeviceDefaults response: {exc}") from exc
+        raise AxlCollectionError(f"Unable to parse device-default SQL response: {exc}") from exc
 
     defaults: list[DeviceLoadDefaultFact] = []
-    candidates = [
-        *list(_iter_local_name(root, "deviceDefault")),
-        *list(_iter_local_name(root, "deviceDefaults")),
-    ]
-    if not candidates:
-        candidates = [
-            element
-            for element in _iter_local_name(root, "return")
-            if _child_text(element, "model")
-        ]
-    for device_default in candidates:
-        model = _child_text(device_default, "model")
+    for device_default in _iter_local_name(root, "row"):
+        model = _child_text(device_default, "modelname")
         if not model:
             continue
         defaults.append(
             DeviceLoadDefaultFact(
                 model=model,
-                protocol=_child_text(device_default, "protocol"),
-                default_load=_child_text(device_default, "loadInformation"),
-                source="AXL.listDeviceDefaults",
+                protocol=_device_protocol_name(_child_text(device_default, "signalingprotocol")),
+                default_load=_child_text(device_default, "devicedefault"),
+                configured_device_count=_optional_int(_child_text(device_default, "configuredcount")),
+                model_code=_child_text(device_default, "tkmodel"),
+                source="AXL.executeSQLQuery.deviceDefaults",
             )
         )
     return defaults
+
+
+def _device_protocol_name(value: str | None) -> str | None:
+    return {"0": "SCCP", "11": "SIP", "99": "Media Resource"}.get(value or "", value)
+
+
+def _optional_int(value: str | None) -> int | None:
+    try:
+        return int(value) if value is not None else None
+    except ValueError:
+        return None
 
 
 def parse_configuration_objects(

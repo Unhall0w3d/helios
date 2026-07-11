@@ -68,12 +68,12 @@ Current capabilities:
 
 - Core pipeline contracts
 - AXL collector for `getCCMVersion`, `listProcessNode`, opt-in summary `listPhone`, and `listDevicePool` inventory enrichment
-- Name-based `listDeviceDefaults` discovery for model/protocol default firmware facts
+- Bounded `executeSQLQuery` collection of configured-model Device Defaults and firmware facts
 - AXL schema retry when CUCM reports that the requested AXL version is unsupported
 - Publisher preflight and interface reachability checks
 - Read-only diagnostic capture with normalized RISPort70 registration, Control Center service-status, and PerfMon counter facts
 - Runtime firmware distribution, explicit download-failure reporting, and conservative firmware findings
-- Reason-aware service summaries that distinguish not-activated and commanded-out-of-service states
+- Reason-aware service summaries by node and service group
 - Zero-only CPU suppression so invalid snapshots are reported as unavailable
 - Conservative summary rules for collected inventory, runtime registration, service, configuration, and device-load facts
 - Terminal Executive Summary output
@@ -90,7 +90,7 @@ platform checks remain unimplemented.
 
 Current CUCM 15 validation status: the previous diagnostic archive has been
 fully replayed against the implemented parsers. A fresh run is required to
-validate name-based `listDeviceDefaults` discovery and the report changes added
+validate SQL-backed Device Defaults discovery and the report changes added
 after that archive. After CUCM 15 stabilizes, validation proceeds to CUCM 14.x,
 12.x, and 11.x before expanding to Cisco Unity Connection.
 
@@ -277,10 +277,12 @@ included. Prefix-based collection may be added later as a fallback for oversized
 clusters, but expected Cisco prefixes are not treated as the authoritative
 inventory boundary.
 
-When phone inventory is enabled, AletheiaUC queries `listDeviceDefaults` using
-the operation's searchable `name` field. Live CUCM 15 evidence showed that
-model/protocol are returned properties, not valid list criteria or
-`getDeviceDefaults` identifiers. If no default facts are available, the report
+When phone inventory is enabled, AletheiaUC runs one bounded, aggregate
+`executeSQLQuery` across `device`, `typeproduct`, and `defaults`. It returns
+default loads only for models configured in the cluster, plus configured counts,
+protocol codes, and `tkmodel`. This is a deliberate API-first exception after
+CUCM 15 rejected the available `listDeviceDefaults` criteria. The complete SOAP
+request and response are retained when artifact capture is enabled. If no default facts are available, the report
 marks load comparison unavailable rather than inferring missing or manual
 loads.
 

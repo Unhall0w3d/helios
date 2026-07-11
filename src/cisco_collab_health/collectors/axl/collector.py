@@ -5,9 +5,10 @@ from __future__ import annotations
 from defusedxml import ElementTree as ET
 
 from cisco_collab_health.collectors.axl.bodies import (
+    DEVICE_DEFAULTS_SQL,
     diagnostic_list_body,
+    execute_sql_query_body,
     get_ccm_version_body,
-    list_device_defaults_body,
     list_device_pool_body,
     list_phone_body,
     list_process_node_body,
@@ -298,11 +299,12 @@ class AxlCollector:
         try:
             defaults_response = self._call_axl_response(
                 context,
-                "listDeviceDefaults",
-                list_device_defaults_body(),
+                "executeSQLQuery",
+                execute_sql_query_body(DEVICE_DEFAULTS_SQL),
+                artifact_operation="deviceDefaults_executeSQLQuery",
             )
         except AxlCollectionError as exc:
-            warnings.append(f"AXL listDeviceDefaults failed: {exc}")
+            warnings.append(f"AXL device-default SQL query failed: {exc}")
             return
         evidence.append(_evidence_from_soap_response(defaults_response, context.publisher_ip))
         try:
@@ -310,7 +312,7 @@ class AxlCollector:
                 parse_device_load_defaults(defaults_response.body)
             )
         except AxlCollectionError as exc:
-            warnings.append(f"AXL listDeviceDefaults failed: {exc}")
+            warnings.append(f"AXL device-default SQL query failed: {exc}")
 
     def _collect_diagnostic_axl(
         self,

@@ -12,7 +12,10 @@ from unittest.mock import patch
 from cisco_collab_health.artifacts import ArtifactStore
 from cisco_collab_health.collectors.axl import AxlCollector, AxlVersionPolicy
 from cisco_collab_health.collectors.axl_errors import AxlCollectionError, AxlVersionError
-from cisco_collab_health.collectors.axl_bodies import list_device_defaults_body
+from cisco_collab_health.collectors.axl_bodies import (
+    DEVICE_DEFAULTS_SQL,
+    execute_sql_query_body,
+)
 from cisco_collab_health.collectors.axl_parsers import parse_configuration_objects
 from cisco_collab_health.collectors.base import CollectionContext
 from cisco_collab_health.transport.soap import SoapResponse
@@ -171,25 +174,16 @@ LIST_DEVICE_POOL_RESPONSE = """<?xml version="1.0" encoding="UTF-8"?>
 LIST_DEVICE_DEFAULTS_RESPONSE = """<?xml version="1.0" encoding="UTF-8"?>
 <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/">
   <soapenv:Body>
-    <ns:listDeviceDefaultsResponse xmlns:ns="http://www.cisco.com/AXL/API/14.0">
+    <ns:executeSQLQueryResponse xmlns:ns="http://www.cisco.com/AXL/API/15.0">
       <return>
-        <deviceDefault>
-          <model>Cisco 8845</model>
-          <protocol>SIP</protocol>
-          <loadInformation>sip8845.14-2-1</loadInformation>
-        </deviceDefault>
-        <deviceDefault>
-          <model>Cisco 7945</model>
-          <protocol>SCCP</protocol>
-          <loadInformation>SCCP45.9-4-2SR4-3</loadInformation>
-        </deviceDefault>
-        <deviceDefault>
-          <model>Cisco Unified Client Services Framework</model>
-          <protocol>SIP</protocol>
-          <loadInformation />
-        </deviceDefault>
+        <row><configuredcount>12</configuredcount><modelname>Cisco 8845</modelname>
+          <signalingprotocol>11</signalingprotocol><devicedefault>sip8845.14-2-1</devicedefault><tkmodel>616</tkmodel></row>
+        <row><configuredcount>4</configuredcount><modelname>Cisco 7945</modelname>
+          <signalingprotocol>0</signalingprotocol><devicedefault>SCCP45.9-4-2SR4-3</devicedefault><tkmodel>434</tkmodel></row>
+        <row><configuredcount>2</configuredcount><modelname>Conference Bridge</modelname>
+          <signalingprotocol>99</signalingprotocol><devicedefault>media-load</devicedefault><tkmodel>42</tkmodel></row>
       </return>
-    </ns:listDeviceDefaultsResponse>
+    </ns:executeSQLQueryResponse>
   </soapenv:Body>
 </soapenv:Envelope>
 """
@@ -237,12 +231,14 @@ def soap_response(body: str, operation: str = "operation") -> SoapResponse:
 
 
 class AxlCollectorTests(unittest.TestCase):
-    def test_device_defaults_discovery_uses_name_search_criteria(self) -> None:
-        body = list_device_defaults_body()
+    def test_device_defaults_sql_is_bounded_to_configured_models_and_xml_safe(self) -> None:
+        body = execute_sql_query_body(DEVICE_DEFAULTS_SQL)
 
-        self.assertIn("<name>%</name>", body)
-        self.assertNotIn("<model>%</model>", body)
-        self.assertIn("<model />", body)
+        self.assertIn("from device as d", body)
+        self.assertIn("inner join defaults as df", body)
+        self.assertIn("group by d.tkmodel", body)
+        self.assertIn('!= ""', body)
+        self.assertIn("&amp;", execute_sql_query_body("select '&' from table"))
 
     def test_diagnostic_axl_parser_normalizes_configuration_objects(self) -> None:
         response = """<Envelope><return><routePattern><pattern>9.!#</pattern>
@@ -321,7 +317,7 @@ class AxlCollectorTests(unittest.TestCase):
                 soap_response(LIST_PROCESS_NODE_RESPONSE, "listProcessNode"),
                 soap_response(LIST_PHONE_RESPONSE, "listPhone"),
                 soap_response(LIST_DEVICE_POOL_RESPONSE, "listDevicePool"),
-                soap_response(LIST_DEVICE_DEFAULTS_RESPONSE, "listDeviceDefaults"),
+                soap_response(LIST_DEVICE_DEFAULTS_RESPONSE, "executeSQLQuery"),
             ],
         ):
             result = collector.collect(context)
@@ -334,7 +330,7 @@ class AxlCollectorTests(unittest.TestCase):
                 "listProcessNode",
                 "listPhone",
                 "listDevicePool",
-                "listDeviceDefaults",
+                "executeSQLQuery",
             ],
         )
         self.assertEqual(
@@ -351,7 +347,10 @@ class AxlCollectorTests(unittest.TestCase):
         )
         self.assertEqual(result.facts.devices[1].location, "Remote-Loc")
         self.assertEqual(len(result.facts.device_load_defaults), 3)
-        self.assertEqual(result.facts.device_load_defaults[0].source, "AXL.listDeviceDefaults")
+        self.assertEqual(result.facts.device_load_defaults[0].source, "AXL.executeSQLQuery.deviceDefaults")
+        self.assertEqual(result.facts.device_load_defaults[0].configured_device_count, 12)
+        self.assertEqual(result.facts.device_load_defaults[0].model_code, "616")
+        self.assertEqual(result.facts.device_load_defaults[2].protocol, "Media Resource")
         self.assertEqual(result.status_flags, [])
 
     def test_axl_collector_pages_phone_inventory_with_configured_bounds(self) -> None:
@@ -374,7 +373,7 @@ class AxlCollectorTests(unittest.TestCase):
                 soap_response(LIST_PHONE_RESPONSE, "listPhone"),
                 soap_response(LIST_PHONE_SECOND_PAGE_RESPONSE, "listPhone"),
                 soap_response(LIST_DEVICE_POOL_RESPONSE, "listDevicePool"),
-                soap_response(LIST_DEVICE_DEFAULTS_RESPONSE, "listDeviceDefaults"),
+                soap_response(LIST_DEVICE_DEFAULTS_RESPONSE, "executeSQLQuery"),
             ],
         ) as call:
             result = collector.collect(context)
@@ -412,7 +411,7 @@ class AxlCollectorTests(unittest.TestCase):
                 soap_response(LIST_PHONE_RESPONSE, "listPhone"),
                 soap_response(LIST_PHONE_RESPONSE, "listPhone"),
                 soap_response(LIST_DEVICE_POOL_RESPONSE, "listDevicePool"),
-                soap_response(LIST_DEVICE_DEFAULTS_RESPONSE, "listDeviceDefaults"),
+                soap_response(LIST_DEVICE_DEFAULTS_RESPONSE, "executeSQLQuery"),
             ],
         ) as call:
             result = collector.collect(context)
@@ -448,7 +447,7 @@ class AxlCollectorTests(unittest.TestCase):
                 soap_response(LIST_PROCESS_NODE_RESPONSE, "listProcessNode"),
                 soap_response(LIST_PHONE_RESPONSE, "listPhone"),
                 soap_response(LIST_DEVICE_POOL_RESPONSE, "listDevicePool"),
-                soap_response(LIST_DEVICE_DEFAULTS_RESPONSE, "listDeviceDefaults"),
+                soap_response(LIST_DEVICE_DEFAULTS_RESPONSE, "executeSQLQuery"),
             ],
         ) as call:
             result = collector.collect(context)
@@ -483,7 +482,7 @@ class AxlCollectorTests(unittest.TestCase):
                 soap_response(GET_VERSION_RESPONSE, "getCCMVersion"),
                 soap_response(LIST_PROCESS_NODE_RESPONSE, "listProcessNode"),
                 soap_response(LIST_PHONE_EMPTY_RESPONSE, "listPhone"),
-                soap_response(LIST_DEVICE_DEFAULTS_RESPONSE, "listDeviceDefaults"),
+                soap_response(LIST_DEVICE_DEFAULTS_RESPONSE, "executeSQLQuery"),
             ],
         ):
             result = collector.collect(context)
@@ -508,7 +507,7 @@ class AxlCollectorTests(unittest.TestCase):
                 soap_response(LIST_PROCESS_NODE_WITH_ENTERPRISE_DATA_RESPONSE, "listProcessNode"),
                 soap_response(LIST_PHONE_RESPONSE, "listPhone"),
                 soap_response(LIST_DEVICE_POOL_RESPONSE, "listDevicePool"),
-                soap_response(LIST_DEVICE_DEFAULTS_RESPONSE, "listDeviceDefaults"),
+                soap_response(LIST_DEVICE_DEFAULTS_RESPONSE, "executeSQLQuery"),
             ],
         ):
             result = collector.collect(context)
@@ -536,7 +535,7 @@ class AxlCollectorTests(unittest.TestCase):
                 soap_response(GET_VERSION_RESPONSE, "getCCMVersion"),
                 soap_response(LIST_PROCESS_NODE_RESPONSE, "listProcessNode"),
                 soap_response("<not-xml", "listPhone"),
-                soap_response(LIST_DEVICE_DEFAULTS_RESPONSE, "listDeviceDefaults"),
+                soap_response(LIST_DEVICE_DEFAULTS_RESPONSE, "executeSQLQuery"),
             ],
         ):
             result = collector.collect(context)
@@ -561,7 +560,7 @@ class AxlCollectorTests(unittest.TestCase):
                 soap_response(LIST_PROCESS_NODE_RESPONSE, "listProcessNode"),
                 soap_response(LIST_PHONE_RESPONSE, "listPhone"),
                 soap_response("<not-xml", "listDevicePool"),
-                soap_response(LIST_DEVICE_DEFAULTS_RESPONSE, "listDeviceDefaults"),
+                soap_response(LIST_DEVICE_DEFAULTS_RESPONSE, "executeSQLQuery"),
             ],
         ):
             result = collector.collect(context)
@@ -586,14 +585,14 @@ class AxlCollectorTests(unittest.TestCase):
                 soap_response(LIST_PROCESS_NODE_RESPONSE, "listProcessNode"),
                 soap_response(LIST_PHONE_RESPONSE, "listPhone"),
                 soap_response(LIST_DEVICE_POOL_RESPONSE, "listDevicePool"),
-                soap_response("<not-xml", "listDeviceDefaults"),
-                soap_response("<not-xml", "listDeviceDefaults"),
-                soap_response("<not-xml", "listDeviceDefaults"),
+                soap_response("<not-xml", "deviceDefaults_executeSQLQuery"),
+                soap_response("<not-xml", "deviceDefaults_executeSQLQuery"),
+                soap_response("<not-xml", "deviceDefaults_executeSQLQuery"),
             ],
         ):
             result = collector.collect(context)
 
-        self.assertIn("AXL listDeviceDefaults failed", result.warnings[0])
+        self.assertIn("AXL device-default SQL query failed", result.warnings[0])
         self.assertEqual(result.facts.device_load_defaults, [])
 
     def test_axl_phone_inventory_writes_page_specific_artifacts(self) -> None:
@@ -660,7 +659,7 @@ class AxlCollectorTests(unittest.TestCase):
             )
             self.assertTrue(
                 str(result.evidence[5].artifact_path).endswith(
-                    "listDeviceDefaults/response.txt"
+                    "deviceDefaults_executeSQLQuery/response.txt"
                 )
             )
 

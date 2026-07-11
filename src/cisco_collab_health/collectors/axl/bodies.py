@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from xml.sax.saxutils import escape
+
 def get_ccm_version_body() -> str:
     return "<axl:getCCMVersion />"
 
@@ -37,20 +39,20 @@ def list_phone_body(*, first: int | None = None, skip: int | None = None) -> str
     </axl:listPhone>"""
 
 
-def list_device_defaults_body() -> str:
-    """Build a name-based Device Defaults discovery request."""
+DEVICE_DEFAULTS_SQL = """select count(d.tkmodel) as configuredcount,
+tp.name as modelname, df.tkdeviceprotocol as signalingprotocol,
+df.loadinformation as devicedefault, d.tkmodel as tkmodel
+from device as d
+inner join typeproduct as tp on d.tkmodel=tp.tkmodel
+inner join defaults as df on tp.tkmodel=df.tkmodel
+where df.loadinformation != ""
+group by d.tkmodel, tp.name, df.loadinformation, df.tkdeviceprotocol"""
 
-    return """<axl:listDeviceDefaults>
-      <searchCriteria>
-        <name>%</name>
-      </searchCriteria>
-      <returnedTags>
-        <name />
-        <model />
-        <protocol />
-        <loadInformation />
-      </returnedTags>
-    </axl:listDeviceDefaults>"""
+
+def execute_sql_query_body(sql: str) -> str:
+    """Build an AXL executeSQLQuery request with XML-safe SQL text."""
+
+    return f"<axl:executeSQLQuery><sql>{escape(sql)}</sql></axl:executeSQLQuery>"
 
 
 def list_device_pool_body() -> str:

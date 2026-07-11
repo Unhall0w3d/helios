@@ -19,6 +19,7 @@ SOURCE_LABELS = {
     "AXL.listDevicePool": "AXL – Device pool",
     "AXL.listDeviceDefaults": "AXL – Device defaults",
     "AXL.getDeviceDefaults": "AXL – Device defaults",
+    "AXL.executeSQLQuery.deviceDefaults": "AXL – Device defaults",
     "RISPort70": "RISPort",
     "RISPort70.selectCmDeviceExt": "RISPort – Device registration",
     "RISPort70.selectCmDevice": "RISPort – Device registration",

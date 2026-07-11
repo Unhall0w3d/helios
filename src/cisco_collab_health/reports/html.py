@@ -52,6 +52,7 @@ class HtmlReportBuilder:
         reconciliation_section = self._reconciliation_section(report)
         service_rows = self._service_rows(report)
         service_summary_rows = self._service_summary_rows(report)
+        service_group_summary_rows = self._service_group_summary_rows(report)
         service_reason_rows = self._service_reason_rows(report)
         perf_counter_rows = self._perf_counter_rows(report)
         perf_summary_rows = self._perf_summary_rows(report)
@@ -298,6 +299,11 @@ class HtmlReportBuilder:
         <thead><tr><th>Reason</th><th>Services</th></tr></thead>
         <tbody>{service_reason_rows}</tbody>
       </table>
+      <h3>Service Status by Group</h3>
+      <table>
+        <thead><tr><th>Group</th><th>Started</th><th>Stopped</th><th>Total</th></tr></thead>
+        <tbody>{service_group_summary_rows}</tbody>
+      </table>
       <details>
         <summary>Show all service records</summary>
       <table>
@@ -317,6 +323,7 @@ class HtmlReportBuilder:
       <h2>Performance Counters</h2>
       {_source_caption("Performance Counters", report)}
       {cpu_note}
+      <p class="meta">Memory values are point-in-time observations; no memory health threshold is applied.</p>
       <table>
         <thead><tr><th>Node</th><th>Metric</th><th>Value</th><th>Samples</th></tr></thead>
         <tbody>{perf_summary_rows}</tbody>
@@ -398,7 +405,7 @@ class HtmlReportBuilder:
         <thead>
           <tr>
             <th>Name</th><th>Status</th><th>Registered Node</th><th>IP Address</th>
-            <th>Model</th><th>Protocol</th><th>Active Load</th><th>Download Status</th>
+            <th>Model</th><th>Protocol</th><th>Active Load</th><th>Download Status</th><th>Failure Reason</th>
             <th>Registration Attempts</th><th>Source</th>
           </tr>
         </thead>
@@ -632,9 +639,9 @@ class HtmlReportBuilder:
 
     def _registration_rows(self, report: AssessmentReport) -> str:
         if not report.facts.registrations:
-            return '<tr><td colspan="10">No device registration facts collected.</td></tr>'
+            return '<tr><td colspan="11">No device registration facts collected.</td></tr>'
         if self.customer_safe:
-            return '<tr><td colspan="10">Detailed runtime identifiers omitted from customer-safe report.</td></tr>'
+            return '<tr><td colspan="11">Detailed runtime identifiers omitted from customer-safe report.</td></tr>'
 
         return "\n".join(
             (
@@ -647,6 +654,7 @@ class HtmlReportBuilder:
                 f"<td>{escape(display_text(registration.protocol))}</td>"
                 f"<td>{escape(display_text(registration.active_load))}</td>"
                 f"<td>{escape(display_text(registration.download_status))}</td>"
+                f"<td>{escape(display_text(registration.download_failure_reason))}</td>"
                 f"<td>{escape(display_text(registration.registration_attempts))}</td>"
                 f"<td>{escape(display_source(registration.source))}</td>"
                 "</tr>"
@@ -761,6 +769,21 @@ class HtmlReportBuilder:
         return "\n".join(
             f"<tr><td>{escape(reason)}</td><td>{count}</td></tr>"
             for reason, count in sorted(reasons.items())
+        )
+
+    def _service_group_summary_rows(self, report: AssessmentReport) -> str:
+        if not report.facts.services:
+            return '<tr><td colspan="4">No service status facts collected.</td></tr>'
+        by_group: dict[str, Counter[str]] = {}
+        for service in report.facts.services:
+            group = service.group_name or "Unclassified"
+            by_group.setdefault(group, Counter())[service.status.strip().lower()] += 1
+        return "\n".join(
+            "<tr>"
+            f"<td>{escape(group)}</td><td>{counts['started']}</td>"
+            f"<td>{counts['stopped']}</td><td>{sum(counts.values())}</td>"
+            "</tr>"
+            for group, counts in sorted(by_group.items())
         )
 
     def _perf_counter_rows(self, report: AssessmentReport) -> str:
@@ -1000,19 +1023,22 @@ class HtmlReportBuilder:
                 ("Configured inventory devices", reconciliation.inventory_count),
                 ("Runtime registration records", reconciliation.runtime_count),
                 ("Matched devices", len(reconciliation.matched_names)),
-                ("Inventory-only devices", len(reconciliation.inventory_only)),
+                ("Inventory-only registration-capable/unclassified", len(reconciliation.registration_capable_or_unclassified)),
+                ("Known non-runtime inventory objects", len(reconciliation.known_non_runtime)),
                 ("Runtime-only devices", len(reconciliation.runtime_only)),
             )
         )
-        inventory_only_rows = self._inventory_only_rows(reconciliation.inventory_only)
+        inventory_only_rows = self._inventory_only_rows(reconciliation.registration_capable_or_unclassified)
+        non_runtime_rows = self._inventory_only_rows(reconciliation.known_non_runtime)
         runtime_only_rows = self._runtime_only_rows(reconciliation.runtime_only)
 
         return f"""
     <section>
       <h2>Inventory / Runtime Reconciliation</h2>
       <p class="meta">Informational name-based comparison between configured inventory facts
-      and runtime registration facts. An inventory-only device was not returned by the RIS
-      query; it is not automatically unregistered or unhealthy. Differences are not health findings.</p>
+      and runtime registration facts. Inventory-only objects are conservatively separated when
+      their model is known not to register. Remaining devices are not automatically unregistered or unhealthy.
+      Differences are not health findings.</p>
       <table>
         <tbody>
           {summary_rows}
@@ -1025,12 +1051,17 @@ class HtmlReportBuilder:
           {runtime_only_rows}
         </tbody>
       </table>
-      <h3>Inventory-only Devices</h3>
+      <h3>Inventory-only Registration-capable or Unclassified Devices</h3>
       <table>
         <thead><tr><th>Name</th><th>Model</th><th>Protocol</th><th>Device Pool</th><th>Location</th><th>Source</th></tr></thead>
         <tbody>
           {inventory_only_rows}
         </tbody>
+      </table>
+      <h3>Known Non-runtime Inventory Objects</h3>
+      <table>
+        <thead><tr><th>Name</th><th>Model</th><th>Protocol</th><th>Device Pool</th><th>Location</th><th>Source</th></tr></thead>
+        <tbody>{non_runtime_rows}</tbody>
       </table>
     </section>
 """
