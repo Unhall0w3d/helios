@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections import Counter
+from collections.abc import Iterable
 
 from cisco_collab_health.models.evidence import EvidenceRef
 from cisco_collab_health.models.facts import AssessmentFacts, CertificateFact, DeviceRegistrationFact
@@ -461,8 +462,14 @@ class CertificateValidityRule:
     def evaluate(self, facts: AssessmentFacts) -> list[HealthFinding]:
         if not facts.certificates:
             return []
-        expired = [item for item in facts.certificates if item.days_remaining is not None and item.days_remaining < 0]
-        soon = [item for item in facts.certificates if item.days_remaining is not None and 0 <= item.days_remaining <= 60]
+        expired = _unique_certificates(
+            item for item in facts.certificates
+            if item.days_remaining is not None and item.days_remaining < 0
+        )
+        soon = _unique_certificates(
+            item for item in facts.certificates
+            if item.days_remaining is not None and 0 <= item.days_remaining <= 60
+        )
         observed = {
             value.lower() for item in facts.certificates
             for value in (item.name, item.store, item.service) if value
@@ -507,6 +514,16 @@ def _certificate_finding(
         recommendation="Renew or replace affected certificates and validate the issuer chain before expiration.",
         evidence=[EvidenceRef(source="CertificateManagementREST", operation="snapshot_server", confidence="high")],
     )
+
+
+def _unique_certificates(certificates: Iterable[CertificateFact]) -> list[CertificateFact]:
+    unique: dict[str, CertificateFact] = {}
+    for item in certificates:
+        key = item.fingerprint_sha256 or "|".join(
+            filter(None, (item.subject, item.serial_number, item.valid_until, item.name))
+        )
+        unique.setdefault(key, item)
+    return list(unique.values())
 
 
 class PlatformCheckSummaryRule:

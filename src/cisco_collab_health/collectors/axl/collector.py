@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from defusedxml import ElementTree as ET
 
 from cisco_collab_health.collectors.axl.bodies import (
     DEVICE_DEFAULTS_SQL,
+    diagnostic_get_body,
     diagnostic_list_body,
     execute_sql_query_body,
     get_ccm_version_body,
@@ -19,6 +21,7 @@ from cisco_collab_health.collectors.axl.parsers import (
     cluster_name_from_nodes,
     find_first_text,
     parse_configuration_objects,
+    parse_configuration_object_details,
     parse_device_load_defaults,
     parse_device_pools,
     parse_phone_inventory,
@@ -72,6 +75,13 @@ DIAGNOSTIC_AXL_OPERATIONS = (
     ("listMtp", "name", ("name", "devicePoolName")),
     ("listLine", "pattern", ("pattern", "routePartitionName", "description")),
 )
+
+DIAGNOSTIC_AXL_GET_RELATIONSHIPS = {
+    "RoutePattern": ("getRoutePattern", ("gatewayOrRouteListName",)),
+    "Css": ("getCss", ("members/member/routePartitionName",)),
+    "RouteGroup": ("getRouteGroup", ("members/member/deviceName",)),
+    "RouteList": ("getRouteList", ("members/member/routeGroupName",)),
+}
 
 
 class AxlCollector:
@@ -153,6 +163,7 @@ class AxlCollector:
 
         if context.diagnostic_capture:
             self._collect_diagnostic_axl(context, facts, warnings, evidence, notes)
+            self._enrich_diagnostic_relationships(context, facts, warnings, evidence, notes)
 
         if facts.cluster is not None and facts.nodes:
             facts.cluster = ClusterIdentity(
@@ -373,6 +384,53 @@ class AxlCollector:
 
     def _call_axl(self, context: CollectionContext, operation: str, body: str) -> str:
         return self._call_axl_response(context, operation, body).body
+
+    def _enrich_diagnostic_relationships(
+        self, context: CollectionContext, facts: AssessmentFacts, warnings: list[str],
+        evidence: list[EvidenceRef], notes: list[str],
+    ) -> None:
+        """Fill nested relationship fields CUCM may omit from list responses."""
+
+        limit = min(max(1, context.diagnostic_axl_max_records), 500)
+        attempted = succeeded = 0
+        failures: list[str] = []
+        enriched: list[ConfigurationObjectFact] = []
+        for fact in facts.configuration_objects:
+            specification = DIAGNOSTIC_AXL_GET_RELATIONSHIPS.get(fact.object_type)
+            if specification is None or attempted >= limit:
+                enriched.append(fact)
+                continue
+            operation, tags = specification
+            key_fields = {"name": fact.name}
+            if fact.object_type == "RoutePattern":
+                key_fields = {"pattern": fact.name}
+                partition = fact.details.get("partition")
+                if partition:
+                    key_fields["routePartitionName"] = partition
+            attempted += 1
+            try:
+                response = self._call_axl_response(
+                    context, operation,
+                    diagnostic_get_body(operation, key_fields=key_fields, returned_tags=tags),
+                    artifact_operation=f"diagnostic_{operation}_{attempted:06d}",
+                )
+                evidence.append(_evidence_from_soap_response(response, context.publisher_ip))
+                details = parse_configuration_object_details(response.body, operation, tags)
+                enriched.append(replace(fact, details={**fact.details, **details}))
+                succeeded += 1
+            except AxlCollectionError as exc:
+                enriched.append(fact)
+                failures.append(str(exc))
+        facts.configuration_objects = enriched
+        if failures:
+            warnings.append(
+                f"Diagnostic AXL relationship enrichment failed for {len(failures)} of "
+                f"{attempted} object(s); list data was preserved. First failure: {failures[0]}"
+            )
+        notes.append(
+            f"Diagnostic AXL relationship enrichment completed {succeeded} of {attempted} "
+            f"bounded get request(s); request limit {limit}."
+        )
 
     def _call_axl_response(
         self,

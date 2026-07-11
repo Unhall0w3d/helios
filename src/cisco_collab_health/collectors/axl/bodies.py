@@ -90,6 +90,23 @@ def diagnostic_list_body(
     </axl:{operation}>"""
 
 
+def diagnostic_get_body(
+    operation: str, *, key_fields: dict[str, str], returned_tags: tuple[str, ...],
+) -> str:
+    """Build a read-only AXL get request for a previously listed object."""
+
+    keys = "\n".join(
+        f"      <{tag}>{escape(value)}</{tag}>" for tag, value in key_fields.items()
+    )
+    tags = "\n".join(f"        {_nested_return_tag(tag)}" for tag in returned_tags)
+    return f"""<axl:{operation}>
+{keys}
+      <returnedTags>
+{tags}
+      </returnedTags>
+    </axl:{operation}>"""
+
+
 def _nested_return_tag(path: str) -> str:
     parts = path.split("/")
     rendered = f"<{parts[-1]} />"

@@ -173,6 +173,27 @@ def parse_configuration_objects(
     return facts
 
 
+def parse_configuration_object_details(
+    response_text: str, operation: str, returned_tags: tuple[str, ...],
+) -> dict[str, str]:
+    """Parse relationship fields from one AXL get response."""
+
+    try:
+        root = ET.fromstring(response_text)
+    except ET.ParseError as exc:
+        raise AxlCollectionError(f"Unable to parse {operation} response: {exc}") from exc
+    object_name = operation.removeprefix("get")
+    element_name = object_name[:1].lower() + object_name[1:]
+    element = next(_iter_local_name(root, element_name), None)
+    if element is None:
+        return {}
+    return {
+        _configuration_detail_name(tag): value
+        for tag in returned_tags
+        if (value := ", ".join(_descendant_path_texts(element, tag)))
+    }
+
+
 def _configuration_detail_name(tag: str) -> str:
     labels = {
         "routePartitionName": "partition",

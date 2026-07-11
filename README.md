@@ -72,8 +72,9 @@ Current capabilities:
 - Inventory-only summaries by model and device pool
 - Diagnostic dial-plan relationships for route-pattern destinations, route-list/route-group membership, and CSS partitions
 - Per-node UC Certificate Management REST snapshots using OS read credentials
-- Raw per-node certificate identity/trust snapshots; live PEM normalization is the next implementation task
-- Planned 60-day expiry and mandatory `phone-sast-trust` / `phone-vpn-trust` assessment policy
+- PEM/X.509 identity and trust parsing with SHA-256 deduplication, validity, key,
+  signer, AKI/SKI, and best-available chain metadata
+- Active 60-day expiry and mandatory `phone-sast-trust` / `phone-vpn-trust` assessment policy
 - Automatic encrypted-profile upgrade when legacy profiles lack OS/SSH credentials
 - Explicit encrypted marker prevents API credentials from being mistaken for Platform/CLI credentials
 - AXL schema retry when CUCM reports that the requested AXL version is unsupported
@@ -101,11 +102,11 @@ Current CUCM 15 validation status: AXL inventory and Device Defaults SQL,
 RISPort registration/firmware, Control Center services, PerfMon snapshots,
 static Phone Loads, firmware findings, service-state policy, evidence export,
 and encrypted Platform credential migration are live-validated. Certificate
-Management REST authentication and raw snapshots are also validated. The next
-work is PEM/X.509 normalization, trust-store deduplication, phone trust-store
-coverage, and bounded AXL `get` enrichment for relationships omitted by list
-responses. After CUCM 15 stabilizes, validation proceeds to CUCM 14.x, 12.x,
-and 11.x before expanding to Cisco Unity Connection.
+Management REST authentication and raw snapshots are also validated. PEM/X.509
+normalization, trust-store deduplication, phone trust-store coverage reporting,
+and bounded AXL `get` relationship enrichment are implemented and awaiting a
+fresh CUCM 15 validation run. After CUCM 15 stabilizes, validation proceeds to
+CUCM 14.x, 12.x, and 11.x before expanding to Cisco Unity Connection.
 
 AXL requests start with schema version `14.0`. If CUCM returns an
 `Incorrect axl version` response that lists supported versions, AletheiaUC
@@ -337,13 +338,15 @@ adds raw request/response evidence for:
 - Bounded AXL configuration discovery for call-manager groups, regions, locations,
   SIP trunks, route patterns, partitions, CSSes, route groups/lists, translation
   patterns, media resources, and lines
+- Up to 500 bounded AXL `get` reads to recover route-pattern, route-list,
+  route-group, and CSS relationships that CUCM omits from list responses
 
 All diagnostic calls are read-only. Supported RISPort70, Control Center, and
 PerfMon responses are normalized into registration, service-status, and
 performance-counter facts and displayed in HTML/JSON. Bounded AXL configuration
-discovery is normalized into shallow configuration inventory facts while the
-raw responses remain available for deeper dependency parsers. Diagnostic facts
-are snapshots: they support conservative
+discovery is normalized into configuration inventory facts, with bounded
+relationship enrichment and raw responses retained for deeper dependency
+parsers. Diagnostic facts are snapshots: they support conservative
 collection summaries and reconciliation, not full service policy or performance
 threshold findings. Unsupported operations and authentication failures are
 captured as artifacts and collector warnings.

@@ -187,6 +187,8 @@ def run_assessment(
         },
     )
     status.ok("Collectors completed")
+    if context.diagnostic_capture:
+        _print_interface_validation_status(report, status)
     for collector_result in report.collector_results:
         for warning in collector_result.warnings:
             status.warn(f"{collector_result.collector_name}: {warning}")
@@ -376,7 +378,7 @@ def _print_preflight_status(preflight: PreflightResult, status: StatusPrinter) -
             status.warn(f"{transport_message}{detail}")
 
         if interface.wsdl_available is None:
-            status.info(f"{interface.name} WSDL: not yet tested")
+            status.info(f"{interface.name} WSDL: scheduled for diagnostic collector")
         elif interface.wsdl_available:
             status.ok(f"{interface.name} WSDL: available")
         else:
@@ -387,7 +389,7 @@ def _print_preflight_status(preflight: PreflightResult, status: StatusPrinter) -
             if interface.name == "axl":
                 status.info(f"{interface.name} authenticated operation: tested by collector")
             else:
-                status.info(f"{interface.name} authenticated operation: not yet tested")
+                status.info(f"{interface.name} authenticated operation: scheduled for collector")
         elif interface.authenticated_available:
             status.ok(f"{interface.name} authenticated operation: available")
         else:
@@ -398,5 +400,26 @@ def _print_preflight_status(preflight: PreflightResult, status: StatusPrinter) -
         status.info(
             "Enabled interfaces: " + ", ".join(preflight.transport_available_interfaces)
         )
+
+
+def _print_interface_validation_status(
+    report: AssessmentReport, status: StatusPrinter,
+) -> None:
+    """Report observed WSDL and authenticated calls after collectors complete."""
+
+    evidence = [item for result in report.collector_results for item in result.evidence]
+    interfaces = sorted({item.source.lower() for item in evidence})
+    if not interfaces:
+        status.warn("Interface validation: no successful API evidence was recorded")
+        return
+    status.stage("Completed interface validation")
+    for interface in interfaces:
+        records = [item for item in evidence if item.source.lower() == interface]
+        if any(item.operation == "wsdl" for item in records):
+            status.ok(f"{interface} WSDL: captured")
+        authenticated = [item for item in records if item.operation != "wsdl"]
+        if authenticated:
+            operations = ", ".join(sorted({item.operation for item in authenticated}))
+            status.ok(f"{interface} authenticated read: {operations}")
     else:
         status.warn("No Publisher API interfaces passed preflight")

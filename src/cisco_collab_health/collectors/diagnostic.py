@@ -11,6 +11,10 @@ from typing import Any, Iterator
 from xml.sax.saxutils import escape
 
 from defusedxml import ElementTree as ET
+from cryptography import x509
+from cryptography.exceptions import UnsupportedAlgorithm
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.asymmetric import ec, padding, rsa
 
 from cisco_collab_health.collectors.base import CollectionResult
 from cisco_collab_health.models.evidence import EvidenceRef
@@ -39,22 +43,58 @@ def parse_certificate_snapshot(payload: str, node: str) -> list[CertificateFact]
     """Defensively normalize certificate metadata from Cisco's versioned JSON."""
 
     document = json.loads(payload)
+    pem_facts: list[CertificateFact] = []
+    for identity in document.get("identities", []) if isinstance(document, dict) else []:
+        if not isinstance(identity, dict):
+            continue
+        service = _json_value(identity, "service")
+        pem = _json_value(identity, "certificate")
+        if pem:
+            fact = _certificate_fact_from_pem(
+                pem, node=node, name=service or "identity", service=service,
+                store=None, certificate_kind="identity",
+            )
+            if fact:
+                pem_facts.append(fact)
+    for trust in document.get("trusts", []) if isinstance(document, dict) else []:
+        if not isinstance(trust, dict):
+            continue
+        service = _json_value(trust, "service")
+        store = service if service and service.lower().endswith("-trust") else (
+            f"{service}-trust" if service else "trust"
+        )
+        entries = trust.get("certificate_data", [])
+        for entry in entries if isinstance(entries, list) else []:
+            if not isinstance(entry, dict):
+                continue
+            pem = _json_value(entry, "certificate")
+            if not pem:
+                continue
+            fact = _certificate_fact_from_pem(
+                pem, node=node, name=_json_value(entry, "filename") or store,
+                service=service, store=store, certificate_kind="trust",
+            )
+            if fact:
+                pem_facts.append(fact)
+    if pem_facts:
+        return _resolve_certificate_chains(pem_facts)
+
     candidates = [item for item in _walk_json(document) if _looks_like_certificate(item)]
     facts = []
     for item in candidates:
         name = _json_value(item, "name", "certificateName", "certName", "alias")
-        service = _json_value(item, "service", "serviceName", "certificatePurpose", "type")
-        store = _json_value(item, "store", "storeName", "trustStore", "category")
+        service_value = _json_value(item, "service", "serviceName", "certificatePurpose", "type")
+        store_value = _json_value(item, "store", "storeName", "trustStore", "category")
         if not name:
-            name = service or store
+            name = service_value or store_value
         if not name:
             continue
         subject = _json_value(item, "subject", "subjectName", "subjectDN")
         issuer = _json_value(item, "issuer", "issuerName", "issuerDN")
         valid_until = _json_value(item, "validUntil", "notAfter", "expiryDate", "expiresOn")
-        kind = "trust" if "trust" in " ".join(filter(None, (name, service, store))).lower() else "identity"
+        kind = "trust" if "trust" in " ".join(filter(None, (name, service_value, store_value))).lower() else "identity"
         facts.append(CertificateFact(
-            node=node, name=name, service=service, store=store, certificate_kind=kind,
+            node=node, name=name, service=service_value, store=store_value, certificate_kind=kind,
             subject=subject, issuer=issuer,
             serial_number=_json_value(item, "serialNumber", "serial"),
             valid_from=_json_value(item, "validFrom", "notBefore"), valid_until=valid_until,
@@ -69,6 +109,78 @@ def parse_certificate_snapshot(payload: str, node: str) -> list[CertificateFact]
             source="CertificateManagementREST.snapshot_server",
         ))
     return _resolve_certificate_chains(facts)
+
+
+def _certificate_fact_from_pem(
+    pem: str, *, node: str, name: str, service: str | None, store: str | None,
+    certificate_kind: str,
+) -> CertificateFact | None:
+    try:
+        certificate = x509.load_pem_x509_certificate(pem.encode("utf-8"))
+    except (ValueError, TypeError):
+        return None
+    public_key = certificate.public_key()
+    if isinstance(public_key, rsa.RSAPublicKey):
+        key_type, key_size = "RSA", str(public_key.key_size)
+    elif isinstance(public_key, ec.EllipticCurvePublicKey):
+        key_type, key_size = f"EC ({public_key.curve.name})", str(public_key.key_size)
+    else:
+        key_type = type(public_key).__name__.removesuffix("PublicKey")
+        key_size = str(getattr(public_key, "key_size", "")) or "unknown"
+    try:
+        signature_hash = certificate.signature_hash_algorithm
+        signature_algorithm = signature_hash.name if signature_hash else certificate.signature_algorithm_oid._name
+    except (ValueError, UnsupportedAlgorithm):
+        signature_algorithm = certificate.signature_algorithm_oid._name
+    return CertificateFact(
+        node=node, name=name, service=service, store=store,
+        certificate_kind=certificate_kind,
+        subject=certificate.subject.rfc4514_string(),
+        issuer=certificate.issuer.rfc4514_string(),
+        serial_number=f"{certificate.serial_number:X}",
+        valid_from=certificate.not_valid_before_utc.isoformat(),
+        valid_until=certificate.not_valid_after_utc.isoformat(),
+        days_remaining=_days_remaining(certificate.not_valid_after_utc.isoformat()),
+        self_signed=_is_self_signed(certificate), key_type=key_type, key_size=key_size,
+        signature_algorithm=signature_algorithm,
+        subject_key_identifier=_extension_hex(certificate, x509.SubjectKeyIdentifier),
+        authority_key_identifier=_extension_hex(certificate, x509.AuthorityKeyIdentifier),
+        intermediate=None, root=None, chain_status=None,
+        source="CertificateManagementREST.snapshot_server",
+        fingerprint_sha256=certificate.fingerprint(hashes.SHA256()).hex(),
+    )
+
+
+def _extension_hex(certificate: x509.Certificate, extension_type: type) -> str | None:
+    try:
+        value: Any = certificate.extensions.get_extension_for_class(extension_type).value
+    except x509.ExtensionNotFound:
+        return None
+    identifier = value.digest if isinstance(value, x509.SubjectKeyIdentifier) else value.key_identifier
+    return identifier.hex() if identifier else None
+
+
+def _is_self_signed(certificate: x509.Certificate) -> bool:
+    if certificate.subject != certificate.issuer:
+        return False
+    public_key = certificate.public_key()
+    signature_hash = certificate.signature_hash_algorithm
+    try:
+        if isinstance(public_key, rsa.RSAPublicKey) and signature_hash is not None:
+            public_key.verify(
+                certificate.signature, certificate.tbs_certificate_bytes,
+                padding.PKCS1v15(), signature_hash,
+            )
+        elif isinstance(public_key, ec.EllipticCurvePublicKey) and signature_hash is not None:
+            public_key.verify(
+                certificate.signature, certificate.tbs_certificate_bytes,
+                ec.ECDSA(signature_hash),
+            )
+        else:
+            return True
+        return True
+    except Exception:
+        return False
 
 
 def _walk_json(value: Any) -> Iterator[dict[str, Any]]:
@@ -120,19 +232,31 @@ def _days_remaining(value: str | None) -> int | None:
 
 
 def _resolve_certificate_chains(facts: list[CertificateFact]) -> list[CertificateFact]:
-    by_subject = {fact.subject: fact for fact in facts if fact.subject}
+    by_subject: dict[str, list[CertificateFact]] = {}
+    by_ski: dict[str, list[CertificateFact]] = {}
+    for candidate in facts:
+        if candidate.subject:
+            by_subject.setdefault(candidate.subject, []).append(candidate)
+        if candidate.subject_key_identifier:
+            by_ski.setdefault(candidate.subject_key_identifier, []).append(candidate)
     resolved = []
     for fact in facts:
         if fact.self_signed:
             resolved.append(replace(fact, root=fact.subject, chain_status="self-signed"))
             continue
-        issuer = by_subject.get(fact.issuer) if fact.issuer else None
+        issuer_candidates = by_ski.get(fact.authority_key_identifier or "", [])
+        if not issuer_candidates and fact.issuer:
+            issuer_candidates = by_subject.get(fact.issuer, [])
+        issuer = issuer_candidates[0] if issuer_candidates else None
         if issuer is None:
             resolved.append(replace(fact, chain_status="unresolved"))
         elif issuer.self_signed:
             resolved.append(replace(fact, root=issuer.subject, chain_status="complete"))
         else:
-            root = by_subject.get(issuer.issuer) if issuer.issuer else None
+            root_candidates = by_ski.get(issuer.authority_key_identifier or "", [])
+            if not root_candidates and issuer.issuer:
+                root_candidates = by_subject.get(issuer.issuer, [])
+            root = root_candidates[0] if root_candidates else None
             resolved.append(replace(
                 fact, intermediate=issuer.subject,
                 root=root.subject if root and root.self_signed else None,

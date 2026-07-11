@@ -7,7 +7,7 @@ from hashlib import sha256
 from html import escape
 
 from cisco_collab_health.models.assessment import AssessmentReport
-from cisco_collab_health.models.facts import DeviceInventoryFact, DeviceRegistrationFact
+from cisco_collab_health.models.facts import CertificateFact, DeviceInventoryFact, DeviceRegistrationFact
 from cisco_collab_health.models.findings import FindingSeverity, HealthFinding
 from cisco_collab_health.reports.coverage import build_report_coverage
 from cisco_collab_health.reports.formatting import (
@@ -1125,9 +1125,13 @@ class HtmlReportBuilder:
             return '<tr><td colspan="10">Certificate metadata was not collected.</td></tr>'
         if not selected:
             return '<tr><td colspan="10">No expired or 60-day certificates found; mandatory phone trust stores were not returned.</td></tr>'
+        grouped: dict[object, list[CertificateFact]] = {}
+        for item in selected:
+            key = item.fingerprint_sha256 or (item.subject, item.serial_number, item.valid_until, item.name)
+            grouped.setdefault(key, []).append(item)
         return "\n".join(
             "<tr>"
-            f"<td>{escape(self._identifier(item.node, 'Node'))}</td>"
+            f"<td>{escape(', '.join(self._identifier(node, 'Node') for node in sorted({entry.node for entry in occurrences})))}</td>"
             f"<td>{escape('Certificate' if self.customer_safe else display_text(item.name))}</td>"
             f"<td>{escape(display_text(item.service or item.store))}</td>"
             f"<td>{escape(item.certificate_kind)}</td>"
@@ -1138,7 +1142,8 @@ class HtmlReportBuilder:
             f"<td>{escape('Omitted' if self.customer_safe and item.root else display_text(item.root))}</td>"
             f"<td>{escape(display_text(item.chain_status))}</td>"
             "</tr>"
-            for item in selected
+            for occurrences in grouped.values()
+            for item in occurrences[:1]
         )
 
     def _collector_issues_section(self, report: AssessmentReport) -> str:

@@ -12,7 +12,7 @@ authors = [
   { name = "Kenneth Perry" }
 ]
 license = { file = "LICENSE" }
-dependencies = ["keyring>=25", "defusedxml>=0.7"]
+dependencies = ["keyring>=25", "defusedxml>=0.7", "cryptography>=44"]
 
 [project.optional-dependencies]
 dev = ["pytest>=8", "ruff>=0.5", "mypy>=1.10", "types-defusedxml>=0.7"]

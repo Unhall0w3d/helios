@@ -168,6 +168,7 @@ class CertificateFact:
     root: str | None
     chain_status: str | None
     source: str
+    fingerprint_sha256: str | None = None
 
 
 @dataclass

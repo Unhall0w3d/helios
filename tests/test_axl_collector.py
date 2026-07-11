@@ -11,7 +11,8 @@ from unittest.mock import patch
 
 from cisco_collab_health.artifacts import ArtifactStore
 from cisco_collab_health.collectors.axl import AxlCollector, AxlVersionPolicy
-from cisco_collab_health.collectors.axl.bodies import diagnostic_list_body
+from cisco_collab_health.collectors.axl.bodies import diagnostic_get_body, diagnostic_list_body
+from cisco_collab_health.collectors.axl.parsers import parse_configuration_object_details
 from cisco_collab_health.collectors.axl_errors import AxlCollectionError, AxlVersionError
 from cisco_collab_health.collectors.axl_bodies import (
     DEVICE_DEFAULTS_SQL,
@@ -276,6 +277,23 @@ class AxlCollectorTests(unittest.TestCase):
         )
 
         self.assertIn("<members><member><routePartitionName /></member></members>", body)
+
+    def test_diagnostic_get_body_and_parser_preserve_relationships(self) -> None:
+        body = diagnostic_get_body(
+            "getRouteList", key_fields={"name": "PSTN & Backup"},
+            returned_tags=("members/member/routeGroupName",),
+        )
+        response = """<Envelope><return><routeList><members>
+        <member><routeGroupName>PRIMARY-RG</routeGroupName></member>
+        <member><routeGroupName>BACKUP-RG</routeGroupName></member>
+        </members></routeList></return></Envelope>"""
+
+        details = parse_configuration_object_details(
+            response, "getRouteList", ("members/member/routeGroupName",),
+        )
+
+        self.assertIn("<name>PSTN &amp; Backup</name>", body)
+        self.assertEqual(details["route_groups"], "PRIMARY-RG, BACKUP-RG")
 
     def test_axl_version_policy_prefers_discovered_supported_version(self) -> None:
         policy = AxlVersionPolicy()
