@@ -72,17 +72,27 @@ Current capabilities:
 - AXL schema retry when CUCM reports that the requested AXL version is unsupported
 - Publisher preflight and interface reachability checks
 - Read-only diagnostic capture with normalized RISPort70 registration, Control Center service-status, and PerfMon counter facts
-- Conservative summary rules for collected inventory, runtime registration, service, and device-load facts
+- Runtime firmware distribution, explicit download-failure reporting, and conservative firmware findings
+- Reason-aware service summaries that distinguish not-activated and commanded-out-of-service states
+- Zero-only CPU suppression so invalid snapshots are reported as unavailable
+- Conservative summary rules for collected inventory, runtime registration, service, configuration, and device-load facts
 - Terminal Executive Summary output
 - Styled HTML report builder
 - JSON output for development and automation
 - Raw evidence capture, normalized artifacts, and per-attempt API accounting
+- Collapsible detail tables and an identifier-masked customer-safe HTML mode
 
 The current production-oriented API implementation is AXL plus the bounded
 diagnostic capture path. RISPort70, Control Center, and PerfMon facts are
 normalized only when `--diagnostic-capture` is enabled; they are not yet
 independent baseline collectors with full policy/threshold coverage. CLI
 platform checks remain unimplemented.
+
+Current CUCM 15 validation status: the previous diagnostic archive has been
+fully replayed against the implemented parsers. A fresh run is required to
+validate name-based `listDeviceDefaults` discovery and the report changes added
+after that archive. After CUCM 15 stabilizes, validation proceeds to CUCM 14.x,
+12.x, and 11.x before expanding to Cisco Unity Connection.
 
 AXL requests start with schema version `14.0`. If CUCM returns an
 `Incorrect axl version` response that lists supported versions, AletheiaUC
