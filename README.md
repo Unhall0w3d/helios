@@ -228,6 +228,19 @@ To disable troubleshooting log writing:
 ./aletheiauc.py --no-logs
 ```
 
+To export the completed self-contained troubleshooting bundle to the current
+user's Downloads folder for the test/review/iterate workflow:
+
+```bash
+./aletheiauc.py --diagnostic-capture --export-review-zip
+```
+
+The generated filename has the form
+`aletheiauc-review-<profile>-<timestamp>.zip`. The archive contains the matching
+`logs/<timestamp>/` bundle: report HTML, normalized assessment JSON, collector
+warnings, manifests, attempt ledger, and copied raw/normalized artifacts.
+`--export-review-zip` cannot be combined with `--no-logs`.
+
 To print JSON instead of the terminal Executive Summary:
 
 ```bash
@@ -460,6 +473,10 @@ report, the normalized assessment JSON, and a copy of the raw and normalized
 artifact files from the matching `assessment_runs/` entry. Raw API artifacts are
 stored below `artifacts/nodes/<node>/api/<interface>/<operation>/` as
 `request.txt` and `response.txt`; request artifacts omit reusable credentials.
+
+Review ZIP exports contain this same customer-sensitive diagnostic material.
+Transfer and retain them accordingly; `--customer-safe-report` changes HTML
+presentation only and does not sanitize the exported raw or JSON evidence.
 
 ## Cluster Discovery Direction
 

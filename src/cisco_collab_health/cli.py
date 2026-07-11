@@ -73,6 +73,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="Do not write local troubleshooting logs.",
     )
     parser.add_argument(
+        "--export-review-zip",
+        action="store_true",
+        help=(
+            "Write the self-contained troubleshooting bundle as a ZIP file in the "
+            "current user's Downloads folder."
+        ),
+    )
+    parser.add_argument(
         "--profile",
         help="Local connection profile name. If omitted, choose from saved profiles or create one.",
     )
@@ -205,6 +213,8 @@ def main(argv: Sequence[str] | None = None) -> int:
 def _validate_args(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:
     if args.ca_bundle and not args.verify_tls:
         parser.error("--ca-bundle requires --verify-tls")
+    if args.export_review_zip and args.no_logs:
+        parser.error("--export-review-zip cannot be combined with --no-logs")
     if args.phone_inventory_page_size < 1:
         parser.error("--phone-inventory-page-size must be at least 1")
     if args.phone_inventory_max_devices < 1:

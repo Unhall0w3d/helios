@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import re
 import shutil
+from zipfile import ZIP_DEFLATED, ZipFile
 from dataclasses import asdict, dataclass, is_dataclass
 from datetime import datetime
 from enum import Enum
@@ -198,6 +199,37 @@ class RunLogStore:
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(source, target)
         return destination
+
+
+def export_review_zip(
+    store: RunLogStore,
+    downloads_dir: str | Path | None = None,
+) -> Path:
+    """Export one self-contained troubleshooting bundle to the Downloads folder."""
+
+    destination = (
+        Path(downloads_dir).expanduser()
+        if downloads_dir is not None
+        else Path.home() / "Downloads"
+    )
+    destination.mkdir(parents=True, exist_ok=True)
+    zip_path = destination / (
+        f"aletheiauc-review-{_safe_name(store.profile_name)}-{store.run_id}.zip"
+    )
+    temporary_path = zip_path.with_suffix(".zip.tmp")
+    try:
+        with ZipFile(temporary_path, "w", compression=ZIP_DEFLATED) as archive:
+            for path in sorted(store.root.rglob("*")):
+                if path.is_file():
+                    archive.write(
+                        path,
+                        arcname=Path("logs") / store.run_id / path.relative_to(store.root),
+                    )
+        temporary_path.replace(zip_path)
+    except Exception:
+        temporary_path.unlink(missing_ok=True)
+        raise
+    return zip_path
 
 
 def write_preflight_artifacts(store: ArtifactStore, publisher: str, preflight: Any) -> Path:

@@ -10,6 +10,18 @@ from cisco_collab_health import cli
 
 
 class CliTests(unittest.TestCase):
+    def test_review_zip_requires_troubleshooting_logs(self) -> None:
+        with self.assertRaises(SystemExit) as exc:
+            cli.main(
+                [
+                    "--skip-profile",
+                    "--export-review-zip",
+                    "--no-logs",
+                ]
+            )
+
+        self.assertEqual(exc.exception.code, 2)
+
     def test_customer_safe_html_flag_is_available(self) -> None:
         args = cli.build_parser().parse_args(["--customer-safe-report"])
 

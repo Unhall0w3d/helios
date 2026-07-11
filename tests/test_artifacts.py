@@ -6,14 +6,39 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from zipfile import ZipFile
 
-from cisco_collab_health.artifacts import ArtifactStore, RunLogStore, write_log_bundle
+from cisco_collab_health.artifacts import (
+    ArtifactStore,
+    RunLogStore,
+    export_review_zip,
+    write_log_bundle,
+)
 from cisco_collab_health.collectors.base import CollectionResult, CollectorError
 from cisco_collab_health.models.assessment import AssessmentReport
 from cisco_collab_health.models.facts import AssessmentFacts
 
 
 class ArtifactStoreTests(unittest.TestCase):
+    def test_review_zip_exports_self_contained_log_bundle(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            log_store = RunLogStore.create(root / "logs", "Lab Cluster")
+            log_store.write_text("assessment_report.json", "{}\n")
+            log_store.write_text("artifacts/operation_attempts.jsonl", "{}\n")
+
+            zip_path = export_review_zip(log_store, root / "Downloads")
+
+            self.assertEqual(
+                zip_path.name,
+                f"aletheiauc-review-Lab_Cluster-{log_store.run_id}.zip",
+            )
+            with ZipFile(zip_path) as archive:
+                names = set(archive.namelist())
+            prefix = f"logs/{log_store.run_id}/"
+            self.assertIn(prefix + "assessment_report.json", names)
+            self.assertIn(prefix + "artifacts/operation_attempts.jsonl", names)
+
     def test_artifact_store_writes_manifest_and_node_files(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             store = ArtifactStore.create(Path(tmpdir), "Lab Cluster")

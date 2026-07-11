@@ -10,6 +10,7 @@ from pathlib import Path
 from cisco_collab_health.artifacts import (
     ArtifactStore,
     RunLogStore,
+    export_review_zip,
     write_assessment_artifacts,
     write_log_bundle,
     write_preflight_artifacts,
@@ -230,6 +231,10 @@ def run_assessment(
             html_report_path=html_report_path,
         )
         status.ok(f"Troubleshooting logs written: {log_store.root}")
+        if args.export_review_zip:
+            status.stage("Exporting review ZIP")
+            review_zip = export_review_zip(log_store)
+            status.ok(f"Review ZIP written: {review_zip}")
 
     return 0
 
