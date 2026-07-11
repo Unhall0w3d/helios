@@ -12,6 +12,8 @@ from cisco_collab_health.reports.coverage import build_report_coverage
 from cisco_collab_health.reports.formatting import (
     display_bool,
     display_details,
+    display_duration,
+    display_source,
     display_status_label,
     display_text,
 )
@@ -257,7 +259,7 @@ class HtmlReportBuilder:
         <thead>
           <tr>
             <th>Node</th><th>Service</th><th>Activated</th><th>Status</th>
-            <th>Uptime Seconds</th><th>Source</th>
+            <th>Uptime</th><th>Source</th>
           </tr>
         </thead>
         <tbody>
@@ -555,7 +557,7 @@ class HtmlReportBuilder:
                 f"<td>{escape(display_text(registration.ip_address))}</td>"
                 f"<td>{escape(display_text(registration.model))}</td>"
                 f"<td>{escape(display_text(registration.protocol))}</td>"
-                f"<td>{escape(display_text(registration.source))}</td>"
+                f"<td>{escape(display_source(registration.source))}</td>"
                 "</tr>"
             )
             for registration in report.facts.registrations
@@ -607,8 +609,8 @@ class HtmlReportBuilder:
                 f"<td>{escape(service.service_name)}</td>"
                 f"<td>{escape(display_bool(service.activated))}</td>"
                 f"<td>{escape(service.status)}</td>"
-                f"<td>{escape(display_text(service.uptime_seconds))}</td>"
-                f"<td>{escape(service.source)}</td>"
+                f"<td>{escape(display_duration(service.uptime_seconds))}</td>"
+                f"<td>{escape(display_source(service.source))}</td>"
                 "</tr>"
             )
             for service in report.facts.services
@@ -627,7 +629,7 @@ class HtmlReportBuilder:
                 f"<td>{escape(display_text(counter.instance))}</td>"
                 f"<td>{escape(display_text(counter.value))}</td>"
                 f"<td>{counter.sample_count}</td>"
-                f"<td>{escape(counter.source)}</td>"
+                f"<td>{escape(display_source(counter.source))}</td>"
                 "</tr>"
             )
             for counter in report.facts.perf_counters
@@ -644,7 +646,7 @@ class HtmlReportBuilder:
                 f"<td>{escape(check.check_name)}</td>"
                 f"<td>{escape(check.status)}</td>"
                 f"<td>{escape(display_details(check.details))}</td>"
-                f"<td>{escape(check.source)}</td>"
+                f"<td>{escape(display_source(check.source))}</td>"
                 "</tr>"
             )
             for check in report.facts.platform_checks
@@ -722,7 +724,7 @@ class HtmlReportBuilder:
                 rows.append(
                     "<tr>"
                     f"<td>{escape(display_text(result.collector_name))}</td>"
-                    f"<td>{escape(display_text(evidence.source))}</td>"
+                    f"<td>{escape(display_source(evidence.source))}</td>"
                     f"<td>{escape(display_text(evidence.operation))}</td>"
                     f"<td>{escape(display_text(evidence.node))}</td>"
                     f"<td>{escape(display_text(artifact))}</td>"
@@ -819,7 +821,7 @@ class HtmlReportBuilder:
                 f"<td>{escape(display_text(registration.registered_node))}</td>"
                 f"<td>{escape(display_text(registration.model))}</td>"
                 f"<td>{escape(display_text(registration.protocol))}</td>"
-                f"<td>{escape(display_text(registration.source))}</td>"
+                f"<td>{escape(display_source(registration.source))}</td>"
                 "</tr>"
             )
             for registration in registrations
@@ -836,7 +838,7 @@ class HtmlReportBuilder:
                 f"<td>{escape(display_text(device.protocol))}</td>"
                 f"<td>{escape(display_text(device.device_pool))}</td>"
                 f"<td>{escape(display_text(device.location))}</td>"
-                f"<td>{escape(display_text(device.source))}</td>"
+                f"<td>{escape(display_source(device.source))}</td>"
                 "</tr>"
             )
             for device in devices
@@ -883,7 +885,7 @@ class HtmlReportBuilder:
                 artifact = f" | Artifact: {escape(str(evidence.artifact_path))}"
             items.append(
                 "<li>"
-                f"Source: {escape(evidence.source)} | "
+                f"Source: {escape(display_source(evidence.source))} | "
                 f"Operation: {escape(evidence.operation)}"
                 f"{node}{artifact} | "
                 f"Confidence: {escape(evidence.confidence)}"

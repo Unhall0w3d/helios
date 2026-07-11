@@ -24,6 +24,8 @@ from cisco_collab_health.models.facts import (
 from cisco_collab_health.reports.coverage import build_report_coverage
 from cisco_collab_health.reports.formatting import (
     display_bool,
+    display_duration,
+    display_source,
     display_status_label,
     display_text,
 )
@@ -42,6 +44,18 @@ class ReportBuilderTests(unittest.TestCase):
             collectors=[SampleCollector()],
             rules=[ClusterIdentityRule(), NodeReachabilityRule()],
         ).run()
+
+    def test_human_readable_report_formatters(self) -> None:
+        self.assertEqual(display_duration(42), "Less than 1 minute")
+        self.assertEqual(display_duration(31_626_060), "1 year, 1 day, 1 hour, 1 minute")
+        self.assertEqual(
+            display_source("ControlCenter.soapGetServiceStatus"),
+            "Control Center – Service status",
+        )
+        self.assertEqual(
+            display_source("AXL.listPhone.summary, AXL.listDevicePool"),
+            "AXL – Phone inventory; AXL – Device pool",
+        )
 
     def test_json_report_is_parseable(self) -> None:
         payload = JsonReportBuilder().build(self.report)
@@ -77,7 +91,7 @@ class ReportBuilderTests(unittest.TestCase):
         self.assertIn("synthetic sample data", payload)
         self.assertIn("SampleCollector synthetic fixture data", payload)
         self.assertIn("Cluster identity collected", payload)
-        self.assertIn("Source: normalized_facts", payload)
+        self.assertIn("Source: Normalized assessment data", payload)
         self.assertIn("Collection Coverage", payload)
         self.assertIn("Device Inventory By Model", payload)
         self.assertIn("Device Load Summary", payload)
@@ -95,7 +109,7 @@ class ReportBuilderTests(unittest.TestCase):
         self.assertIn("Gateways/endpoints", payload)
         self.assertIn("SIP trunks", payload)
         self.assertIn("Cisco CallManager", payload)
-        self.assertIn("sample.synthetic", payload)
+        self.assertIn("Sample data", payload)
         self.assertIn("Call Manager Group", payload)
         self.assertIn("Region", payload)
 
