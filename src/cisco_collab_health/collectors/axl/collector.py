@@ -7,7 +7,7 @@ from defusedxml import ElementTree as ET
 from cisco_collab_health.collectors.axl.bodies import (
     diagnostic_list_body,
     get_ccm_version_body,
-    get_device_defaults_body,
+    list_device_defaults_body,
     list_device_pool_body,
     list_phone_body,
     list_process_node_body,
@@ -35,6 +35,7 @@ from cisco_collab_health.models.facts import (
     AssessmentFacts,
     ClusterIdentity,
     CollaborationNode,
+    ConfigurationObjectFact,
     DeviceInventoryFact,
 )
 from cisco_collab_health.models.runtime import CollectionContext
@@ -267,6 +268,23 @@ class AxlCollector:
             return
 
         facts.devices = _enrich_devices_from_device_pools(facts.devices, device_pools)
+        facts.configuration_objects.extend(
+            ConfigurationObjectFact(
+                object_type="DevicePool",
+                name=device_pool.name,
+                details={
+                    key: value
+                    for key, value in {
+                        "call_manager_group": device_pool.call_manager_group,
+                        "location": device_pool.location,
+                        "region": device_pool.region,
+                    }.items()
+                    if value
+                },
+                source="AXL.listDevicePool",
+            )
+            for device_pool in device_pools
+        )
 
     def _collect_device_load_defaults(
         self,
@@ -275,57 +293,24 @@ class AxlCollector:
         warnings: list[str],
         evidence: list[EvidenceRef],
     ) -> None:
-        target_keys = sorted(
-            {
-                (device.model.strip(), device.protocol.strip())
-                for device in facts.devices
-                if device.model and device.model.strip() and device.protocol and device.protocol.strip()
-            }
-        )
-        if not target_keys:
+        if not facts.devices:
             return
-
-        unresolved = set(target_keys)
-        failures = 0
-        attempted = 0
-        for index, (model, protocol) in enumerate(target_keys, start=1):
-            attempted += 1
-            try:
-                defaults_response = self._call_axl_response(
-                    context,
-                    "getDeviceDefaults",
-                    get_device_defaults_body(model, protocol),
-                    artifact_operation=f"getDeviceDefaults_{index:03d}",
-                )
-            except AxlCollectionError as exc:
-                failures += 1
-                if "No Search Criteria Defined" in str(exc):
-                    break
-                continue
-
-            evidence.append(_evidence_from_soap_response(defaults_response, context.publisher_ip))
-            try:
-                defaults = parse_device_load_defaults(defaults_response.body)
-            except AxlCollectionError:
-                failures += 1
-                continue
-            facts.device_load_defaults.extend(defaults)
-            unresolved.difference_update(
-                (default.model.strip(), (default.protocol or "").strip())
-                for default in defaults
-                if default.model and default.protocol
+        try:
+            defaults_response = self._call_axl_response(
+                context,
+                "listDeviceDefaults",
+                list_device_defaults_body(),
             )
-            # Some CUCM releases return every default despite the exact criteria.
-            # Stop once the response set covers the inventory's model/protocol pairs.
-            if not unresolved:
-                break
-
-        if failures:
-            warnings.append(
-                "AXL getDeviceDefaults could not collect "
-                f"{failures} of {attempted} attempted model/protocol default request(s); "
-                "review the corresponding diagnostic artifacts."
+        except AxlCollectionError as exc:
+            warnings.append(f"AXL listDeviceDefaults failed: {exc}")
+            return
+        evidence.append(_evidence_from_soap_response(defaults_response, context.publisher_ip))
+        try:
+            facts.device_load_defaults.extend(
+                parse_device_load_defaults(defaults_response.body)
             )
+        except AxlCollectionError as exc:
+            warnings.append(f"AXL listDeviceDefaults failed: {exc}")
 
     def _collect_diagnostic_axl(
         self,

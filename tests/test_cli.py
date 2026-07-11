@@ -10,6 +10,11 @@ from cisco_collab_health import cli
 
 
 class CliTests(unittest.TestCase):
+    def test_customer_safe_html_flag_is_available(self) -> None:
+        args = cli.build_parser().parse_args(["--customer-safe-report"])
+
+        self.assertTrue(args.customer_safe_report)
+
     def test_no_arguments_opens_menu_and_can_quit(self) -> None:
         output = io.StringIO()
         with (

@@ -30,6 +30,7 @@ from cisco_collab_health.rules.basic import (
     DeviceInventorySummaryRule,
     DeviceLoadRule,
     DeviceLoadSummaryRule,
+    FirmwareDownloadRule,
     NodeReachabilityRule,
     PlatformCheckSummaryRule,
     RegistrationSummaryRule,
@@ -162,6 +163,7 @@ def run_assessment(
             ServiceSummaryRule(),
             PlatformCheckSummaryRule(),
             DeviceLoadSummaryRule(),
+            FirmwareDownloadRule(),
             ConfigurationInventorySummaryRule(),
         ],
     )
@@ -176,6 +178,7 @@ def run_assessment(
             "tls_verification": tls_policy.verify,
             "phone_inventory_enabled": context.collect_phone_inventory or context.diagnostic_capture,
             "diagnostic_capture": context.diagnostic_capture,
+            "customer_safe_report": args.customer_safe_report,
         },
     )
     status.ok("Collectors completed")
@@ -195,7 +198,11 @@ def run_assessment(
     if not args.no_html_report:
         status.stage("Writing HTML report")
         try:
-            html_report_path = _write_html_report(report, args.html_report)
+            html_report_path = _write_html_report(
+                report,
+                args.html_report,
+                customer_safe=args.customer_safe_report,
+            )
             status.ok(f"HTML report written: {html_report_path}")
         except OSError as exc:
             status.fail(f"Unable to write HTML report: {exc}")
@@ -233,7 +240,12 @@ def tls_policy_from_args(args: argparse.Namespace) -> TlsPolicy:
     return TlsPolicy(verify=verify, ca_bundle=ca_bundle)
 
 
-def _write_html_report(report: AssessmentReport, requested_path: str | None) -> Path:
+def _write_html_report(
+    report: AssessmentReport,
+    requested_path: str | None,
+    *,
+    customer_safe: bool = False,
+) -> Path:
     if requested_path:
         path = Path(requested_path).expanduser()
     else:
@@ -241,7 +253,10 @@ def _write_html_report(report: AssessmentReport, requested_path: str | None) -> 
         path = Path("reports") / f"assessment-{timestamp}.html"
 
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(HtmlReportBuilder().build(report), encoding="utf-8")
+    path.write_text(
+        HtmlReportBuilder(customer_safe=customer_safe).build(report),
+        encoding="utf-8",
+    )
     return path
 
 

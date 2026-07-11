@@ -2,9 +2,6 @@
 
 from __future__ import annotations
 
-from xml.sax.saxutils import escape
-
-
 def get_ccm_version_body() -> str:
     return "<axl:getCCMVersion />"
 
@@ -40,18 +37,20 @@ def list_phone_body(*, first: int | None = None, skip: int | None = None) -> str
     </axl:listPhone>"""
 
 
-def get_device_defaults_body(model: str, protocol: str) -> str:
-    """Build a device-default lookup for one observed model/protocol pair."""
+def list_device_defaults_body() -> str:
+    """Build a name-based Device Defaults discovery request."""
 
-    return f"""<axl:getDeviceDefaults>
-      <model>{escape(model)}</model>
-      <protocol>{escape(protocol)}</protocol>
+    return """<axl:listDeviceDefaults>
+      <searchCriteria>
+        <name>%</name>
+      </searchCriteria>
       <returnedTags>
+        <name />
         <model />
         <protocol />
         <loadInformation />
       </returnedTags>
-    </axl:getDeviceDefaults>"""
+    </axl:listDeviceDefaults>"""
 
 
 def list_device_pool_body() -> str:

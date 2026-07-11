@@ -20,11 +20,37 @@ from cisco_collab_health.rules.basic import (
     DeviceInventorySummaryRule,
     DeviceLoadRule,
     DeviceLoadSummaryRule,
+    FirmwareDownloadRule,
     NodeReachabilityRule,
     PlatformCheckSummaryRule,
     RegistrationSummaryRule,
     ServiceSummaryRule,
 )
+
+
+class FirmwareDownloadRuleTests(unittest.TestCase):
+    def test_explicit_download_failures_are_warning_findings(self) -> None:
+        facts = AssessmentFacts(
+            registrations=[
+                DeviceRegistrationFact(
+                    name="SEP001",
+                    status="Registered",
+                    registered_node="sub-1",
+                    ip_address="192.0.2.50",
+                    model="Cisco 8841",
+                    protocol="SIP",
+                    source="RISPort70.selectCmDeviceExt",
+                    download_status="Failed",
+                    download_failure_reason="File Not Found",
+                )
+            ]
+        )
+
+        findings = FirmwareDownloadRule().evaluate(facts)
+
+        self.assertEqual(len(findings), 1)
+        self.assertEqual(findings[0].severity, FindingSeverity.WARNING)
+        self.assertIn("File Not Found: 1", findings[0].facts)
 
 
 class NodeReachabilityRuleTests(unittest.TestCase):

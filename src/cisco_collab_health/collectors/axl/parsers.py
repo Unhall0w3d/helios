@@ -98,7 +98,7 @@ def parse_device_load_defaults(response_text: str) -> list[DeviceLoadDefaultFact
     try:
         root = ET.fromstring(response_text)
     except ET.ParseError as exc:
-        raise AxlCollectionError(f"Unable to parse getDeviceDefaults response: {exc}") from exc
+        raise AxlCollectionError(f"Unable to parse listDeviceDefaults response: {exc}") from exc
 
     defaults: list[DeviceLoadDefaultFact] = []
     candidates = [
@@ -120,7 +120,7 @@ def parse_device_load_defaults(response_text: str) -> list[DeviceLoadDefaultFact
                 model=model,
                 protocol=_child_text(device_default, "protocol"),
                 default_load=_child_text(device_default, "loadInformation"),
-                source="AXL.getDeviceDefaults",
+                source="AXL.listDeviceDefaults",
             )
         )
     return defaults

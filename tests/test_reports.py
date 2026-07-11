@@ -553,6 +553,80 @@ class ReportBuilderTests(unittest.TestCase):
         self.assertIn("% Used", payload)
         self.assertIn("peer: 192.0.2.1", payload)
 
+    def test_html_report_marks_zero_only_cpu_unavailable(self) -> None:
+        report = AssessmentReport(
+            facts=AssessmentFacts(
+                perf_counters=[
+                    PerfCounterFact(
+                        node="cucm-pub-01",
+                        object_name="Processor",
+                        counter_name="% CPU Time",
+                        instance="_Total",
+                        value=0,
+                        sample_count=2,
+                        source="PerfMon.perfmonCollectCounterData",
+                    )
+                ]
+            ),
+            collector_results=[],
+            findings=[],
+        )
+
+        payload = HtmlReportBuilder().build(report)
+
+        self.assertIn("CPU percentage unavailable", payload)
+        self.assertIn("Unavailable (zero-only snapshot)", payload)
+
+    def test_customer_safe_html_omits_identifiers_and_artifact_paths(self) -> None:
+        report = AssessmentReport(
+            facts=AssessmentFacts(
+                devices=[
+                    DeviceInventoryFact(
+                        name="SEP001122334455",
+                        description="Principal office",
+                        model="Cisco 8841",
+                        protocol="SIP",
+                        device_pool="Private-Pool",
+                        call_manager_group=None,
+                        location="Private-Site",
+                        region=None,
+                        configured_load=None,
+                        source="AXL.listPhone.summary",
+                    )
+                ]
+            ),
+            collector_results=[
+                CollectionResult(
+                    collector_name="axl",
+                    facts=AssessmentFacts(),
+                    evidence=[
+                        EvidenceRef(
+                            source="AXL",
+                            operation="listPhone",
+                            node="private-publisher.example",
+                            artifact_path=Path("private/artifact/response.txt"),
+                            confidence="high",
+                            parser="fixture",
+                        )
+                    ],
+                )
+            ],
+            findings=[],
+            runtime_metadata={
+                "profile_name": "PrivateCustomer",
+                "publisher": "private-publisher.example",
+            },
+        )
+
+        payload = HtmlReportBuilder(customer_safe=True).build(report)
+
+        self.assertNotIn("SEP001122334455", payload)
+        self.assertNotIn("PrivateCustomer", payload)
+        self.assertNotIn("private-publisher.example", payload)
+        self.assertNotIn("private/artifact/response.txt", payload)
+        self.assertIn("Customer-safe HTML</th><td>Enabled", payload)
+        self.assertIn("Detailed device identifiers omitted", payload)
+
     def test_html_report_contains_collector_notes_and_evidence(self) -> None:
         report = AssessmentReport(
             facts=AssessmentFacts(),

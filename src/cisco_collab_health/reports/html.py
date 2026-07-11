@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections import Counter
+from hashlib import sha256
 from html import escape
 
 from cisco_collab_health.models.assessment import AssessmentReport
@@ -25,6 +26,9 @@ from cisco_collab_health.reports.reconciliation import (
 class HtmlReportBuilder:
     """Builds a styled standalone HTML report."""
 
+    def __init__(self, *, customer_safe: bool = False) -> None:
+        self.customer_safe = customer_safe
+
     def build(self, report: AssessmentReport) -> str:
         severity_counts = Counter(finding.severity for finding in report.findings)
         collector_note_count = sum(len(result.notes) for result in report.collector_results)
@@ -43,18 +47,24 @@ class HtmlReportBuilder:
         coverage_section = self._coverage_section(report)
         registration_rows = self._registration_rows(report)
         registration_summary_rows = self._registration_summary_rows(report)
+        firmware_summary_rows = self._firmware_summary_rows(report)
+        firmware_failure_rows = self._firmware_failure_rows(report)
         reconciliation_section = self._reconciliation_section(report)
         service_rows = self._service_rows(report)
         service_summary_rows = self._service_summary_rows(report)
+        service_reason_rows = self._service_reason_rows(report)
         perf_counter_rows = self._perf_counter_rows(report)
         perf_summary_rows = self._perf_summary_rows(report)
+        cpu_note = self._cpu_availability_note(report)
         configuration_summary_rows = self._configuration_summary_rows(report)
         configuration_rows = self._configuration_rows(report)
         platform_check_rows = self._platform_check_rows(report)
         collector_issues_section = self._collector_issues_section(report)
         collector_notes_section = self._collector_notes_section(report)
         collector_evidence_section = self._collector_evidence_section(report)
-        finding_sections = "\n".join(self._finding_section(finding) for finding in report.findings)
+        finding_sections = "\n".join(
+            self._finding_section(finding) for finding in report.findings
+        )
         if not finding_sections:
             finding_sections = "<p>No findings generated.</p>"
 
@@ -263,11 +273,30 @@ class HtmlReportBuilder:
       </table>
     </section>
     <section>
+      <h2>Runtime Firmware and Downloads</h2>
+      <p class="meta">Source: RISPort runtime firmware and download state. Unknown download
+      status is reported as unknown and is not treated as a failure.</p>
+      <table>
+        <thead><tr><th>Active Load</th><th>Devices</th></tr></thead>
+        <tbody>{firmware_summary_rows}</tbody>
+      </table>
+      <h3>Explicit Download Failures</h3>
+      <table>
+        <thead><tr><th>Reason</th><th>Devices</th></tr></thead>
+        <tbody>{firmware_failure_rows}</tbody>
+      </table>
+    </section>
+    <section>
       <h2>Services</h2>
       {_source_caption("Services", report)}
       <table>
         <thead><tr><th>Node</th><th>Started</th><th>Stopped</th><th>Total</th></tr></thead>
         <tbody>{service_summary_rows}</tbody>
+      </table>
+      <h3>Non-started Service Reasons</h3>
+      <table>
+        <thead><tr><th>Reason</th><th>Services</th></tr></thead>
+        <tbody>{service_reason_rows}</tbody>
       </table>
       <details>
         <summary>Show all service records</summary>
@@ -287,6 +316,7 @@ class HtmlReportBuilder:
     <section>
       <h2>Performance Counters</h2>
       {_source_caption("Performance Counters", report)}
+      {cpu_note}
       <table>
         <thead><tr><th>Node</th><th>Metric</th><th>Value</th><th>Samples</th></tr></thead>
         <tbody>{perf_summary_rows}</tbody>
@@ -343,6 +373,8 @@ class HtmlReportBuilder:
     <section>
       <h2>Detailed Device Inventory</h2>
       {_source_caption("Detailed Device Inventory", report)}
+      <details>
+      <summary>Show detailed configured device inventory</summary>
       <table>
         <thead>
           <tr>
@@ -355,10 +387,13 @@ class HtmlReportBuilder:
           {device_rows}
         </tbody>
       </table>
+      </details>
     </section>
     <section>
       <h2>Detailed Device Registration</h2>
       {_source_caption("Detailed Device Registration", report)}
+      <details>
+      <summary>Show detailed runtime registration inventory</summary>
       <table>
         <thead>
           <tr>
@@ -371,6 +406,7 @@ class HtmlReportBuilder:
           {registration_rows}
         </tbody>
       </table>
+      </details>
     </section>
   </main>
 </body>
@@ -411,13 +447,20 @@ class HtmlReportBuilder:
             ("Services count", str(len(report.facts.services))),
             ("Perf counter count", str(len(report.facts.perf_counters))),
             ("Platform check count", str(len(report.facts.platform_checks))),
-            ("Profile", display_text(metadata.get("profile_name"))),
-            ("Publisher", display_text(metadata.get("publisher"))),
+            (
+                "Profile",
+                self._identifier(display_text(metadata.get("profile_name")), "Profile"),
+            ),
+            (
+                "Publisher",
+                self._identifier(display_text(metadata.get("publisher")), "Node"),
+            ),
             ("Artifacts enabled", "Yes" if metadata.get("artifacts_enabled") else "No"),
             ("Artifact redaction mode", display_text(metadata.get("artifact_redaction"))),
             ("TLS verification mode", "Enabled" if metadata.get("tls_verification") else "Disabled"),
             ("Phone inventory scope", "Enabled" if metadata.get("phone_inventory_enabled") else "Skipped"),
             ("Diagnostic capture", "Enabled" if metadata.get("diagnostic_capture") else "Disabled"),
+            ("Customer-safe HTML", "Enabled" if self.customer_safe else "Disabled"),
         ]
         rendered_rows = "".join(
             f"<tr><th>{escape(name)}</th><td>{escape(value)}</td></tr>"
@@ -476,7 +519,7 @@ class HtmlReportBuilder:
       {_source_caption("Cluster", report)}
       <table>
         <tbody>
-          <tr><th>Cluster Anchor</th><td>{escape(cluster.name)}</td></tr>
+          <tr><th>Cluster Anchor</th><td>{escape(self._identifier(cluster.name, "Node"))}</td></tr>
           <tr><th>Product</th><td>{escape(cluster.product)}</td></tr>
           <tr><th>Version</th><td>{escape(cluster.version)}</td></tr>
         </tbody>
@@ -491,8 +534,8 @@ class HtmlReportBuilder:
         return "\n".join(
             (
                 "<tr>"
-                f"<td>{escape(node.name)}</td>"
-                f"<td>{escape(node.address)}</td>"
+                f"<td>{escape(self._identifier(node.name, 'Node'))}</td>"
+                f"<td>{escape(self._identifier(node.address, 'Address'))}</td>"
                 f"<td>{escape(node.role)}</td>"
                 f"<td>{escape(display_bool(node.reachable))}</td>"
                 "</tr>"
@@ -503,6 +546,8 @@ class HtmlReportBuilder:
     def _device_rows(self, report: AssessmentReport) -> str:
         if not report.facts.devices:
             return '<tr><td colspan="8">No devices inventoried.</td></tr>'
+        if self.customer_safe:
+            return '<tr><td colspan="8">Detailed device identifiers omitted from customer-safe report.</td></tr>'
 
         return "\n".join(
             (
@@ -588,6 +633,8 @@ class HtmlReportBuilder:
     def _registration_rows(self, report: AssessmentReport) -> str:
         if not report.facts.registrations:
             return '<tr><td colspan="10">No device registration facts collected.</td></tr>'
+        if self.customer_safe:
+            return '<tr><td colspan="10">Detailed runtime identifiers omitted from customer-safe report.</td></tr>'
 
         return "\n".join(
             (
@@ -642,6 +689,31 @@ class HtmlReportBuilder:
             )
         return "\n".join(rows)
 
+    def _firmware_summary_rows(self, report: AssessmentReport) -> str:
+        loads = Counter(
+            registration.active_load or "Unavailable"
+            for registration in report.facts.registrations
+        )
+        if not loads:
+            return '<tr><td colspan="2">No runtime firmware data collected.</td></tr>'
+        return "\n".join(
+            f"<tr><td>{escape(load)}</td><td>{count}</td></tr>"
+            for load, count in sorted(loads.items())
+        )
+
+    def _firmware_failure_rows(self, report: AssessmentReport) -> str:
+        failures = Counter(
+            registration.download_failure_reason or "Reason unavailable"
+            for registration in report.facts.registrations
+            if (registration.download_status or "").strip().lower() == "failed"
+        )
+        if not failures:
+            return '<tr><td colspan="2">No explicit firmware download failures reported.</td></tr>'
+        return "\n".join(
+            f"<tr><td>{escape(reason)}</td><td>{count}</td></tr>"
+            for reason, count in sorted(failures.items())
+        )
+
     def _service_rows(self, report: AssessmentReport) -> str:
         if not report.facts.services:
             return '<tr><td colspan="8">No service status facts collected.</td></tr>'
@@ -649,7 +721,7 @@ class HtmlReportBuilder:
         return "\n".join(
             (
                 "<tr>"
-                f"<td>{escape(service.node)}</td>"
+                f"<td>{escape(self._identifier(service.node, 'Node'))}</td>"
                 f"<td>{escape(service.service_name)}</td>"
                 f"<td>{escape(display_text(service.service_type))}</td>"
                 f"<td>{escape(display_text(service.group_name))}</td>"
@@ -670,12 +742,25 @@ class HtmlReportBuilder:
             by_node.setdefault(service.node, Counter())[service.status.strip().lower()] += 1
         return "\n".join(
             "<tr>"
-            f"<td>{escape(node)}</td>"
+            f"<td>{escape(self._identifier(node, 'Node'))}</td>"
             f"<td>{counts['started']}</td>"
             f"<td>{counts['stopped']}</td>"
             f"<td>{sum(counts.values())}</td>"
             "</tr>"
             for node, counts in sorted(by_node.items())
+        )
+
+    def _service_reason_rows(self, report: AssessmentReport) -> str:
+        reasons = Counter(
+            service.reason or "Reason unavailable"
+            for service in report.facts.services
+            if service.status.strip().lower() != "started"
+        )
+        if not reasons:
+            return '<tr><td colspan="2">No non-started services reported.</td></tr>'
+        return "\n".join(
+            f"<tr><td>{escape(reason)}</td><td>{count}</td></tr>"
+            for reason, count in sorted(reasons.items())
         )
 
     def _perf_counter_rows(self, report: AssessmentReport) -> str:
@@ -685,7 +770,7 @@ class HtmlReportBuilder:
         return "\n".join(
             (
                 "<tr>"
-                f"<td>{escape(counter.node)}</td>"
+                f"<td>{escape(self._identifier(counter.node, 'Node'))}</td>"
                 f"<td>{escape(counter.object_name)}</td>"
                 f"<td>{escape(counter.counter_name)}</td>"
                 f"<td>{escape(display_text(counter.instance))}</td>"
@@ -711,14 +796,24 @@ class HtmlReportBuilder:
         ]
         if not counters:
             return '<tr><td colspan="4">No selected performance summary counters collected.</td></tr>'
+        cpu_zero_only = _cpu_counters_are_zero_only(report)
         return "\n".join(
             "<tr>"
-            f"<td>{escape(counter.node)}</td>"
+            f"<td>{escape(self._identifier(counter.node, 'Node'))}</td>"
             f"<td>{escape(counter.counter_name)}</td>"
-            f"<td>{escape(display_text(counter.value))}</td>"
+            f"<td>{escape('Unavailable (zero-only snapshot)' if cpu_zero_only and counter.counter_name == '% CPU Time' else display_text(counter.value))}</td>"
             f"<td>{counter.sample_count}</td>"
             "</tr>"
             for counter in sorted(counters, key=lambda item: (item.node, item.counter_name))
+        )
+
+    def _cpu_availability_note(self, report: AssessmentReport) -> str:
+        if not _cpu_counters_are_zero_only(report):
+            return ""
+        return (
+            '<p class="meta"><strong>CPU percentage unavailable:</strong> all collected CPU '
+            'percentage samples were zero. The raw counters are retained, but this report '
+            'does not interpret them as actual zero utilization.</p>'
         )
 
     def _configuration_summary_rows(self, report: AssessmentReport) -> str:
@@ -733,6 +828,8 @@ class HtmlReportBuilder:
     def _configuration_rows(self, report: AssessmentReport) -> str:
         if not report.facts.configuration_objects:
             return '<tr><td colspan="4">No normalized configuration objects collected.</td></tr>'
+        if self.customer_safe:
+            return '<tr><td colspan="4">Configuration names and details omitted from customer-safe report.</td></tr>'
         return "\n".join(
             "<tr>"
             f"<td>{escape(item.object_type)}</td>"
@@ -753,7 +850,7 @@ class HtmlReportBuilder:
         return "\n".join(
             (
                 "<tr>"
-                f"<td>{escape(check.node)}</td>"
+                f"<td>{escape(self._identifier(check.node, 'Node'))}</td>"
                 f"<td>{escape(check.check_name)}</td>"
                 f"<td>{escape(check.status)}</td>"
                 f"<td>{escape(display_details(check.details))}</td>"
@@ -767,19 +864,29 @@ class HtmlReportBuilder:
         rows = []
         for result in report.collector_results:
             for warning in result.warnings:
+                message = (
+                    "Warning detail omitted from customer-safe report."
+                    if self.customer_safe
+                    else warning
+                )
                 rows.append(
                     "<tr>"
                     f"<td>{escape(result.collector_name)}</td>"
                     "<td>warning</td>"
-                    f"<td>{escape(warning)}</td>"
+                    f"<td>{escape(message)}</td>"
                     "</tr>"
                 )
             for error in result.errors:
+                error_message = (
+                    "Error detail omitted from customer-safe report."
+                    if self.customer_safe
+                    else f"{error.exception_type}: {error.message}"
+                )
                 rows.append(
                     "<tr>"
                     f"<td>{escape(result.collector_name)}</td>"
                     "<td>error</td>"
-                    f"<td>{escape(error.exception_type)}: {escape(error.message)}</td>"
+                    f"<td>{escape(error_message)}</td>"
                     "</tr>"
                 )
         if not rows:
@@ -801,10 +908,15 @@ class HtmlReportBuilder:
         rows = []
         for result in report.collector_results:
             for note in result.notes:
+                note_text = (
+                    "Operational note detail omitted from customer-safe report."
+                    if self.customer_safe
+                    else note
+                )
                 rows.append(
                     "<tr>"
                     f"<td>{escape(result.collector_name)}</td>"
-                    f"<td>{escape(note)}</td>"
+                    f"<td>{escape(note_text)}</td>"
                     "</tr>"
                 )
 
@@ -832,12 +944,14 @@ class HtmlReportBuilder:
         for result in report.collector_results:
             for evidence in result.evidence:
                 artifact = str(evidence.artifact_path) if evidence.artifact_path else None
+                if self.customer_safe:
+                    artifact = None
                 rows.append(
                     "<tr>"
                     f"<td>{escape(display_text(result.collector_name))}</td>"
                     f"<td>{escape(display_source(evidence.source))}</td>"
                     f"<td>{escape(display_text(evidence.operation))}</td>"
-                    f"<td>{escape(display_text(evidence.node))}</td>"
+                    f"<td>{escape(self._identifier(evidence.node, 'Node'))}</td>"
                     f"<td>{escape(display_text(artifact))}</td>"
                     f"<td>{escape(display_text(evidence.confidence))}</td>"
                     f"<td>{escape(display_text(evidence.parser))}</td>"
@@ -924,6 +1038,8 @@ class HtmlReportBuilder:
     def _runtime_only_rows(self, registrations: list[DeviceRegistrationFact]) -> str:
         if not registrations:
             return '<tr><td colspan="6">No runtime-only devices found.</td></tr>'
+        if self.customer_safe:
+            return '<tr><td colspan="6">Runtime-only identifiers omitted from customer-safe report.</td></tr>'
         return "\n".join(
             (
                 "<tr>"
@@ -941,6 +1057,8 @@ class HtmlReportBuilder:
     def _inventory_only_rows(self, devices: list[DeviceInventoryFact]) -> str:
         if not devices:
             return '<tr><td colspan="6">No configured devices absent from the RIS response.</td></tr>'
+        if self.customer_safe:
+            return '<tr><td colspan="6">Inventory-only identifiers omitted from customer-safe report.</td></tr>'
         return "\n".join(
             (
                 "<tr>"
@@ -957,7 +1075,11 @@ class HtmlReportBuilder:
 
     def _finding_section(self, finding: HealthFinding) -> str:
         severity = escape(finding.severity.value)
-        facts = "\n".join(f"<li>{escape(fact)}</li>" for fact in finding.facts)
+        facts = (
+            "<li>Detailed facts omitted from customer-safe report.</li>"
+            if self.customer_safe
+            else "\n".join(f"<li>{escape(fact)}</li>" for fact in finding.facts)
+        )
         recommendation = ""
         if finding.recommendation:
             escaped_recommendation = escape(finding.recommendation)
@@ -990,9 +1112,10 @@ class HtmlReportBuilder:
 
         items = []
         for evidence in finding.evidence:
-            node = f" | Node: {escape(evidence.node)}" if evidence.node else ""
+            node_value = self._identifier(evidence.node, "Node")
+            node = f" | Node: {escape(node_value)}" if evidence.node else ""
             artifact = ""
-            if evidence.artifact_path:
+            if evidence.artifact_path and not self.customer_safe:
                 artifact = f" | Artifact: {escape(str(evidence.artifact_path))}"
             items.append(
                 "<li>"
@@ -1009,6 +1132,13 @@ class HtmlReportBuilder:
           {"".join(items)}
         </ul>
 """
+
+    def _identifier(self, value: object | None, kind: str) -> str:
+        text = display_text(value)
+        if not self.customer_safe or text == "—":
+            return text
+        digest = sha256(f"{kind}:{text}".encode()).hexdigest()[:8].upper()
+        return f"{kind}-{digest}"
 
 
 def _protocol_bucket(protocol: str | None) -> str:
@@ -1068,6 +1198,18 @@ def _is_manual_load(configured_load: str | None, default_load: str | None) -> bo
 
 def _is_sample_report(report: AssessmentReport) -> bool:
     return any(result.collector_name == "sample" for result in report.collector_results)
+
+
+def _cpu_counters_are_zero_only(report: AssessmentReport) -> bool:
+    cpu_values = [
+        counter.value
+        for counter in report.facts.perf_counters
+        if counter.counter_name == "% CPU Time"
+    ]
+    if not cpu_values:
+        return False
+    numeric_values = [value for value in cpu_values if isinstance(value, int | float)]
+    return len(numeric_values) == len(cpu_values) and all(value == 0 for value in numeric_values)
 
 
 def _has_axl_evidence(report: AssessmentReport) -> bool:

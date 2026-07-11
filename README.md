@@ -68,7 +68,7 @@ Current capabilities:
 
 - Core pipeline contracts
 - AXL collector for `getCCMVersion`, `listProcessNode`, opt-in summary `listPhone`, and `listDevicePool` inventory enrichment
-- Scoped `getDeviceDefaults` collection using exact model/protocol pairs observed in inventory, with one artifact per request
+- Name-based `listDeviceDefaults` discovery for model/protocol default firmware facts
 - AXL schema retry when CUCM reports that the requested AXL version is unsupported
 - Publisher preflight and interface reachability checks
 - Read-only diagnostic capture with normalized RISPort70 registration, Control Center service-status, and PerfMon counter facts
@@ -254,12 +254,12 @@ included. Prefix-based collection may be added later as a fallback for oversized
 clusters, but expected Cisco prefixes are not treated as the authoritative
 inventory boundary.
 
-When phone inventory is enabled, AletheiaUC queries `getDeviceDefaults` for the
-exact model/protocol pairs observed in that inventory. This replaces the
-`listDeviceDefaults` request form that CUCM 15 rejected with `No Search Criteria
-Defined`. Each request and response has a separate artifact path. If no default
-facts are available, the report marks load comparison unavailable rather than
-inferring missing or manual loads.
+When phone inventory is enabled, AletheiaUC queries `listDeviceDefaults` using
+the operation's searchable `name` field. Live CUCM 15 evidence showed that
+model/protocol are returned properties, not valid list criteria or
+`getDeviceDefaults` identifiers. If no default facts are available, the report
+marks load comparison unavailable rather than inferring missing or manual
+loads.
 
 ## Diagnostic Capture Mode
 
@@ -323,6 +323,18 @@ certificates during alpha testing. To verify CUCM HTTPS certificates:
 ```
 
 Use `--insecure` to explicitly keep certificate verification disabled.
+
+To generate an HTML report intended for controlled sharing, mask node/profile
+identifiers and omit detailed device, registration, configuration, and artifact
+paths:
+
+```bash
+./aletheiauc.py --customer-safe-report
+```
+
+This option affects HTML presentation only. Raw artifacts, troubleshooting
+logs, and normalized JSON remain private diagnostic output and can contain
+customer identifiers.
 
 If you prefer installing AletheiaUC as a Python package during development, the
 `aletheiauc` and `ccha` console commands are available after an editable install:

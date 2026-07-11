@@ -223,6 +223,55 @@ class DeviceLoadRule:
         ]
 
 
+class FirmwareDownloadRule:
+    """Reports explicit runtime firmware download failures from RISPort."""
+
+    rule_id = "runtime.firmware_downloads"
+
+    def evaluate(self, facts: AssessmentFacts) -> list[HealthFinding]:
+        failures = [
+            registration
+            for registration in facts.registrations
+            if (registration.download_status or "").strip().lower() == "failed"
+        ]
+        if not failures:
+            return []
+        reason_counts = Counter(
+            registration.download_failure_reason or "Reason unavailable"
+            for registration in failures
+        )
+        return [
+            HealthFinding(
+                rule_id=self.rule_id,
+                title="One or more devices report firmware download failures",
+                severity=FindingSeverity.WARNING,
+                recommendation_kind=RecommendationKind.ENGINEERING_RECOMMENDATION,
+                facts=[
+                    f"Devices reporting failed downloads: {len(failures)}",
+                    *[
+                        f"{reason}: {count}"
+                        for reason, count in sorted(reason_counts.items())
+                    ],
+                ],
+                reasoning=(
+                    "RISPort reported an explicit failed firmware download state. "
+                    "This is stronger evidence than an inferred load mismatch."
+                ),
+                recommendation=(
+                    "Review TFTP availability, device configuration, firmware files, and the "
+                    "captured per-device download failure reasons."
+                ),
+                evidence=[
+                    EvidenceRef(
+                        source="RISPort70",
+                        operation="selectCmDeviceExt",
+                        confidence="high",
+                    )
+                ],
+            )
+        ]
+
+
 def _model_protocol_key(model: str | None, protocol: str | None) -> tuple[str, str]:
     return ((model or "").strip().lower(), (protocol or "").strip().lower())
 

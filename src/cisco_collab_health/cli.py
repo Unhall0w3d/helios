@@ -39,6 +39,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="Do not write the styled HTML report.",
     )
     parser.add_argument(
+        "--customer-safe-report",
+        action="store_true",
+        help=(
+            "Mask customer identifiers and omit sensitive detail from the HTML report. "
+            "Raw artifacts and JSON remain private diagnostic output."
+        ),
+    )
+    parser.add_argument(
         "--artifact-dir",
         default="assessment_runs",
         help="Directory for local per-run artifacts. Defaults to assessment_runs/.",
