@@ -50,7 +50,7 @@ class DeviceLoadDefaultFact:
     protocol: str | None
     default_load: str | None
     source: str
-    configured_device_count: int | None = None
+    configured_model_count: int | None = None
     model_code: str | None = None
 
 
@@ -321,7 +321,7 @@ def _merge_device_load_default(
         protocol=_prefer(existing.protocol, incoming.protocol),
         default_load=_prefer(existing.default_load, incoming.default_load),
         source=_merge_sources(existing.source, incoming.source),
-        configured_device_count=existing.configured_device_count or incoming.configured_device_count,
+        configured_model_count=existing.configured_model_count or incoming.configured_model_count,
         model_code=_prefer(existing.model_code, incoming.model_code),
     )
 

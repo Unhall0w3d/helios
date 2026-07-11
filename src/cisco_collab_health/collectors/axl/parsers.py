@@ -110,7 +110,10 @@ def parse_device_load_defaults(response_text: str) -> list[DeviceLoadDefaultFact
                 model=model,
                 protocol=_device_protocol_name(_child_text(device_default, "signalingprotocol")),
                 default_load=_child_text(device_default, "devicedefault"),
-                configured_device_count=_optional_int(_child_text(device_default, "configuredcount")),
+                configured_model_count=_optional_int(
+                    _child_text(device_default, "configuredmodelcount")
+                    or _child_text(device_default, "configuredcount")
+                ),
                 model_code=_child_text(device_default, "tkmodel"),
                 source="AXL.executeSQLQuery.deviceDefaults",
             )

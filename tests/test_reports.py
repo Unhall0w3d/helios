@@ -190,6 +190,48 @@ class ReportBuilderTests(unittest.TestCase):
         self.assertIn("Active load matches static override</td><td>1", payload)
         self.assertIn("sip8845.pilot</td><td>1", payload)
 
+    def test_html_report_excludes_cti_noise_and_correlates_download_failures(self) -> None:
+        facts = AssessmentFacts(
+            devices=[
+                DeviceInventoryFact(
+                    name="SEP1", description=None, model="Cisco 7841", protocol="SIP",
+                    device_pool=None, call_manager_group=None, location=None, region=None,
+                    configured_load=None, source="fixture",
+                ),
+                DeviceInventoryFact(
+                    name="CTI1", description=None, model="CTI Port", protocol="SCCP",
+                    device_pool=None, call_manager_group=None, location=None, region=None,
+                    configured_load=None, source="fixture",
+                ),
+            ],
+            device_load_defaults=[
+                DeviceLoadDefaultFact(
+                    model="Cisco 7841", protocol="SIP", default_load="sip78.current",
+                    source="fixture",
+                )
+            ],
+            registrations=[
+                DeviceRegistrationFact(
+                    name="SEP1", status="registered", registered_node="sub1", ip_address=None,
+                    model="Cisco 7841", protocol="SIP", source="fixture",
+                    active_load="sip78.old", download_status="Failed",
+                    download_failure_reason="No Tftp server set",
+                ),
+                DeviceRegistrationFact(
+                    name="CTI1", status="registered", registered_node="sub1", ip_address=None,
+                    model="CTI Port", protocol="SCCP", source="fixture",
+                ),
+            ],
+        )
+
+        payload = HtmlReportBuilder().build(
+            AssessmentReport(facts=facts, collector_results=[], findings=[])
+        )
+
+        self.assertIn("Download failed; active load differs from intended load</td><td>1", payload)
+        self.assertIn("No Tftp server set", payload)
+        self.assertNotIn("<td>CTI Port</td><td>SCCP</td><td>Unavailable</td>", payload)
+
     def test_html_report_marks_load_comparison_unavailable_without_defaults(self) -> None:
         report = AssessmentReport(
             facts=AssessmentFacts(

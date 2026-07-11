@@ -292,6 +292,11 @@ currently equals the model/protocol Device Default—because it remains pinned
 across later default changes. Reports distinguish matching, differing, and
 default-unavailable overrides, summarize them by model/load, and correlate them
 with RISPort active firmware when diagnostic capture supplies runtime data.
+Firmware reporting excludes non-firmware runtime objects such as CTI Ports,
+identifies mixed active-load populations by model/protocol, separates failed
+downloads that remain on the wrong load from failures already showing the
+intended load, and provides an exception table with configured, default, active,
+status, reason, and node context.
 
 ## Diagnostic Capture Mode
 

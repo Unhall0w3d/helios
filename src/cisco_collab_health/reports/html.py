@@ -57,6 +57,9 @@ class HtmlReportBuilder:
         registration_summary_rows = self._registration_summary_rows(report)
         firmware_summary_rows = self._firmware_summary_rows(report)
         firmware_failure_rows = self._firmware_failure_rows(report)
+        firmware_failure_detail_rows = self._firmware_failure_detail_rows(report)
+        firmware_exception_rows = self._firmware_exception_rows(report)
+        mixed_firmware_rows = self._mixed_firmware_rows(report)
         reconciliation_section = self._reconciliation_section(report)
         service_rows = self._service_rows(report)
         service_summary_rows = self._service_summary_rows(report)
@@ -301,10 +304,26 @@ class HtmlReportBuilder:
         <thead><tr><th>State</th><th>Devices</th></tr></thead>
         <tbody>{firmware_correlation_rows}</tbody>
       </table>
+      <h3>Mixed Active Firmware Populations</h3>
+      <table>
+        <thead><tr><th>Model</th><th>Protocol</th><th>Active Loads</th><th>Devices</th></tr></thead>
+        <tbody>{mixed_firmware_rows}</tbody>
+      </table>
       <h3>Explicit Download Failures</h3>
       <table>
         <thead><tr><th>Reason</th><th>Devices</th></tr></thead>
         <tbody>{firmware_failure_rows}</tbody>
+      </table>
+      <h3>Download Failures by Model and Node</h3>
+      <table>
+        <thead><tr><th>Model</th><th>Node</th><th>Reason</th><th>Devices</th></tr></thead>
+        <tbody>{firmware_failure_detail_rows}</tbody>
+      </table>
+      <h3>Firmware Exceptions</h3>
+      <table>
+        <thead><tr><th>Device</th><th>Model</th><th>Static Load</th><th>Default Load</th>
+        <th>Active Load</th><th>Download Status</th><th>Failure Reason</th><th>Node</th></tr></thead>
+        <tbody>{firmware_exception_rows}</tbody>
       </table>
     </section>
     <section>
@@ -742,7 +761,7 @@ class HtmlReportBuilder:
                 registration.protocol or "Unknown",
                 registration.active_load or "Unavailable",
             )
-            for registration in report.facts.registrations
+            for registration in _firmware_registrations(report)
         )
         if not loads:
             return '<tr><td colspan="4">No runtime firmware data collected.</td></tr>'
@@ -764,6 +783,61 @@ class HtmlReportBuilder:
             f"<tr><td>{escape(reason)}</td><td>{count}</td></tr>"
             for reason, count in sorted(failures.items())
         )
+
+    def _firmware_failure_detail_rows(self, report: AssessmentReport) -> str:
+        failures = Counter(
+            (
+                registration.model or "Unknown model",
+                registration.registered_node or "Node unavailable",
+                registration.download_failure_reason or "Reason unavailable",
+            )
+            for registration in report.facts.registrations
+            if (registration.download_status or "").strip().lower() == "failed"
+        )
+        if not failures:
+            return '<tr><td colspan="4">No explicit firmware download failures reported.</td></tr>'
+        return "\n".join(
+            f"<tr><td>{escape(model)}</td><td>{escape(self._identifier(node, 'Node'))}</td>"
+            f"<td>{escape(reason)}</td><td>{count}</td></tr>"
+            for (model, node, reason), count in sorted(failures.items())
+        )
+
+    def _mixed_firmware_rows(self, report: AssessmentReport) -> str:
+        grouped: dict[tuple[str, str], Counter[str]] = {}
+        for registration in _firmware_registrations(report):
+            if not registration.active_load:
+                continue
+            key = (registration.model or "Unknown model", registration.protocol or "Unknown")
+            grouped.setdefault(key, Counter())[registration.active_load] += 1
+        mixed = {key: loads for key, loads in grouped.items() if len(loads) > 1}
+        if not mixed:
+            return '<tr><td colspan="4">No mixed active firmware populations found.</td></tr>'
+        return "\n".join(
+            f"<tr><td>{escape(model)}</td><td>{escape(protocol)}</td>"
+            f"<td>{escape('; '.join(f'{load}: {count}' for load, count in sorted(loads.items())))}</td>"
+            f"<td>{sum(loads.values())}</td></tr>"
+            for (model, protocol), loads in sorted(mixed.items())
+        )
+
+    def _firmware_exception_rows(self, report: AssessmentReport) -> str:
+        exceptions = _firmware_exceptions(report)
+        if not exceptions:
+            return '<tr><td colspan="8">No firmware exceptions found.</td></tr>'
+        rows = []
+        for registration, device, default_load in exceptions:
+            rows.append(
+                "<tr>"
+                f"<td>{escape(self._identifier(registration.name, 'Device'))}</td>"
+                f"<td>{escape(display_text(registration.model or device.model))}</td>"
+                f"<td>{escape(display_text(device.configured_load))}</td>"
+                f"<td>{escape(display_text(default_load))}</td>"
+                f"<td>{escape(display_text(registration.active_load))}</td>"
+                f"<td>{escape(display_text(registration.download_status))}</td>"
+                f"<td>{escape(display_text(registration.download_failure_reason))}</td>"
+                f"<td>{escape(self._identifier(registration.registered_node, 'Node'))}</td>"
+                "</tr>"
+            )
+        return "\n".join(rows)
 
     def _service_rows(self, report: AssessmentReport) -> str:
         if not report.facts.services:
@@ -1278,7 +1352,7 @@ def _firmware_correlation_counts(report: AssessmentReport) -> Counter[str]:
         for default in report.facts.device_load_defaults
     }
     counts: Counter[str] = Counter()
-    for registration in report.facts.registrations:
+    for registration in _firmware_registrations(report):
         device = devices.get(registration.name.strip().lower())
         if not device:
             continue
@@ -1287,7 +1361,13 @@ def _firmware_correlation_counts(report: AssessmentReport) -> Counter[str]:
         default = defaults.get(
             ((device.model or "").strip().lower(), (device.protocol or "").strip().lower())
         )
-        if not active:
+        intended = override or default
+        failed = (registration.download_status or "").strip().lower() == "failed"
+        if failed and _loads_equal(active, intended):
+            counts["Download failure reported; active load matches intended load"] += 1
+        elif failed:
+            counts["Download failed; active load differs from intended load"] += 1
+        elif not active:
             counts["Runtime active load unavailable"] += 1
         elif override and _loads_equal(active, override):
             counts["Active load matches static override"] += 1
@@ -1302,6 +1382,59 @@ def _firmware_correlation_counts(report: AssessmentReport) -> Counter[str]:
         else:
             counts["Active load present; current default unavailable"] += 1
     return counts
+
+
+def _firmware_registrations(report: AssessmentReport) -> list[DeviceRegistrationFact]:
+    """Return runtime records with evidence that firmware applies to the device."""
+
+    devices = {device.name.strip().lower(): device for device in report.facts.devices}
+    default_keys = {
+        ((item.model or "").strip().lower(), (item.protocol or "").strip().lower())
+        for item in report.facts.device_load_defaults
+        if item.default_load
+    }
+    return [
+        registration
+        for registration in report.facts.registrations
+        if registration.active_load
+        or (registration.download_status or "").strip().lower() == "failed"
+        or (
+            (device := devices.get(registration.name.strip().lower())) is not None
+            and (
+                bool(device.configured_load)
+                or (
+                    (device.model or "").strip().lower(),
+                    (device.protocol or "").strip().lower(),
+                ) in default_keys
+            )
+        )
+    ]
+
+
+def _firmware_exceptions(
+    report: AssessmentReport,
+) -> list[tuple[DeviceRegistrationFact, DeviceInventoryFact, str | None]]:
+    devices = {device.name.strip().lower(): device for device in report.facts.devices}
+    defaults = {
+        (
+            (item.model or "").strip().lower(),
+            (item.protocol or "").strip().lower(),
+        ): item.default_load
+        for item in report.facts.device_load_defaults
+    }
+    exceptions = []
+    for registration in _firmware_registrations(report):
+        device = devices.get(registration.name.strip().lower())
+        if device is None:
+            continue
+        default = defaults.get(
+            ((device.model or "").strip().lower(), (device.protocol or "").strip().lower())
+        )
+        intended = device.configured_load or default
+        failed = (registration.download_status or "").strip().lower() == "failed"
+        if failed or (registration.active_load and intended and not _loads_equal(registration.active_load, intended)):
+            exceptions.append((registration, device, default))
+    return exceptions
 
 
 def _is_sample_report(report: AssessmentReport) -> bool:
@@ -1346,7 +1479,7 @@ def _source_caption(section_name: str, report: AssessmentReport) -> str:
         "Cluster": "Source: AXL getCCMVersion and listProcessNode.",
         "Discovered Nodes": "Source: AXL listProcessNode.",
         "Device Inventory By Model": inventory_caption,
-        "Device Load Summary": "Source: AXL listPhone summary inventory and AXL getDeviceDefaults facts when available.",
+        "Device Load Summary": "Source: AXL phone inventory and bounded Device Defaults SQL.",
         "Detailed Device Inventory": detailed_inventory_caption,
     }
     collected_sections = {

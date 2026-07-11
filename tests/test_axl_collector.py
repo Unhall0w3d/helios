@@ -176,11 +176,11 @@ LIST_DEVICE_DEFAULTS_RESPONSE = """<?xml version="1.0" encoding="UTF-8"?>
   <soapenv:Body>
     <ns:executeSQLQueryResponse xmlns:ns="http://www.cisco.com/AXL/API/15.0">
       <return>
-        <row><configuredcount>12</configuredcount><modelname>Cisco 8845</modelname>
+        <row><configuredmodelcount>12</configuredmodelcount><modelname>Cisco 8845</modelname>
           <signalingprotocol>11</signalingprotocol><devicedefault>sip8845.14-2-1</devicedefault><tkmodel>616</tkmodel></row>
-        <row><configuredcount>4</configuredcount><modelname>Cisco 7945</modelname>
+        <row><configuredmodelcount>4</configuredmodelcount><modelname>Cisco 7945</modelname>
           <signalingprotocol>0</signalingprotocol><devicedefault>SCCP45.9-4-2SR4-3</devicedefault><tkmodel>434</tkmodel></row>
-        <row><configuredcount>2</configuredcount><modelname>Conference Bridge</modelname>
+        <row><configuredmodelcount>2</configuredmodelcount><modelname>Conference Bridge</modelname>
           <signalingprotocol>99</signalingprotocol><devicedefault>media-load</devicedefault><tkmodel>42</tkmodel></row>
       </return>
     </ns:executeSQLQueryResponse>
@@ -348,7 +348,7 @@ class AxlCollectorTests(unittest.TestCase):
         self.assertEqual(result.facts.devices[1].location, "Remote-Loc")
         self.assertEqual(len(result.facts.device_load_defaults), 3)
         self.assertEqual(result.facts.device_load_defaults[0].source, "AXL.executeSQLQuery.deviceDefaults")
-        self.assertEqual(result.facts.device_load_defaults[0].configured_device_count, 12)
+        self.assertEqual(result.facts.device_load_defaults[0].configured_model_count, 12)
         self.assertEqual(result.facts.device_load_defaults[0].model_code, "616")
         self.assertEqual(result.facts.device_load_defaults[2].protocol, "Media Resource")
         self.assertEqual(result.status_flags, [])

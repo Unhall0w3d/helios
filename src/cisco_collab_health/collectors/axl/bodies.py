@@ -39,7 +39,7 @@ def list_phone_body(*, first: int | None = None, skip: int | None = None) -> str
     </axl:listPhone>"""
 
 
-DEVICE_DEFAULTS_SQL = """select count(d.tkmodel) as configuredcount,
+DEVICE_DEFAULTS_SQL = """select count(d.tkmodel) as configuredmodelcount,
 tp.name as modelname, df.tkdeviceprotocol as signalingprotocol,
 df.loadinformation as devicedefault, d.tkmodel as tkmodel
 from device as d
