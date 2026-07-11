@@ -49,6 +49,20 @@ where df.loadinformation != ""
 group by d.tkmodel, tp.name, df.loadinformation, df.tkdeviceprotocol"""
 
 
+ROUTE_PATTERN_RELATIONSHIPS_SQL = """select first 500
+n.pkid as routepatternuuid, n.dnorpattern as routepattern,
+rp.name as partition, d.name as destination,
+rl.selectionorder as selectionorder, rg.name as routegroup
+from numplan as n
+left join routepartition as rp on rp.pkid=n.fkroutepartition
+inner join devicenumplanmap as dnpm on dnpm.fknumplan=n.pkid
+inner join device as d on dnpm.fkdevice=d.pkid
+left join routelist as rl on rl.fkdevice=d.pkid
+left join routegroup as rg on rg.pkid=rl.fkroutegroup
+where n.tkpatternusage=5
+order by n.pkid, rl.selectionorder"""
+
+
 def execute_sql_query_body(sql: str) -> str:
     """Build an AXL executeSQLQuery request with XML-safe SQL text."""
 

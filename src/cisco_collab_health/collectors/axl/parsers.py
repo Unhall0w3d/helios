@@ -29,6 +29,15 @@ class DevicePoolRecord:
     region: str | None
 
 
+@dataclass(frozen=True)
+class RoutePatternRelationship:
+    """Database-backed destination and ordered route-group relationship."""
+
+    uuid: str
+    destination: str
+    route_groups: tuple[str, ...]
+
+
 class XmlElement(Protocol):
     text: str | None
     tag: str
@@ -192,6 +201,42 @@ def parse_configuration_object_details(
         _configuration_detail_name(tag): value
         for tag in returned_tags
         if (value := ", ".join(_descendant_path_texts(element, tag)))
+    }
+
+
+def parse_route_pattern_relationships(
+    response_text: str,
+) -> dict[str, RoutePatternRelationship]:
+    """Normalize the bounded route-pattern relationship SQL result by UUID."""
+
+    try:
+        root = ET.fromstring(response_text)
+    except ET.ParseError as exc:
+        raise AxlCollectionError(
+            f"Unable to parse route-pattern relationship SQL response: {exc}"
+        ) from exc
+    accumulated: dict[str, tuple[str, list[tuple[int, str]]]] = {}
+    for row in _iter_local_name(root, "row"):
+        uuid = (_child_text(row, "routepatternuuid") or "").strip().strip("{}").lower()
+        destination = _child_text(row, "destination")
+        if not uuid or not destination:
+            continue
+        selection_text = _child_text(row, "selectionorder") or "0"
+        try:
+            selection_order = int(selection_text)
+        except ValueError:
+            selection_order = 0
+        route_group = _child_text(row, "routegroup")
+        current_destination, groups = accumulated.setdefault(uuid, (destination, []))
+        if route_group and (selection_order, route_group) not in groups:
+            groups.append((selection_order, route_group))
+        accumulated[uuid] = (current_destination, groups)
+    return {
+        uuid: RoutePatternRelationship(
+            uuid=uuid, destination=destination,
+            route_groups=tuple(name for _, name in sorted(groups)),
+        )
+        for uuid, (destination, groups) in accumulated.items()
     }
 
 

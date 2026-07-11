@@ -12,7 +12,10 @@ from unittest.mock import patch
 from cisco_collab_health.artifacts import ArtifactStore
 from cisco_collab_health.collectors.axl import AxlCollector, AxlVersionPolicy
 from cisco_collab_health.collectors.axl.bodies import diagnostic_get_body, diagnostic_list_body
-from cisco_collab_health.collectors.axl.parsers import parse_configuration_object_details
+from cisco_collab_health.collectors.axl.parsers import (
+    parse_configuration_object_details,
+    parse_route_pattern_relationships,
+)
 from cisco_collab_health.collectors.axl_errors import AxlCollectionError, AxlVersionError
 from cisco_collab_health.collectors.axl_bodies import (
     DEVICE_DEFAULTS_SQL,
@@ -295,6 +298,21 @@ class AxlCollectorTests(unittest.TestCase):
 
         self.assertIn("<name>PSTN &amp; Backup</name>", body)
         self.assertEqual(details["route_groups"], "PRIMARY-RG, BACKUP-RG")
+
+    def test_route_pattern_sql_relationships_are_grouped_by_uuid_and_order(self) -> None:
+        response = """<Envelope><return>
+        <row><routepatternuuid>{ABC}</routepatternuuid><destination>PSTN-RL</destination>
+        <selectionorder>2</selectionorder><routegroup>BACKUP-RG</routegroup></row>
+        <row><routepatternuuid>{ABC}</routepatternuuid><destination>PSTN-RL</destination>
+        <selectionorder>1</selectionorder><routegroup>PRIMARY-RG</routegroup></row>
+        </return></Envelope>"""
+
+        relationships = parse_route_pattern_relationships(response)
+
+        self.assertEqual(relationships["abc"].destination, "PSTN-RL")
+        self.assertEqual(
+            relationships["abc"].route_groups, ("PRIMARY-RG", "BACKUP-RG")
+        )
 
     def test_axl_version_policy_prefers_discovered_supported_version(self) -> None:
         policy = AxlVersionPolicy()

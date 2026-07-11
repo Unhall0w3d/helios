@@ -7,6 +7,7 @@ from defusedxml import ElementTree as ET
 
 from cisco_collab_health.collectors.axl.bodies import (
     DEVICE_DEFAULTS_SQL,
+    ROUTE_PATTERN_RELATIONSHIPS_SQL,
     diagnostic_get_body,
     diagnostic_list_body,
     execute_sql_query_body,
@@ -26,6 +27,7 @@ from cisco_collab_health.collectors.axl.parsers import (
     parse_device_pools,
     parse_phone_inventory,
     parse_process_nodes,
+    parse_route_pattern_relationships,
 )
 from cisco_collab_health.collectors.axl.version import (
     AxlVersionPolicy,
@@ -77,7 +79,6 @@ DIAGNOSTIC_AXL_OPERATIONS = (
 )
 
 DIAGNOSTIC_AXL_GET_RELATIONSHIPS = {
-    "RoutePattern": ("getRoutePattern", ("gatewayOrRouteListName",)),
     "Css": ("getCss", ("members/member/routePartitionName",)),
     "RouteGroup": ("getRouteGroup", ("members/member/deviceName",)),
     "RouteList": ("getRouteList", ("members/member/routeGroupName",)),
@@ -164,6 +165,9 @@ class AxlCollector:
         if context.diagnostic_capture:
             self._collect_diagnostic_axl(context, facts, warnings, evidence, notes)
             self._enrich_diagnostic_relationships(context, facts, warnings, evidence, notes)
+            self._enrich_route_pattern_relationships_sql(
+                context, facts, warnings, evidence, notes,
+            )
 
         if facts.cluster is not None and facts.nodes:
             facts.cluster = ClusterIdentity(
@@ -402,11 +406,6 @@ class AxlCollector:
                 continue
             operation, tags = specification
             key_fields = {"uuid": fact.uuid} if fact.uuid else {"name": fact.name}
-            if fact.object_type == "RoutePattern" and not fact.uuid:
-                key_fields = {"pattern": fact.name}
-                partition = fact.details.get("partition")
-                if partition:
-                    key_fields["routePartitionName"] = partition
             attempted += 1
             try:
                 response = self._call_axl_response(
@@ -430,6 +429,48 @@ class AxlCollector:
         notes.append(
             f"Diagnostic AXL relationship enrichment completed {succeeded} of {attempted} "
             f"bounded get request(s); request limit {limit}."
+        )
+
+    def _enrich_route_pattern_relationships_sql(
+        self, context: CollectionContext, facts: AssessmentFacts, warnings: list[str],
+        evidence: list[EvidenceRef], notes: list[str],
+    ) -> None:
+        """Recover route-pattern destinations omitted by standard AXL responses."""
+
+        route_patterns = [
+            item for item in facts.configuration_objects
+            if item.object_type == "RoutePattern" and item.uuid
+        ]
+        if not route_patterns or all(item.details.get("destination") for item in route_patterns):
+            return
+        try:
+            response = self._call_axl_response(
+                context, "executeSQLQuery",
+                execute_sql_query_body(ROUTE_PATTERN_RELATIONSHIPS_SQL),
+                artifact_operation="diagnostic_routePatternRelationships_executeSQLQuery",
+            )
+            evidence.append(_evidence_from_soap_response(response, context.publisher_ip))
+            relationships = parse_route_pattern_relationships(response.body)
+        except AxlCollectionError as exc:
+            warnings.append(f"Diagnostic route-pattern relationship SQL failed: {exc}")
+            return
+        enriched: list[ConfigurationObjectFact] = []
+        matched = 0
+        for fact in facts.configuration_objects:
+            uuid = (fact.uuid or "").strip().strip("{}").lower()
+            relationship = relationships.get(uuid)
+            if fact.object_type != "RoutePattern" or relationship is None:
+                enriched.append(fact)
+                continue
+            details = {**fact.details, "destination": relationship.destination}
+            if relationship.route_groups:
+                details["route_groups"] = ", ".join(relationship.route_groups)
+            enriched.append(replace(fact, details=details))
+            matched += 1
+        facts.configuration_objects = enriched
+        notes.append(
+            f"Diagnostic route-pattern SQL enrichment matched {matched} of "
+            f"{len(route_patterns)} route pattern(s), bounded to 500 relationship rows."
         )
 
     def _call_axl_response(
