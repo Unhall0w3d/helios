@@ -26,6 +26,7 @@ from cisco_collab_health.reports.summary import ExecutiveSummaryBuilder
 from cisco_collab_health.rules.basic import (
     ClusterIdentityRule,
     CollectorHealthRule,
+    ConfigurationInventorySummaryRule,
     DeviceInventorySummaryRule,
     DeviceLoadRule,
     DeviceLoadSummaryRule,
@@ -161,6 +162,7 @@ def run_assessment(
             ServiceSummaryRule(),
             PlatformCheckSummaryRule(),
             DeviceLoadSummaryRule(),
+            ConfigurationInventorySummaryRule(),
         ],
     )
     report = engine.run(context)

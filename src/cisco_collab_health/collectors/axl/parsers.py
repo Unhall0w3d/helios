@@ -11,6 +11,7 @@ from defusedxml import ElementTree as ET
 from cisco_collab_health.collectors.axl.errors import AxlCollectionError
 from cisco_collab_health.models.facts import (
     CollaborationNode,
+    ConfigurationObjectFact,
     DeviceInventoryFact,
     DeviceLoadDefaultFact,
 )
@@ -97,10 +98,20 @@ def parse_device_load_defaults(response_text: str) -> list[DeviceLoadDefaultFact
     try:
         root = ET.fromstring(response_text)
     except ET.ParseError as exc:
-        raise AxlCollectionError(f"Unable to parse listDeviceDefaults response: {exc}") from exc
+        raise AxlCollectionError(f"Unable to parse getDeviceDefaults response: {exc}") from exc
 
     defaults: list[DeviceLoadDefaultFact] = []
-    for device_default in _iter_local_name(root, "deviceDefault"):
+    candidates = [
+        *list(_iter_local_name(root, "deviceDefault")),
+        *list(_iter_local_name(root, "deviceDefaults")),
+    ]
+    if not candidates:
+        candidates = [
+            element
+            for element in _iter_local_name(root, "return")
+            if _child_text(element, "model")
+        ]
+    for device_default in candidates:
         model = _child_text(device_default, "model")
         if not model:
             continue
@@ -109,10 +120,56 @@ def parse_device_load_defaults(response_text: str) -> list[DeviceLoadDefaultFact
                 model=model,
                 protocol=_child_text(device_default, "protocol"),
                 default_load=_child_text(device_default, "loadInformation"),
-                source="AXL.listDeviceDefaults",
+                source="AXL.getDeviceDefaults",
             )
         )
     return defaults
+
+
+def parse_configuration_objects(
+    response_text: str,
+    operation: str,
+    returned_tags: tuple[str, ...],
+) -> list[ConfigurationObjectFact]:
+    """Normalize the bounded, shallow fields returned by a diagnostic AXL list call."""
+
+    try:
+        root = ET.fromstring(response_text)
+    except ET.ParseError as exc:
+        raise AxlCollectionError(f"Unable to parse {operation} response: {exc}") from exc
+    object_name = operation.removeprefix("list")
+    element_name = object_name[:1].lower() + object_name[1:]
+    facts = []
+    for element in _iter_local_name(root, element_name):
+        values = {tag: _child_text(element, tag) for tag in returned_tags}
+        name = values.get("name") or values.get("pattern")
+        if not name:
+            continue
+        details = {
+            _configuration_detail_name(tag): value
+            for tag, value in values.items()
+            if value and tag not in {"name", "pattern"}
+        }
+        facts.append(
+            ConfigurationObjectFact(
+                object_type=object_name,
+                name=name,
+                details=details,
+                source=f"AXL.{operation}",
+            )
+        )
+    return facts
+
+
+def _configuration_detail_name(tag: str) -> str:
+    labels = {
+        "routePartitionName": "partition",
+        "devicePoolName": "device_pool",
+        "locationName": "location",
+        "sipProfileName": "sip_profile",
+        "distributionAlgorithm": "distribution_algorithm",
+    }
+    return labels.get(tag, tag)
 
 
 def parse_device_pools(response_text: str) -> list[DevicePoolRecord]:

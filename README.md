@@ -68,7 +68,7 @@ Current capabilities:
 
 - Core pipeline contracts
 - AXL collector for `getCCMVersion`, `listProcessNode`, opt-in summary `listPhone`, and `listDevicePool` inventory enrichment
-- Scoped `listDeviceDefaults` collection using exact model/protocol pairs observed in inventory, with one artifact per request
+- Scoped `getDeviceDefaults` collection using exact model/protocol pairs observed in inventory, with one artifact per request
 - AXL schema retry when CUCM reports that the requested AXL version is unsupported
 - Publisher preflight and interface reachability checks
 - Read-only diagnostic capture with normalized RISPort70 registration, Control Center service-status, and PerfMon counter facts
@@ -254,13 +254,12 @@ included. Prefix-based collection may be added later as a fallback for oversized
 clusters, but expected Cisco prefixes are not treated as the authoritative
 inventory boundary.
 
-When phone inventory is enabled, AletheiaUC queries `listDeviceDefaults` for
-the exact model/protocol pairs observed in that inventory. This avoids CUCM 15
-rejecting a broad wildcard search. A response can cover more than one requested
-pair; collection stops once all observed pairs are covered. Each request and
-response has a separate artifact path. If no default facts are available, the
-report marks load comparison unavailable rather than inferring missing or
-manual loads.
+When phone inventory is enabled, AletheiaUC queries `getDeviceDefaults` for the
+exact model/protocol pairs observed in that inventory. This replaces the
+`listDeviceDefaults` request form that CUCM 15 rejected with `No Search Criteria
+Defined`. Each request and response has a separate artifact path. If no default
+facts are available, the report marks load comparison unavailable rather than
+inferring missing or manual loads.
 
 ## Diagnostic Capture Mode
 
@@ -278,16 +277,17 @@ adds raw request/response evidence for:
 - RISPort70 `selectCmDeviceExt` registration snapshot using the AXL device list
   (or a bounded wildcard `selectCmDevice` fallback if AXL inventory is unavailable)
 - Control Center `getProductInformationList` and `soapGetServiceStatus` on every discovered node
-- PerfMon object/counter discovery plus `Processor`, `Memory`, and `Cisco CallManager` snapshots on every discovered node
+- PerfMon object/counter discovery plus two samples of `Processor`, `Memory`, and `Cisco CallManager` counters on every discovered node
 - Bounded AXL configuration discovery for call-manager groups, regions, locations,
   SIP trunks, route patterns, partitions, CSSes, route groups/lists, translation
   patterns, media resources, and lines
 
 All diagnostic calls are read-only. Supported RISPort70, Control Center, and
 PerfMon responses are normalized into registration, service-status, and
-performance-counter facts and displayed in HTML/JSON. The remaining bounded
-AXL configuration discovery is currently retained as raw evidence for future
-parser work. Diagnostic facts are snapshots: they support conservative
+performance-counter facts and displayed in HTML/JSON. Bounded AXL configuration
+discovery is normalized into shallow configuration inventory facts while the
+raw responses remain available for deeper dependency parsers. Diagnostic facts
+are snapshots: they support conservative
 collection summaries and reconciliation, not full service policy or performance
 threshold findings. Unsupported operations and authentication failures are
 captured as artifacts and collector warnings.

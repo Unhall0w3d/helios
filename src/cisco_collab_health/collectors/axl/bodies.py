@@ -40,25 +40,18 @@ def list_phone_body(*, first: int | None = None, skip: int | None = None) -> str
     </axl:listPhone>"""
 
 
-def list_device_defaults_body(model: str, protocol: str) -> str:
-    """Build a narrowly scoped device-default request.
+def get_device_defaults_body(model: str, protocol: str) -> str:
+    """Build a device-default lookup for one observed model/protocol pair."""
 
-    Device model and protocol are enumerated values in CUCM.  A wildcard
-    request is accepted by some releases but rejected by CUCM 15, so callers
-    provide values observed in the phone inventory instead.
-    """
-
-    return f"""<axl:listDeviceDefaults>
-      <searchCriteria>
-        <model>{escape(model)}</model>
-        <protocol>{escape(protocol)}</protocol>
-      </searchCriteria>
+    return f"""<axl:getDeviceDefaults>
+      <model>{escape(model)}</model>
+      <protocol>{escape(protocol)}</protocol>
       <returnedTags>
         <model />
         <protocol />
         <loadInformation />
       </returnedTags>
-    </axl:listDeviceDefaults>"""
+    </axl:getDeviceDefaults>"""
 
 
 def list_device_pool_body() -> str:

@@ -12,6 +12,7 @@ from unittest.mock import patch
 from cisco_collab_health.artifacts import ArtifactStore
 from cisco_collab_health.collectors.axl import AxlCollector, AxlVersionPolicy
 from cisco_collab_health.collectors.axl_errors import AxlCollectionError, AxlVersionError
+from cisco_collab_health.collectors.axl_parsers import parse_configuration_objects
 from cisco_collab_health.collectors.base import CollectionContext
 from cisco_collab_health.transport.soap import SoapResponse
 
@@ -235,6 +236,21 @@ def soap_response(body: str, operation: str = "operation") -> SoapResponse:
 
 
 class AxlCollectorTests(unittest.TestCase):
+    def test_diagnostic_axl_parser_normalizes_configuration_objects(self) -> None:
+        response = """<Envelope><return><routePattern><pattern>9.!#</pattern>
+        <routePartitionName>PT-PSTN</routePartitionName></routePattern></return></Envelope>"""
+
+        facts = parse_configuration_objects(
+            response,
+            "listRoutePattern",
+            ("pattern", "routePartitionName"),
+        )
+
+        self.assertEqual(len(facts), 1)
+        self.assertEqual(facts[0].object_type, "RoutePattern")
+        self.assertEqual(facts[0].name, "9.!#")
+        self.assertEqual(facts[0].details["partition"], "PT-PSTN")
+
     def test_axl_version_policy_prefers_discovered_supported_version(self) -> None:
         policy = AxlVersionPolicy()
 
@@ -297,7 +313,7 @@ class AxlCollectorTests(unittest.TestCase):
                 soap_response(LIST_PROCESS_NODE_RESPONSE, "listProcessNode"),
                 soap_response(LIST_PHONE_RESPONSE, "listPhone"),
                 soap_response(LIST_DEVICE_POOL_RESPONSE, "listDevicePool"),
-                soap_response(LIST_DEVICE_DEFAULTS_RESPONSE, "listDeviceDefaults"),
+                soap_response(LIST_DEVICE_DEFAULTS_RESPONSE, "getDeviceDefaults"),
             ],
         ):
             result = collector.collect(context)
@@ -310,7 +326,7 @@ class AxlCollectorTests(unittest.TestCase):
                 "listProcessNode",
                 "listPhone",
                 "listDevicePool",
-                "listDeviceDefaults",
+                "getDeviceDefaults",
             ],
         )
         self.assertEqual(
@@ -327,7 +343,7 @@ class AxlCollectorTests(unittest.TestCase):
         )
         self.assertEqual(result.facts.devices[1].location, "Remote-Loc")
         self.assertEqual(len(result.facts.device_load_defaults), 3)
-        self.assertEqual(result.facts.device_load_defaults[0].source, "AXL.listDeviceDefaults")
+        self.assertEqual(result.facts.device_load_defaults[0].source, "AXL.getDeviceDefaults")
         self.assertEqual(result.status_flags, [])
 
     def test_axl_collector_pages_phone_inventory_with_configured_bounds(self) -> None:
@@ -569,7 +585,7 @@ class AxlCollectorTests(unittest.TestCase):
         ):
             result = collector.collect(context)
 
-        self.assertIn("AXL listDeviceDefaults could not collect", result.warnings[0])
+        self.assertIn("AXL getDeviceDefaults could not collect", result.warnings[0])
         self.assertEqual(result.facts.device_load_defaults, [])
 
     def test_axl_phone_inventory_writes_page_specific_artifacts(self) -> None:
@@ -636,7 +652,7 @@ class AxlCollectorTests(unittest.TestCase):
             )
             self.assertTrue(
                 str(result.evidence[5].artifact_path).endswith(
-                    "listDeviceDefaults_001/response.txt"
+                    "getDeviceDefaults_001/response.txt"
                 )
             )
 

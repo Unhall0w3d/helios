@@ -63,6 +63,17 @@ class DeviceRegistrationFact:
     model: str | None
     protocol: str | None
     source: str
+    runtime_model_code: str | None = None
+    device_class: str | None = None
+    active_load: str | None = None
+    inactive_load: str | None = None
+    download_status: str | None = None
+    download_failure_reason: str | None = None
+    registration_attempts: int | None = None
+    status_reason: str | None = None
+    directory_numbers: tuple[str, ...] = ()
+    login_user_id: str | None = None
+    timestamp: str | None = None
 
 
 @dataclass(frozen=True)
@@ -74,6 +85,24 @@ class ServiceStatusFact:
     activated: bool | None
     status: str
     uptime_seconds: int | None
+    source: str
+    start_time: str | None = None
+    reason_code: str | None = None
+    reason: str | None = None
+    service_type: str | None = None
+    group_name: str | None = None
+    product_id: str | None = None
+    deployable: bool | None = None
+    dependent_services: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class ConfigurationObjectFact:
+    """Bounded configuration inventory fact from an AXL list operation."""
+
+    object_type: str
+    name: str
+    details: dict[str, str]
     source: str
 
 
@@ -123,6 +152,7 @@ class AssessmentFacts:
     registrations: list[DeviceRegistrationFact] = field(default_factory=list)
     services: list[ServiceStatusFact] = field(default_factory=list)
     perf_counters: list[PerfCounterFact] = field(default_factory=list)
+    configuration_objects: list[ConfigurationObjectFact] = field(default_factory=list)
     platform_checks: list[PlatformCheckFact] = field(default_factory=list)
     collector_issues: list[CollectorIssueFact] = field(default_factory=list)
 
@@ -163,14 +193,27 @@ class AssessmentFacts:
             _device_load_default_key,
             _merge_device_load_default,
         )
+        inventory_by_name = {
+            device.name.strip().lower(): device for device in self.devices if device.name.strip()
+        }
+        registrations = [
+            _enrich_registration_from_inventory(registration, inventory_by_name)
+            for registration in other.registrations
+        ]
         _merge_by_key(
             self.registrations,
-            other.registrations,
+            registrations,
             _device_registration_key,
             _merge_device_registration,
         )
         _merge_by_key(self.services, other.services, _service_status_key, _merge_service_status)
         _merge_by_key(self.perf_counters, other.perf_counters, _perf_counter_key)
+        _merge_by_key(
+            self.configuration_objects,
+            other.configuration_objects,
+            _configuration_object_key,
+            _merge_configuration_object,
+        )
         _merge_by_key(
             self.platform_checks,
             other.platform_checks,
@@ -291,6 +334,21 @@ def _merge_device_registration(
         model=_prefer(existing.model, incoming.model),
         protocol=_prefer(existing.protocol, incoming.protocol),
         source=_merge_sources(existing.source, incoming.source),
+        runtime_model_code=_prefer(existing.runtime_model_code, incoming.runtime_model_code),
+        device_class=_prefer(existing.device_class, incoming.device_class),
+        active_load=_prefer(existing.active_load, incoming.active_load),
+        inactive_load=_prefer(existing.inactive_load, incoming.inactive_load),
+        download_status=_prefer(existing.download_status, incoming.download_status),
+        download_failure_reason=_prefer(
+            existing.download_failure_reason, incoming.download_failure_reason
+        ),
+        registration_attempts=_prefer(
+            existing.registration_attempts, incoming.registration_attempts
+        ),
+        status_reason=_prefer(existing.status_reason, incoming.status_reason),
+        directory_numbers=_prefer(existing.directory_numbers, incoming.directory_numbers),
+        login_user_id=_prefer(existing.login_user_id, incoming.login_user_id),
+        timestamp=_prefer(existing.timestamp, incoming.timestamp),
     )
 
 
@@ -304,6 +362,55 @@ def _merge_service_status(
         activated=_prefer(existing.activated, incoming.activated),
         status=_prefer(existing.status, incoming.status),
         uptime_seconds=_prefer(existing.uptime_seconds, incoming.uptime_seconds),
+        source=_merge_sources(existing.source, incoming.source),
+        start_time=_prefer(existing.start_time, incoming.start_time),
+        reason_code=_prefer(existing.reason_code, incoming.reason_code),
+        reason=_prefer(existing.reason, incoming.reason),
+        service_type=_prefer(existing.service_type, incoming.service_type),
+        group_name=_prefer(existing.group_name, incoming.group_name),
+        product_id=_prefer(existing.product_id, incoming.product_id),
+        deployable=_prefer(existing.deployable, incoming.deployable),
+        dependent_services=_prefer(existing.dependent_services, incoming.dependent_services),
+    )
+
+
+def _enrich_registration_from_inventory(
+    registration: DeviceRegistrationFact,
+    inventory_by_name: dict[str, DeviceInventoryFact],
+) -> DeviceRegistrationFact:
+    device = inventory_by_name.get(registration.name.strip().lower())
+    if device is None:
+        return registration
+    return DeviceRegistrationFact(
+        name=registration.name,
+        status=registration.status,
+        registered_node=registration.registered_node,
+        ip_address=registration.ip_address,
+        model=device.model or registration.model,
+        protocol=device.protocol or registration.protocol,
+        source=_merge_sources(registration.source, "AXL.listPhone.summary"),
+        runtime_model_code=registration.runtime_model_code or registration.model,
+        device_class=registration.device_class,
+        active_load=registration.active_load,
+        inactive_load=registration.inactive_load,
+        download_status=registration.download_status,
+        download_failure_reason=registration.download_failure_reason,
+        registration_attempts=registration.registration_attempts,
+        status_reason=registration.status_reason,
+        directory_numbers=registration.directory_numbers,
+        login_user_id=registration.login_user_id,
+        timestamp=registration.timestamp,
+    )
+
+
+def _merge_configuration_object(
+    existing: ConfigurationObjectFact,
+    incoming: ConfigurationObjectFact,
+) -> ConfigurationObjectFact:
+    return ConfigurationObjectFact(
+        object_type=_prefer(existing.object_type, incoming.object_type),
+        name=_prefer(existing.name, incoming.name),
+        details={**existing.details, **incoming.details},
         source=_merge_sources(existing.source, incoming.source),
     )
 
@@ -353,3 +460,11 @@ def _perf_counter_key(fact: PerfCounterFact) -> tuple[str, str, str, str, str]:
 
 def _platform_check_key(fact: PlatformCheckFact) -> tuple[str, str]:
     return (_normalize_node_key(fact.node), fact.check_name.strip().lower())
+
+
+def _configuration_object_key(fact: ConfigurationObjectFact) -> tuple[str, str, str]:
+    return (
+        fact.object_type.strip().lower(),
+        fact.name.strip().lower(),
+        fact.details.get("partition", "").strip().lower(),
+    )

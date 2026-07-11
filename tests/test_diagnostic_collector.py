@@ -7,8 +7,10 @@ from pathlib import Path
 
 from cisco_collab_health.collectors.diagnostic import (
     DiagnosticCaptureCollector,
+    _enrich_service_status,
     _parse_perf_counters,
     _parse_risport_registrations,
+    _parse_service_catalog,
     _parse_service_status,
 )
 from cisco_collab_health.models.runtime import CollectionContext
@@ -58,21 +60,45 @@ class DiagnosticCaptureCollectorTests(unittest.TestCase):
     def test_parsers_normalize_risport_serviceability_and_perfmon_data(self) -> None:
         risport = """<Envelope><CmNodes><item><Name>sub-1</Name><CmDevices><item>
         <Name>SEP001</Name><Status>Registered</Status><Model>683</Model><Protocol>SIP</Protocol>
+        <DeviceClass>Phone</DeviceClass><ActiveLoadID>sip88xx.14-3-1</ActiveLoadID>
+        <InactiveLoadID>sip88xx.14-2-1</InactiveLoadID><RegistrationAttempts>2</RegistrationAttempts>
+        <StatusReason>0</StatusReason><DirNumber>1001-Registered,1002-Registered</DirNumber>
         <IPAddress><item><IP>192.0.2.50</IP></item></IPAddress>
         </item></CmDevices></item></CmNodes></Envelope>"""
         services = """<Envelope><ServiceInfoList><item><ServiceName>Cisco CallManager</ServiceName>
-        <ServiceStatus>Started</ServiceStatus><UpTime>123</UpTime></item></ServiceInfoList></Envelope>"""
-        perfmon = """<Envelope><perfmonCollectCounterDataReturn><Name>\\sub-1\\Processor\\% CPU Time</Name>
+        <ServiceStatus>Started</ServiceStatus><UpTime>123</UpTime><StartTime>today</StartTime>
+        </item></ServiceInfoList></Envelope>"""
+        catalog_xml = """<Envelope><Services><item><ServiceName>Cisco CallManager</ServiceName>
+        <ServiceType>Service</ServiceType><GroupName>CM Services</GroupName>
+        <ProductID>CallManager</ProductID><Deployable>true</Deployable>
+        <DependentServices><Service>Cisco DB</Service></DependentServices>
+        </item></Services></Envelope>"""
+        perfmon = """<Envelope><perfmonCollectCounterDataReturn><Name>\\sub-1\\Processor(_Total)\\% CPU Time</Name>
         <Value>17</Value><CStatus>0</CStatus></perfmonCollectCounterDataReturn></Envelope>"""
 
         registrations = _parse_risport_registrations(risport)
-        service_facts = _parse_service_status(services, "sub-1")
+        catalog = {
+            item.service_name.lower(): item for item in _parse_service_catalog(catalog_xml)
+        }
+        service_facts = [
+            _enrich_service_status(item, catalog)
+            for item in _parse_service_status(services, "sub-1")
+        ]
         perf_facts = _parse_perf_counters(perfmon, "sub-1", "Processor")
 
         self.assertEqual(registrations[0].name, "SEP001")
         self.assertEqual(registrations[0].ip_address, "192.0.2.50")
+        self.assertEqual(registrations[0].active_load, "sip88xx.14-3-1")
+        self.assertEqual(registrations[0].registration_attempts, 2)
+        self.assertEqual(
+            registrations[0].directory_numbers,
+            ("1001-Registered", "1002-Registered"),
+        )
         self.assertEqual(service_facts[0].uptime_seconds, 123)
+        self.assertEqual(service_facts[0].group_name, "CM Services")
+        self.assertEqual(service_facts[0].dependent_services, ("Cisco DB",))
         self.assertEqual(perf_facts[0].counter_name, "% CPU Time")
+        self.assertEqual(perf_facts[0].instance, "_Total")
         self.assertEqual(perf_facts[0].value, 17)
 
     def test_capture_queries_all_discovered_nodes_with_bounded_operations(self) -> None:
@@ -82,6 +108,7 @@ class DiagnosticCaptureCollectorTests(unittest.TestCase):
             ["risport70", "control_center", "perfmon"],
             soap_client=soap,
             http_client=http,
+            sleep=lambda _: None,
         )
         context = CollectionContext(
             publisher_ip="192.0.2.10",
@@ -98,7 +125,7 @@ class DiagnosticCaptureCollectorTests(unittest.TestCase):
         self.assertEqual(result.warnings, [])
         self.assertIn("diagnostic_capture.enabled", result.status_flags)
         self.assertEqual(len(http.calls), 8)
-        self.assertEqual(len(soap.requests), 13)
+        self.assertEqual(len(soap.requests), 19)
         risport = next(
             request for request in soap.requests if request.operation == "selectCmDeviceExt"
         )
@@ -112,7 +139,8 @@ class DiagnosticCaptureCollectorTests(unittest.TestCase):
         self.assertEqual(control_nodes, {"192.0.2.10", "192.0.2.11"})
         self.assertTrue(
             any(
-                request.artifact_operation == "perfmonCollectCounterData_processor"
+                request.artifact_operation
+                == "perfmonCollectCounterData_processor_sample_002"
                 for request in soap.requests
             )
         )

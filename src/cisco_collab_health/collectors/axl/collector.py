@@ -7,16 +7,17 @@ from defusedxml import ElementTree as ET
 from cisco_collab_health.collectors.axl.bodies import (
     diagnostic_list_body,
     get_ccm_version_body,
-    list_device_defaults_body,
+    get_device_defaults_body,
     list_device_pool_body,
     list_phone_body,
     list_process_node_body,
 )
 from cisco_collab_health.collectors.axl.errors import AxlCollectionError, AxlVersionError
 from cisco_collab_health.collectors.axl.parsers import (
-    cluster_name_from_nodes,
     DevicePoolRecord,
+    cluster_name_from_nodes,
     find_first_text,
+    parse_configuration_objects,
     parse_device_load_defaults,
     parse_device_pools,
     parse_phone_inventory,
@@ -149,7 +150,7 @@ class AxlCollector:
             )
 
         if context.diagnostic_capture:
-            self._collect_diagnostic_axl(context, warnings, evidence, notes)
+            self._collect_diagnostic_axl(context, facts, warnings, evidence, notes)
 
         if facts.cluster is not None and facts.nodes:
             facts.cluster = ClusterIdentity(
@@ -286,16 +287,20 @@ class AxlCollector:
 
         unresolved = set(target_keys)
         failures = 0
+        attempted = 0
         for index, (model, protocol) in enumerate(target_keys, start=1):
+            attempted += 1
             try:
                 defaults_response = self._call_axl_response(
                     context,
-                    "listDeviceDefaults",
-                    list_device_defaults_body(model, protocol),
-                    artifact_operation=f"listDeviceDefaults_{index:03d}",
+                    "getDeviceDefaults",
+                    get_device_defaults_body(model, protocol),
+                    artifact_operation=f"getDeviceDefaults_{index:03d}",
                 )
-            except AxlCollectionError:
+            except AxlCollectionError as exc:
                 failures += 1
+                if "No Search Criteria Defined" in str(exc):
+                    break
                 continue
 
             evidence.append(_evidence_from_soap_response(defaults_response, context.publisher_ip))
@@ -317,14 +322,15 @@ class AxlCollector:
 
         if failures:
             warnings.append(
-                "AXL listDeviceDefaults could not collect "
-                f"{failures} of {len(target_keys)} model/protocol default request(s); "
+                "AXL getDeviceDefaults could not collect "
+                f"{failures} of {attempted} attempted model/protocol default request(s); "
                 "review the corresponding diagnostic artifacts."
             )
 
     def _collect_diagnostic_axl(
         self,
         context: CollectionContext,
+        facts: AssessmentFacts,
         warnings: list[str],
         evidence: list[EvidenceRef],
         notes: list[str],
@@ -353,6 +359,9 @@ class AxlCollector:
                     warnings.append(f"Diagnostic AXL {operation} failed: {exc}")
                     break
                 evidence.append(_evidence_from_soap_response(response, context.publisher_ip))
+                facts.configuration_objects.extend(
+                    parse_configuration_objects(response.body, operation, returned_tags)
+                )
                 record_count = _list_response_record_count(response.body)
                 if record_count is None:
                     notes.append(

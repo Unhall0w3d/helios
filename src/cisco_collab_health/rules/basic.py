@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections import Counter
+
 from cisco_collab_health.models.evidence import EvidenceRef
 from cisco_collab_health.models.facts import AssessmentFacts
 from cisco_collab_health.models.findings import (
@@ -27,7 +29,7 @@ class ClusterIdentityRule:
                     facts=[
                         f"Product: {facts.cluster.product}",
                         f"Version: {facts.cluster.version}",
-                        f"Cluster name: {facts.cluster.name}",
+                        f"Cluster anchor: {facts.cluster.name}",
                     ],
                     reasoning="The assessment has enough identity data to anchor later findings.",
                     evidence=[
@@ -84,7 +86,7 @@ class NodeReachabilityRule:
             return [
                 HealthFinding(
                     rule_id=self.rule_id,
-                    title="No unreachable nodes reported",
+                    title="No nodes explicitly reported unreachable",
                     severity=FindingSeverity.INFO,
                     recommendation_kind=RecommendationKind.INFORMATIONAL,
                     facts=[f"Nodes evaluated: {len(facts.nodes)}"],
@@ -361,6 +363,31 @@ class DeviceLoadSummaryRule:
                     f"Devices with configured loads: {with_configured_load}",
                 ],
                 operation="device_load_summary",
+            )
+        ]
+
+
+class ConfigurationInventorySummaryRule:
+    """Summarizes bounded AXL configuration objects without policy judgment."""
+
+    rule_id = "cucm.configuration_inventory_summary"
+
+    def evaluate(self, facts: AssessmentFacts) -> list[HealthFinding]:
+        if not facts.configuration_objects:
+            return []
+        counts = Counter(item.object_type for item in facts.configuration_objects)
+        return [
+            _info_finding(
+                rule_id=self.rule_id,
+                title="Configuration inventory data collected",
+                facts=[
+                    f"Configuration objects: {len(facts.configuration_objects)}",
+                    *[
+                        f"{object_type}: {count}"
+                        for object_type, count in sorted(counts.items())
+                    ],
+                ],
+                operation="configuration_inventory_summary",
             )
         ]
 

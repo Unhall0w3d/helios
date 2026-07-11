@@ -17,6 +17,47 @@ from cisco_collab_health.models.facts import (
 
 
 class AssessmentFactsTests(unittest.TestCase):
+    def test_runtime_registration_is_enriched_from_axl_inventory(self) -> None:
+        facts = AssessmentFacts(
+            devices=[
+                DeviceInventoryFact(
+                    name="SEP001",
+                    description=None,
+                    model="Cisco 8841",
+                    protocol="SIP",
+                    device_pool="Default",
+                    call_manager_group=None,
+                    location=None,
+                    region=None,
+                    configured_load=None,
+                    source="AXL.listPhone.summary",
+                )
+            ]
+        )
+        facts.merge(
+            AssessmentFacts(
+                registrations=[
+                    DeviceRegistrationFact(
+                        name="sep001",
+                        status="Registered",
+                        registered_node="sub-1",
+                        ip_address="192.0.2.50",
+                        model="683",
+                        protocol="SIP",
+                        source="RISPort70.selectCmDeviceExt",
+                        runtime_model_code="683",
+                        active_load="sip88xx.14-3-1",
+                    )
+                ]
+            )
+        )
+
+        registration = facts.registrations[0]
+        self.assertEqual(registration.model, "Cisco 8841")
+        self.assertEqual(registration.runtime_model_code, "683")
+        self.assertEqual(registration.active_load, "sip88xx.14-3-1")
+        self.assertIn("AXL.listPhone.summary", registration.source)
+
     def test_merge_deduplicates_nodes_by_address(self) -> None:
         facts = AssessmentFacts(
             nodes=[

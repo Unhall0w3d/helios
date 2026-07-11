@@ -213,6 +213,7 @@ class ReportBuilderTests(unittest.TestCase):
                 "Cluster nodes",
                 "Device inventory",
                 "Device load defaults",
+                "Configuration inventory",
                 "Device registration",
                 "Services",
                 "Performance counters",

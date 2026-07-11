@@ -45,7 +45,11 @@ class HtmlReportBuilder:
         registration_summary_rows = self._registration_summary_rows(report)
         reconciliation_section = self._reconciliation_section(report)
         service_rows = self._service_rows(report)
+        service_summary_rows = self._service_summary_rows(report)
         perf_counter_rows = self._perf_counter_rows(report)
+        perf_summary_rows = self._perf_summary_rows(report)
+        configuration_summary_rows = self._configuration_summary_rows(report)
+        configuration_rows = self._configuration_rows(report)
         platform_check_rows = self._platform_check_rows(report)
         collector_issues_section = self._collector_issues_section(report)
         collector_notes_section = self._collector_notes_section(report)
@@ -132,6 +136,12 @@ class HtmlReportBuilder:
     table {{
       width: 100%;
       border-collapse: collapse;
+    }}
+    details > summary {{
+      cursor: pointer;
+      color: var(--info);
+      font-weight: 700;
+      margin: 8px 0 14px;
     }}
     th, td {{
       padding: 10px 8px;
@@ -256,20 +266,33 @@ class HtmlReportBuilder:
       <h2>Services</h2>
       {_source_caption("Services", report)}
       <table>
+        <thead><tr><th>Node</th><th>Started</th><th>Stopped</th><th>Total</th></tr></thead>
+        <tbody>{service_summary_rows}</tbody>
+      </table>
+      <details>
+        <summary>Show all service records</summary>
+      <table>
         <thead>
           <tr>
-            <th>Node</th><th>Service</th><th>Activated</th><th>Status</th>
-            <th>Uptime</th><th>Source</th>
+            <th>Node</th><th>Service</th><th>Type</th><th>Group</th><th>Status</th>
+            <th>Uptime</th><th>Reason</th><th>Source</th>
           </tr>
         </thead>
         <tbody>
           {service_rows}
         </tbody>
       </table>
+      </details>
     </section>
     <section>
       <h2>Performance Counters</h2>
       {_source_caption("Performance Counters", report)}
+      <table>
+        <thead><tr><th>Node</th><th>Metric</th><th>Value</th><th>Samples</th></tr></thead>
+        <tbody>{perf_summary_rows}</tbody>
+      </table>
+      <details>
+        <summary>Show all performance counter records</summary>
       <table>
         <thead>
           <tr>
@@ -281,6 +304,23 @@ class HtmlReportBuilder:
           {perf_counter_rows}
         </tbody>
       </table>
+      </details>
+    </section>
+    <section>
+      <h2>Configuration Inventory</h2>
+      <p class="meta">Source: bounded AXL configuration discovery. Counts reflect captured
+      list responses and do not imply dependency or policy validation.</p>
+      <table>
+        <thead><tr><th>Object Type</th><th>Count</th></tr></thead>
+        <tbody>{configuration_summary_rows}</tbody>
+      </table>
+      <details>
+        <summary>Show captured configuration objects</summary>
+        <table>
+          <thead><tr><th>Type</th><th>Name/Pattern</th><th>Details</th><th>Source</th></tr></thead>
+          <tbody>{configuration_rows}</tbody>
+        </table>
+      </details>
     </section>
     <section>
       <h2>Platform Checks</h2>
@@ -323,7 +363,8 @@ class HtmlReportBuilder:
         <thead>
           <tr>
             <th>Name</th><th>Status</th><th>Registered Node</th><th>IP Address</th>
-            <th>Model</th><th>Protocol</th><th>Source</th>
+            <th>Model</th><th>Protocol</th><th>Active Load</th><th>Download Status</th>
+            <th>Registration Attempts</th><th>Source</th>
           </tr>
         </thead>
         <tbody>
@@ -435,7 +476,7 @@ class HtmlReportBuilder:
       {_source_caption("Cluster", report)}
       <table>
         <tbody>
-          <tr><th>Name</th><td>{escape(cluster.name)}</td></tr>
+          <tr><th>Cluster Anchor</th><td>{escape(cluster.name)}</td></tr>
           <tr><th>Product</th><td>{escape(cluster.product)}</td></tr>
           <tr><th>Version</th><td>{escape(cluster.version)}</td></tr>
         </tbody>
@@ -546,7 +587,7 @@ class HtmlReportBuilder:
 
     def _registration_rows(self, report: AssessmentReport) -> str:
         if not report.facts.registrations:
-            return '<tr><td colspan="7">No device registration facts collected.</td></tr>'
+            return '<tr><td colspan="10">No device registration facts collected.</td></tr>'
 
         return "\n".join(
             (
@@ -557,6 +598,9 @@ class HtmlReportBuilder:
                 f"<td>{escape(display_text(registration.ip_address))}</td>"
                 f"<td>{escape(display_text(registration.model))}</td>"
                 f"<td>{escape(display_text(registration.protocol))}</td>"
+                f"<td>{escape(display_text(registration.active_load))}</td>"
+                f"<td>{escape(display_text(registration.download_status))}</td>"
+                f"<td>{escape(display_text(registration.registration_attempts))}</td>"
                 f"<td>{escape(display_source(registration.source))}</td>"
                 "</tr>"
             )
@@ -600,20 +644,38 @@ class HtmlReportBuilder:
 
     def _service_rows(self, report: AssessmentReport) -> str:
         if not report.facts.services:
-            return '<tr><td colspan="6">No service status facts collected.</td></tr>'
+            return '<tr><td colspan="8">No service status facts collected.</td></tr>'
 
         return "\n".join(
             (
                 "<tr>"
                 f"<td>{escape(service.node)}</td>"
                 f"<td>{escape(service.service_name)}</td>"
-                f"<td>{escape(display_bool(service.activated))}</td>"
+                f"<td>{escape(display_text(service.service_type))}</td>"
+                f"<td>{escape(display_text(service.group_name))}</td>"
                 f"<td>{escape(service.status)}</td>"
                 f"<td>{escape(display_duration(service.uptime_seconds))}</td>"
+                f"<td>{escape(display_text(service.reason))}</td>"
                 f"<td>{escape(display_source(service.source))}</td>"
                 "</tr>"
             )
             for service in report.facts.services
+        )
+
+    def _service_summary_rows(self, report: AssessmentReport) -> str:
+        if not report.facts.services:
+            return '<tr><td colspan="4">No service status facts collected.</td></tr>'
+        by_node: dict[str, Counter[str]] = {}
+        for service in report.facts.services:
+            by_node.setdefault(service.node, Counter())[service.status.strip().lower()] += 1
+        return "\n".join(
+            "<tr>"
+            f"<td>{escape(node)}</td>"
+            f"<td>{counts['started']}</td>"
+            f"<td>{counts['stopped']}</td>"
+            f"<td>{sum(counts.values())}</td>"
+            "</tr>"
+            for node, counts in sorted(by_node.items())
         )
 
     def _perf_counter_rows(self, report: AssessmentReport) -> str:
@@ -633,6 +695,55 @@ class HtmlReportBuilder:
                 "</tr>"
             )
             for counter in report.facts.perf_counters
+        )
+
+    def _perf_summary_rows(self, report: AssessmentReport) -> str:
+        preferred = {
+            "% CPU Time",
+            "% Mem Used",
+            "% VM Used",
+            "CallsActive",
+            "RegisteredHardwarePhones",
+        }
+        counters = [
+            counter for counter in report.facts.perf_counters
+            if counter.counter_name in preferred and counter.instance in {None, "_Total"}
+        ]
+        if not counters:
+            return '<tr><td colspan="4">No selected performance summary counters collected.</td></tr>'
+        return "\n".join(
+            "<tr>"
+            f"<td>{escape(counter.node)}</td>"
+            f"<td>{escape(counter.counter_name)}</td>"
+            f"<td>{escape(display_text(counter.value))}</td>"
+            f"<td>{counter.sample_count}</td>"
+            "</tr>"
+            for counter in sorted(counters, key=lambda item: (item.node, item.counter_name))
+        )
+
+    def _configuration_summary_rows(self, report: AssessmentReport) -> str:
+        if not report.facts.configuration_objects:
+            return '<tr><td colspan="2">No normalized configuration objects collected.</td></tr>'
+        counts = Counter(item.object_type for item in report.facts.configuration_objects)
+        return "\n".join(
+            f"<tr><td>{escape(object_type)}</td><td>{count}</td></tr>"
+            for object_type, count in sorted(counts.items())
+        )
+
+    def _configuration_rows(self, report: AssessmentReport) -> str:
+        if not report.facts.configuration_objects:
+            return '<tr><td colspan="4">No normalized configuration objects collected.</td></tr>'
+        return "\n".join(
+            "<tr>"
+            f"<td>{escape(item.object_type)}</td>"
+            f"<td>{escape(item.name)}</td>"
+            f"<td>{escape(display_details(item.details))}</td>"
+            f"<td>{escape(display_source(item.source))}</td>"
+            "</tr>"
+            for item in sorted(
+                report.facts.configuration_objects,
+                key=lambda fact: (fact.object_type, fact.name),
+            )
         )
 
     def _platform_check_rows(self, report: AssessmentReport) -> str:
@@ -985,7 +1096,7 @@ def _source_caption(section_name: str, report: AssessmentReport) -> str:
         "Cluster": "Source: AXL getCCMVersion and listProcessNode.",
         "Discovered Nodes": "Source: AXL listProcessNode.",
         "Device Inventory By Model": inventory_caption,
-        "Device Load Summary": "Source: AXL listPhone summary inventory and AXL listDeviceDefaults facts when available.",
+        "Device Load Summary": "Source: AXL listPhone summary inventory and AXL getDeviceDefaults facts when available.",
         "Detailed Device Inventory": detailed_inventory_caption,
     }
     collected_sections = {

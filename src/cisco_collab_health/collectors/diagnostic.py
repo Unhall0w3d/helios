@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
+from dataclasses import dataclass, replace
+from time import sleep as default_sleep
 from typing import Any, Iterator
 from xml.sax.saxutils import escape
 
@@ -39,10 +41,12 @@ class DiagnosticCaptureCollector:
         *,
         soap_client: SoapClient | None = None,
         http_client: CapturedHttpClient | None = None,
+        sleep: Callable[[float], None] = default_sleep,
     ) -> None:
         self.available_interfaces = frozenset(available_interfaces)
         self.soap_client = soap_client or SoapClient()
         self.http_client = http_client or CapturedHttpClient()
+        self.sleep = sleep
 
     def collect(self, context: CollectionContext) -> CollectionResult:
         facts = AssessmentFacts()
@@ -243,6 +247,7 @@ class DiagnosticCaptureCollector:
                 f"https://{node}:{context.control_center_port}"
                 "/controlcenterservice2/services/ControlCenterServices"
             )
+            catalog: dict[str, ServiceCatalogRecord] = {}
             for operation, body in operations:
                 response = self._capture_soap(
                     context,
@@ -254,8 +259,16 @@ class DiagnosticCaptureCollector:
                     evidence=evidence,
                     warnings=warnings,
                 )
+                if response is not None and operation == "getProductInformationList":
+                    catalog = {
+                        record.service_name.strip().lower(): record
+                        for record in _parse_service_catalog(response.body)
+                    }
                 if response is not None and operation == "soapGetServiceStatus":
-                    facts.services.extend(_parse_service_status(response.body, node))
+                    services = _parse_service_status(response.body, node)
+                    facts.services.extend(
+                        _enrich_service_status(service, catalog) for service in services
+                    )
 
     def _capture_perfmon(
         self,
@@ -288,29 +301,43 @@ class DiagnosticCaptureCollector:
             )
             if discovery is None:
                 continue
-            for object_name in baseline_objects:
-                artifact_operation = "perfmonCollectCounterData_" + _safe_operation(object_name)
-                body = (
-                    "<ast:perfmonCollectCounterData>"
-                    f"<ast:Host>{escaped_node}</ast:Host>"
-                    f"<ast:Object>{object_name}</ast:Object>"
-                    "</ast:perfmonCollectCounterData>"
-                )
-                response = self._capture_soap(
-                    context,
-                    node=node,
-                    endpoint=endpoint,
-                    interface="perfmon",
-                    operation="perfmonCollectCounterData",
-                    artifact_operation=artifact_operation,
-                    body=body,
-                    evidence=evidence,
-                    warnings=warnings,
-                )
-                if response is not None:
-                    facts.perf_counters.extend(
-                        _parse_perf_counters(response.body, node, object_name)
+            samples: dict[tuple[str, str, str | None], PerfCounterFact] = {}
+            for sample_number in (1, 2):
+                if sample_number > 1:
+                    self.sleep(1.0)
+                for object_name in baseline_objects:
+                    artifact_operation = (
+                        "perfmonCollectCounterData_"
+                        + _safe_operation(object_name)
+                        + f"_sample_{sample_number:03d}"
                     )
+                    body = (
+                        "<ast:perfmonCollectCounterData>"
+                        f"<ast:Host>{escaped_node}</ast:Host>"
+                        f"<ast:Object>{object_name}</ast:Object>"
+                        "</ast:perfmonCollectCounterData>"
+                    )
+                    response = self._capture_soap(
+                        context,
+                        node=node,
+                        endpoint=endpoint,
+                        interface="perfmon",
+                        operation="perfmonCollectCounterData",
+                        artifact_operation=artifact_operation,
+                        body=body,
+                        evidence=evidence,
+                        warnings=warnings,
+                    )
+                    if response is None:
+                        continue
+                    for counter in _parse_perf_counters(response.body, node, object_name):
+                        key = (counter.object_name, counter.counter_name, counter.instance)
+                        previous = samples.get(key)
+                        samples[key] = replace(
+                            counter,
+                            sample_count=(previous.sample_count if previous else 0) + 1,
+                        )
+            facts.perf_counters.extend(samples.values())
 
     def _capture_soap(
         self,
@@ -380,12 +407,35 @@ def _parse_risport_registrations(response_text: str) -> list[DeviceRegistrationF
                         ip_item = next(iter(_direct_children(ip_container, "item")), None)
                         if ip_item is not None:
                             ip_address = _child_text(ip_item, "IP")
-                    registrations.append(DeviceRegistrationFact(
-                        name=name, status=status, registered_node=node_name,
-                        ip_address=ip_address, model=_child_text(device, "Model"),
-                        protocol=_child_text(device, "Protocol"),
-                        source="RISPort70.selectCmDeviceExt",
-                    ))
+                    model_code = _child_text(device, "Model")
+                    registrations.append(
+                        DeviceRegistrationFact(
+                            name=name,
+                            status=status,
+                            registered_node=node_name,
+                            ip_address=ip_address,
+                            model=model_code,
+                            protocol=_child_text(device, "Protocol"),
+                            source="RISPort70.selectCmDeviceExt",
+                            runtime_model_code=model_code,
+                            device_class=_child_text(device, "DeviceClass"),
+                            active_load=_child_text(device, "ActiveLoadID"),
+                            inactive_load=_child_text(device, "InactiveLoadID"),
+                            download_status=_child_text(device, "DownloadStatus"),
+                            download_failure_reason=_child_text(
+                                device, "DownloadFailureReason"
+                            ),
+                            registration_attempts=_optional_int(
+                                _child_text(device, "RegistrationAttempts")
+                            ),
+                            status_reason=_child_text(device, "StatusReason"),
+                            directory_numbers=_directory_numbers(
+                                _child_text(device, "DirNumber")
+                            ),
+                            login_user_id=_child_text(device, "LoginUserId"),
+                            timestamp=_child_text(device, "TimeStamp"),
+                        )
+                    )
     return registrations
 
 
@@ -408,6 +458,9 @@ def _parse_service_status(response_text: str, node: str) -> list[ServiceStatusFa
             facts.append(ServiceStatusFact(
                 node=node, service_name=name, activated=None, status=status,
                 uptime_seconds=uptime, source="ControlCenter.soapGetServiceStatus",
+                start_time=_child_text(item, "StartTime"),
+                reason_code=_child_text(item, "ReasonCode"),
+                reason=_child_text(item, "ReasonCodeString") or _child_text(item, "ReasonString"),
             ))
     return facts
 
@@ -430,12 +483,103 @@ def _parse_perf_counters(response_text: str, node: str, object_name: str) -> lis
                 parsed_value = float(value)
             except ValueError:
                 parsed_value = value
-        facts.append(PerfCounterFact(
-            node=node, object_name=object_name, counter_name=name.split("\\")[-1],
-            instance=None, value=parsed_value, sample_count=1,
-            source="PerfMon.perfmonCollectCounterData",
-        ))
+        counter_name, instance = _perf_counter_identity(name, object_name)
+        facts.append(
+            PerfCounterFact(
+                node=node,
+                object_name=object_name,
+                counter_name=counter_name,
+                instance=instance,
+                value=parsed_value,
+                sample_count=1,
+                source="PerfMon.perfmonCollectCounterData",
+            )
+        )
     return facts
+
+
+@dataclass(frozen=True)
+class ServiceCatalogRecord:
+    service_name: str
+    service_type: str | None
+    group_name: str | None
+    product_id: str | None
+    deployable: bool | None
+    dependent_services: tuple[str, ...]
+
+
+def _parse_service_catalog(response_text: str) -> list[ServiceCatalogRecord]:
+    root = _xml_root(response_text)
+    if root is None:
+        return []
+    records = []
+    for container in _elements(root, "Services"):
+        for item in _direct_children(container, "item"):
+            name = _child_text(item, "ServiceName")
+            if not name:
+                continue
+            dependent_services = tuple(
+                service.text.strip()
+                for dependent in _direct_children(item, "DependentServices")
+                for service in _direct_children(dependent, "Service")
+                if service.text and service.text.strip()
+            )
+            deployable_text = (_child_text(item, "Deployable") or "").lower()
+            records.append(
+                ServiceCatalogRecord(
+                    service_name=name,
+                    service_type=_child_text(item, "ServiceType"),
+                    group_name=_child_text(item, "GroupName"),
+                    product_id=_child_text(item, "ProductID"),
+                    deployable=(
+                        True if deployable_text == "true" else False if deployable_text == "false" else None
+                    ),
+                    dependent_services=dependent_services,
+                )
+            )
+    return records
+
+
+def _enrich_service_status(
+    service: ServiceStatusFact,
+    catalog: dict[str, ServiceCatalogRecord],
+) -> ServiceStatusFact:
+    record = catalog.get(service.service_name.strip().lower())
+    if record is None:
+        return service
+    return replace(
+        service,
+        service_type=record.service_type,
+        group_name=record.group_name,
+        product_id=record.product_id,
+        deployable=record.deployable,
+        dependent_services=record.dependent_services,
+    )
+
+
+def _optional_int(value: str | None) -> int | None:
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except ValueError:
+        return None
+
+
+def _directory_numbers(value: str | None) -> tuple[str, ...]:
+    if not value:
+        return ()
+    return tuple(part.strip() for part in value.split(",") if part.strip())
+
+
+def _perf_counter_identity(name: str, object_name: str) -> tuple[str, str | None]:
+    components = [component for component in name.split("\\") if component]
+    counter_name = components[-1] if components else name
+    object_component = components[-2] if len(components) > 1 else object_name
+    prefix = object_name + "("
+    if object_component.startswith(prefix) and object_component.endswith(")"):
+        return counter_name, object_component[len(prefix) : -1] or None
+    return counter_name, None
 
 
 def _xml_root(response_text: str) -> Any | None:
