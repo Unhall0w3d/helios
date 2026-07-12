@@ -190,7 +190,8 @@ def load_profile_names(config_dir: Path | None = None) -> list[str]:
 
 
 def load_profile_names_for_technology(
-    technology: str, config_dir: Path | None = None,
+    technology: str,
+    config_dir: Path | None = None,
 ) -> list[str]:
     """Return profiles owned by one technology; legacy profiles are CUCM."""
 
@@ -201,8 +202,10 @@ def load_profile_names_for_technology(
         payload = json.load(handle)
     ownership = payload.get("profile_technologies", {})
     return [
-        name for name in load_profile_names(config_dir)
-        if technology in (
+        name
+        for name in load_profile_names(config_dir)
+        if technology
+        in (
             ownership.get(name, "cucm")
             if isinstance(ownership.get(name, "cucm"), list)
             else [ownership.get(name, "cucm")]
@@ -235,7 +238,8 @@ def load_assessment_profiles(config_dir: Path | None = None) -> dict[str, Assess
 
 
 def save_assessment_profiles(
-    profiles: dict[str, AssessmentProfile], config_dir: Path | None = None,
+    profiles: dict[str, AssessmentProfile],
+    config_dir: Path | None = None,
 ) -> Path:
     """Persist assessment composition while leaving all secrets in target profiles."""
 
@@ -262,10 +266,15 @@ def save_assessment_profiles(
 
 
 def resolve_assessment_targets(
-    assessment: AssessmentProfile, *, reset: bool = False, save_credentials: bool = True,
-    config_dir: Path | None = None, input_func: Callable[[str], str] = input,
+    assessment: AssessmentProfile,
+    *,
+    reset: bool = False,
+    save_credentials: bool = True,
+    config_dir: Path | None = None,
+    input_func: Callable[[str], str] = input,
     getpass_func: Callable[[str], str] = getpass.getpass,
-    credential_store: CredentialStore | None = None, use_system_keyring: bool = True,
+    credential_store: CredentialStore | None = None,
+    use_system_keyring: bool = True,
 ) -> list[tuple[AssessmentTarget, RuntimeProfile]]:
     """Resolve each target independently, prompting only for its missing credentials."""
 
@@ -273,10 +282,15 @@ def resolve_assessment_targets(
         (
             target,
             ensure_runtime_profile(
-                target.connection_profile, reset=reset, save_credentials=save_credentials,
+                target.connection_profile,
+                reset=reset,
+                save_credentials=save_credentials,
                 technology=target.technology,
-                config_dir=config_dir, input_func=input_func, getpass_func=getpass_func,
-                credential_store=credential_store, use_system_keyring=use_system_keyring,
+                config_dir=config_dir,
+                input_func=input_func,
+                getpass_func=getpass_func,
+                credential_store=credential_store,
+                use_system_keyring=use_system_keyring,
             ),
         )
         for target in assessment.targets
@@ -305,7 +319,9 @@ def save_profile_names(profile_names: list[str], config_dir: Path | None = None)
 
 
 def register_profile_name(
-    profile_name: str, config_dir: Path | None = None, technology: str = "cucm",
+    profile_name: str,
+    config_dir: Path | None = None,
+    technology: str = "cucm",
 ) -> None:
     """Add a profile name to the local registry."""
 
@@ -327,12 +343,148 @@ def register_profile_name(
 
 
 def unregister_profile_name(profile_name: str, config_dir: Path | None = None) -> None:
-    """Remove a profile name from the local registry."""
+    """Remove a profile name and its ownership metadata from the registry."""
 
-    save_profile_names(
-        [name for name in load_profile_names(config_dir) if name != profile_name],
-        config_dir,
-    )
+    path = profile_config_path(config_dir)
+    if not path.exists():
+        return
+    with path.open("r", encoding="utf-8") as handle:
+        payload = json.load(handle)
+
+    payload["profile_names"] = [
+        name for name in payload.get("profile_names", []) if name != profile_name
+    ]
+    profiles = payload.get("profiles")
+    if isinstance(profiles, dict):
+        profiles.pop(profile_name, None)
+    ownership = payload.get("profile_technologies")
+    if isinstance(ownership, dict):
+        ownership.pop(profile_name, None)
+
+    with path.open("w", encoding="utf-8") as handle:
+        json.dump(payload, handle, indent=2, sort_keys=True)
+        handle.write("\n")
+
+
+def delete_connection_profile(
+    profile_name: str,
+    *,
+    config_dir: Path | None = None,
+    credential_store: CredentialStore | None = None,
+    use_system_keyring: bool = True,
+) -> list[str]:
+    """Delete a connection profile and remove saved assessments that reference it."""
+
+    store = credential_store
+    if store is None and use_system_keyring:
+        store = load_keyring()
+    delete_profile_credentials(profile_name, store)
+
+    removed_assessments: list[str] = []
+    path = profile_config_path(config_dir)
+    if path.exists():
+        with path.open("r", encoding="utf-8") as handle:
+            payload = json.load(handle)
+        assessments = payload.get("assessment_profiles")
+        if isinstance(assessments, dict):
+            for name, assessment in list(assessments.items()):
+                targets = assessment.get("targets", []) if isinstance(assessment, dict) else []
+                if any(
+                    isinstance(target, dict) and target.get("connection_profile") == profile_name
+                    for target in targets
+                ):
+                    assessments.pop(name, None)
+                    removed_assessments.append(name)
+        with path.open("w", encoding="utf-8") as handle:
+            json.dump(payload, handle, indent=2, sort_keys=True)
+            handle.write("\n")
+
+    unregister_profile_name(profile_name, config_dir)
+    return sorted(removed_assessments)
+
+
+def load_connection_profile_details(
+    profile_name: str,
+    *,
+    config_dir: Path | None = None,
+    credential_store: CredentialStore | None = None,
+    use_system_keyring: bool = True,
+) -> dict[str, StoredProfile]:
+    """Return non-secret details for every technology in a connection profile.
+
+    Passwords deliberately remain in the credential store and are never returned.
+    """
+
+    details: dict[str, StoredProfile] = {}
+    stored = load_profiles(config_dir).get(profile_name)
+    if stored is not None:
+        details[stored.technology] = stored
+
+    store = credential_store if credential_store is not None else None
+    if store is None and use_system_keyring:
+        store = load_keyring()
+    if store is None:
+        return details
+    try:
+        raw_payload = store.get_password(KEYRING_SERVICE, profile_secret_key(profile_name))
+        payload = json.loads(raw_payload) if raw_payload else {}
+    except (Exception,):
+        return details
+    if not isinstance(payload, dict):
+        return details
+
+    sections = payload.get("technology_profiles")
+    if not isinstance(sections, dict):
+        sections = {"cucm": payload}
+    for technology, data in sections.items():
+        if technology not in SUPPORTED_TECHNOLOGIES or not isinstance(data, dict):
+            continue
+        required = ("publisher_input", "publisher_ip", "gui_username")
+        if any(not str(data.get(field) or "").strip() for field in required):
+            continue
+        details[technology] = StoredProfile(
+            name=profile_name,
+            publisher_input=str(data["publisher_input"]),
+            publisher_ip=str(data["publisher_ip"]),
+            gui_username=str(data["gui_username"]),
+            os_username=str(data.get("os_username") or ""),
+            technology=technology,
+        )
+    return details
+
+
+def edit_connection_profile(
+    profile_name: str,
+    *,
+    technology: str = "cucm",
+    save_credentials: bool = True,
+    config_dir: Path | None = None,
+    input_func: Callable[[str], str] = input,
+    getpass_func: Callable[[str], str] = getpass.getpass,
+    credential_store: CredentialStore | None = None,
+    use_system_keyring: bool = True,
+) -> RuntimeProfile:
+    """Replace one technology's connection details, preserving other sections."""
+
+    if technology not in SUPPORTED_TECHNOLOGIES:
+        raise ValueError(f"Unsupported profile technology: {technology}")
+    runtime = prompt_for_profile(profile_name, technology, input_func, getpass_func)
+    store = credential_store if credential_store is not None else None
+    if store is None and use_system_keyring:
+        store = load_keyring()
+    if store is not None:
+        runtime = _store_or_warn(runtime, store, save_credentials)
+        if save_credentials and not any(
+            "Unable to store encrypted profile" in warning for warning in runtime.warnings
+        ):
+            register_profile_name(profile_name, config_dir, technology)
+        return runtime
+
+    profiles = load_profiles(config_dir)
+    profiles[profile_name] = runtime.stored
+    save_profiles(profiles, config_dir)
+    register_profile_name(profile_name, config_dir, technology)
+    return _store_or_warn(runtime, None, save_credentials)
 
 
 def save_profiles(profiles: dict[str, StoredProfile], config_dir: Path | None = None) -> Path:
@@ -343,13 +495,9 @@ def save_profiles(profiles: dict[str, StoredProfile], config_dir: Path | None = 
     payload = {
         "profile_names": sorted(set(load_profile_names(config_dir)) | set(profiles)),
         "profiles": {
-            name: {
-                key: value
-                for key, value in asdict(profile).items()
-                if key != "name"
-            }
+            name: {key: value for key, value in asdict(profile).items() if key != "name"}
             for name, profile in sorted(profiles.items())
-        }
+        },
     }
     with path.open("w", encoding="utf-8") as handle:
         json.dump(payload, handle, indent=2, sort_keys=True)
@@ -409,9 +557,9 @@ def prompt_for_profile_name(
         return ProfileSelection(_prompt_new_profile_name(existing_names, input_func, output_func))
 
     while True:
-        choice = input_func(
-            "Existing profile found. Load existing profile? (Y/N): "
-        ).strip().lower()
+        choice = (
+            input_func("Existing profile found. Load existing profile? (Y/N): ").strip().lower()
+        )
         if choice == "n":
             return ProfileSelection(
                 _prompt_new_profile_name(existing_names, input_func, output_func)
@@ -468,7 +616,9 @@ def prompt_for_profile(
     """Prompt for profile values and return a runtime profile."""
 
     label = "CUCM" if technology == "cucm" else "Unity Connection"
-    publisher_prompt = "Publisher IP or FQDN: " if technology == "cucm" else f"{label} Publisher IP or FQDN: "
+    publisher_prompt = (
+        "Publisher IP or FQDN: " if technology == "cucm" else f"{label} Publisher IP or FQDN: "
+    )
     publisher_input = input_func(publisher_prompt).strip()
     publisher_ip = resolve_publisher(publisher_input)
     gui_username = input_func(f"{label} GUI/API username: ").strip()
@@ -524,8 +674,11 @@ def ensure_runtime_profile(
             unregister_profile_name(profile_name, config_dir)
 
         runtime = _load_runtime_profile_from_store(
-            profile_name, store, technology=technology,
-            input_func=input_func, getpass_func=getpass_func
+            profile_name,
+            store,
+            technology=technology,
+            input_func=input_func,
+            getpass_func=getpass_func,
         )
         if runtime is not None:
             return _store_or_warn(runtime, store, save_credentials)
@@ -585,7 +738,9 @@ def ensure_runtime_profile(
 
 
 def _reset_encrypted_technology_profile(
-    profile_name: str, technology: str, store: CredentialStore,
+    profile_name: str,
+    technology: str,
+    store: CredentialStore,
 ) -> None:
     """Remove one technology section while preserving other technology credentials."""
 
@@ -647,15 +802,29 @@ def _load_runtime_profile_from_store(
     if not payload:
         return None
 
-    data = json.loads(payload)
+    try:
+        data = json.loads(payload)
+    except (json.JSONDecodeError, TypeError):
+        return None
+    if not isinstance(data, dict):
+        return None
+
     technology_profiles = data.get("technology_profiles", {})
-    profile_data = technology_profiles.get(technology) if isinstance(technology_profiles, dict) else None
+    profile_data = (
+        technology_profiles.get(technology) if isinstance(technology_profiles, dict) else None
+    )
     if profile_data is None:
-        # Legacy top-level fields are the CUCM section. For another technology,
-        # deliberately prompt for its address and credentials rather than reuse them.
+        # Legacy top-level fields are CUCM only. Never reinterpret them as CUC.
         if technology != "cucm":
             return None
         profile_data = data
+    if not isinstance(profile_data, dict):
+        return None
+
+    required = ("publisher_input", "publisher_ip", "gui_username", "gui_password")
+    if any(not str(profile_data.get(field) or "").strip() for field in required):
+        return None
+
     platform_credentials_configured = profile_data.get("platform_credentials_configured") is True
     os_username = str(profile_data.get("os_username") or "").strip()
     os_password = str(profile_data.get("os_password") or "")
@@ -672,13 +841,13 @@ def _load_runtime_profile_from_store(
     return RuntimeProfile(
         stored=StoredProfile(
             name=profile_name,
-            publisher_input=profile_data["publisher_input"],
-            publisher_ip=profile_data["publisher_ip"],
-            gui_username=profile_data["gui_username"],
+            publisher_input=str(profile_data["publisher_input"]),
+            publisher_ip=str(profile_data["publisher_ip"]),
+            gui_username=str(profile_data["gui_username"]),
             os_username=os_username,
             technology=technology,
         ),
-        gui_password=profile_data["gui_password"],
+        gui_password=str(profile_data["gui_password"]),
         os_password=os_password,
         technology=technology,
         warnings=list(dict.fromkeys(warnings)),
@@ -718,8 +887,11 @@ def _store_or_warn(
             "Credential saving disabled; passwords will be requested again on future runs."
         )
         return RuntimeProfile(
-            runtime.stored, runtime.gui_password, runtime.os_password,
-            runtime.technology, warnings,
+            runtime.stored,
+            runtime.gui_password,
+            runtime.os_password,
+            runtime.technology,
+            warnings,
         )
 
     if store is None:
@@ -728,8 +900,11 @@ def _store_or_warn(
             "Passwords will be requested again."
         )
         return RuntimeProfile(
-            runtime.stored, runtime.gui_password, runtime.os_password,
-            runtime.technology, warnings,
+            runtime.stored,
+            runtime.gui_password,
+            runtime.os_password,
+            runtime.technology,
+            warnings,
         )
 
     section = {
@@ -756,19 +931,26 @@ def _store_or_warn(
         if runtime.technology == "cucm":
             existing_payload.update(section)
         store.set_password(
-            KEYRING_SERVICE, profile_key, json.dumps(existing_payload, sort_keys=True),
+            KEYRING_SERVICE,
+            profile_key,
+            json.dumps(existing_payload, sort_keys=True),
         )
     except Exception as exc:
         warnings.append(f"Unable to store encrypted profile in keyring: {exc}")
 
     return RuntimeProfile(
-        runtime.stored, runtime.gui_password, runtime.os_password,
-        runtime.technology, warnings,
+        runtime.stored,
+        runtime.gui_password,
+        runtime.os_password,
+        runtime.technology,
+        warnings,
     )
 
 
 def update_runtime_gui_credentials(
-    runtime: RuntimeProfile, username: str, password: str,
+    runtime: RuntimeProfile,
+    username: str,
+    password: str,
     store: CredentialStore | None,
 ) -> RuntimeProfile:
     """Persist credentials re-entered after an authenticated API failure."""

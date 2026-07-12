@@ -10,7 +10,10 @@ from cisco_collab_health.config import (
     AssessmentProfile,
     AssessmentTarget,
     KEYRING_SERVICE,
+    delete_connection_profile,
+    edit_connection_profile,
     ensure_runtime_profile,
+    load_connection_profile_details,
     load_profile_names,
     load_profile_names_for_technology,
     load_profiles,
@@ -39,10 +42,13 @@ class FakeCredentialStore:
 
 class ConfigTests(unittest.TestCase):
     def test_multi_technology_assessment_profile_round_trips_without_secrets(self) -> None:
-        assessment = AssessmentProfile("district", (
-            AssessmentTarget("call-control", "cucm", "YorktownCSD"),
-            AssessmentTarget("voicemail", "cuc", "YorktownCUC"),
-        ))
+        assessment = AssessmentProfile(
+            "district",
+            (
+                AssessmentTarget("call-control", "cucm", "YorktownCSD"),
+                AssessmentTarget("voicemail", "cuc", "YorktownCUC"),
+            ),
+        )
 
         with tempfile.TemporaryDirectory() as tmpdir:
             config_dir = Path(tmpdir)
@@ -55,10 +61,13 @@ class ConfigTests(unittest.TestCase):
 
     def test_assessment_profile_rejects_duplicate_target_ids(self) -> None:
         with self.assertRaises(ValueError):
-            AssessmentProfile("invalid", (
-                AssessmentTarget("primary", "cucm", "one"),
-                AssessmentTarget("PRIMARY", "cuc", "two"),
-            ))
+            AssessmentProfile(
+                "invalid",
+                (
+                    AssessmentTarget("primary", "cucm", "one"),
+                    AssessmentTarget("PRIMARY", "cuc", "two"),
+                ),
+            )
 
     def test_ip_publisher_is_accepted_without_resolution(self) -> None:
         self.assertEqual(resolve_publisher("192.0.2.10"), "192.0.2.10")
@@ -121,8 +130,11 @@ class ConfigTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmpdir:
             runtime = ensure_runtime_profile(
-                "lab", config_dir=Path(tmpdir), input_func=lambda prompt: "osreader",
-                getpass_func=lambda prompt: "os-secret", credential_store=store,
+                "lab",
+                config_dir=Path(tmpdir),
+                input_func=lambda prompt: "osreader",
+                getpass_func=lambda prompt: "os-secret",
+                credential_store=store,
             )
 
         self.assertEqual(runtime.stored.os_username, "osreader")
@@ -135,7 +147,8 @@ class ConfigTests(unittest.TestCase):
     def test_legacy_profile_can_add_cuc_section_without_overwriting_cucm(self) -> None:
         store = FakeCredentialStore()
         store.set_password(
-            KEYRING_SERVICE, profile_secret_key("YorktownCSD"),
+            KEYRING_SERVICE,
+            profile_secret_key("YorktownCSD"),
             '{"publisher_input":"10.0.0.8","publisher_ip":"10.0.0.8",'
             '"gui_username":"cucm-api","gui_password":"cucm-secret",'
             '"os_username":"cucm-platform","os_password":"cucm-os",'
@@ -146,9 +159,12 @@ class ConfigTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmpdir:
             runtime = ensure_runtime_profile(
-                "YorktownCSD", technology="cuc", config_dir=Path(tmpdir),
+                "YorktownCSD",
+                technology="cuc",
+                config_dir=Path(tmpdir),
                 input_func=lambda prompt: next(inputs),
-            getpass_func=lambda prompt: next(passwords), credential_store=store,
+                getpass_func=lambda prompt: next(passwords),
+                credential_store=store,
             )
         payload = store.get_password(KEYRING_SERVICE, profile_secret_key("YorktownCSD")) or ""
 
@@ -160,17 +176,21 @@ class ConfigTests(unittest.TestCase):
     def test_reset_cuc_section_preserves_cucm_section(self) -> None:
         store = FakeCredentialStore()
         store.set_password(
-            KEYRING_SERVICE, profile_secret_key("shared"),
+            KEYRING_SERVICE,
+            profile_secret_key("shared"),
             '{"gui_username":"cucm","gui_password":"one",'
             '"technology_profiles":{"cucm":{"gui_password":"one"},'
             '"cuc":{"gui_password":"two"}}}',
         )
         with tempfile.TemporaryDirectory() as tmpdir:
             ensure_runtime_profile(
-                "shared", technology="cuc", reset_technology=True,
+                "shared",
+                technology="cuc",
+                reset_technology=True,
                 config_dir=Path(tmpdir),
                 input_func=lambda prompt: "10.0.0.20" if "FQDN" in prompt else "cuc-user",
-                getpass_func=lambda prompt: "secret", credential_store=store,
+                getpass_func=lambda prompt: "secret",
+                credential_store=store,
             )
         payload = store.get_password(KEYRING_SERVICE, profile_secret_key("shared")) or ""
         self.assertIn('"cucm"', payload)
@@ -189,8 +209,11 @@ class ConfigTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmpdir:
             runtime = ensure_runtime_profile(
-                "lab", config_dir=Path(tmpdir), input_func=lambda prompt: "platform-reader",
-                getpass_func=lambda prompt: "platform-secret", credential_store=store,
+                "lab",
+                config_dir=Path(tmpdir),
+                input_func=lambda prompt: "platform-reader",
+                getpass_func=lambda prompt: "platform-secret",
+                credential_store=store,
             )
 
         self.assertEqual(runtime.stored.os_username, "platform-reader")
@@ -328,6 +351,81 @@ class ConfigTests(unittest.TestCase):
 
         self.assertEqual(profiles["lab"].publisher_ip, "192.0.2.10")
         self.assertIn("Passwords will be requested again", runtime.warnings[0])
+
+    def test_profile_details_exclude_passwords_and_include_each_technology(self) -> None:
+        store = FakeCredentialStore()
+        store.set_password(
+            KEYRING_SERVICE,
+            profile_secret_key("district"),
+            '{"technology_profiles":{"cucm":{"publisher_input":"cucm.example",'
+            '"publisher_ip":"192.0.2.10","gui_username":"api",'
+            '"gui_password":"do-not-display","os_username":"platform",'
+            '"os_password":"also-secret"},"cuc":{"publisher_input":"cuc.example",'
+            '"publisher_ip":"192.0.2.11","gui_username":"cuc-api",'
+            '"gui_password":"do-not-display","os_username":"cuc-platform",'
+            '"os_password":"also-secret"}}}',
+        )
+
+        details = load_connection_profile_details(
+            "district",
+            credential_store=store,
+            use_system_keyring=False,
+        )
+
+        self.assertEqual(details["cucm"].publisher_ip, "192.0.2.10")
+        self.assertEqual(details["cuc"].gui_username, "cuc-api")
+        self.assertNotIn("password", repr(details).lower())
+
+    def test_editing_one_technology_preserves_other_encrypted_section(self) -> None:
+        store = FakeCredentialStore()
+        store.set_password(
+            KEYRING_SERVICE,
+            profile_secret_key("shared"),
+            '{"technology_profiles":{"cucm":{"publisher_input":"cucm.example",'
+            '"publisher_ip":"192.0.2.10","gui_username":"cucm-api",'
+            '"gui_password":"old-cucm","os_username":"cucm-os",'
+            '"os_password":"old-cucm-os","platform_credentials_configured":true},'
+            '"cuc":{"publisher_input":"cuc.example","publisher_ip":"192.0.2.11",'
+            '"gui_username":"old-cuc","gui_password":"old-cuc-secret",'
+            '"os_username":"old-cuc-os","os_password":"old-cuc-os-secret",'
+            '"platform_credentials_configured":true}}}',
+        )
+        inputs = iter(["192.0.2.12", "new-cuc", "new-cuc-os"])
+        passwords = iter(["new-cuc-secret", "new-cuc-os-secret"])
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            edit_connection_profile(
+                "shared",
+                technology="cuc",
+                config_dir=Path(tmpdir),
+                input_func=lambda prompt: next(inputs),
+                getpass_func=lambda prompt: next(passwords),
+                credential_store=store,
+            )
+
+        payload = store.get_password(KEYRING_SERVICE, profile_secret_key("shared")) or ""
+        self.assertIn('"gui_password": "old-cucm"', payload)
+        self.assertIn('"gui_password": "new-cuc-secret"', payload)
+
+    def test_deleting_profile_removes_assessments_that_reference_it(self) -> None:
+        store = FakeCredentialStore()
+        assessment = AssessmentProfile(
+            "district", (AssessmentTarget("call-control", "cucm", "shared"),)
+        )
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config_dir = Path(tmpdir)
+            register_profile_name("shared", config_dir)
+            save_assessment_profiles({"district": assessment}, config_dir)
+            removed = delete_connection_profile(
+                "shared",
+                config_dir=config_dir,
+                credential_store=store,
+                use_system_keyring=False,
+            )
+
+            self.assertEqual(load_profile_names(config_dir), [])
+            self.assertEqual(load_assessment_profiles(config_dir), {})
+        self.assertEqual(removed, ["district"])
 
 
 if __name__ == "__main__":

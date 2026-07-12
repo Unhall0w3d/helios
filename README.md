@@ -150,10 +150,11 @@ ccha --help
 
 Main menu options:
 
-- Load Profile
-- New Profile
-- Generate Report
-- TEMP Test Options
+- Guided assessment (CUCM, CUC, or both)
+- Run a saved multi-technology assessment
+- Run a single connection profile
+- Manage connection profiles
+- Test/framework options
 - Quit
 
 When a health assessment runs, AletheiaUC prints an Executive Summary in the
@@ -462,6 +463,15 @@ Running `./aletheiauc.py` with no arguments opens the guided workflow. It can:
 - Combine diagnostic capture and Downloads-folder review ZIP export into one
   recommended menu choice
 - Run a single technology profile when a consolidated assessment is not needed
+- Configure the same report, artifact, log, diagnostic, inventory, port, and TLS
+  settings available as command-line options before starting an assessment
+
+The **Manage connection profiles** menu lets you select a profile and view its
+non-secret address and username details, edit the full connection details for
+CUCM or CUC (including replacement passwords), or delete it. Editing one
+technology preserves the other technology section of a shared profile.
+Passwords are never displayed. Deleting a profile also removes saved combined
+assessments that reference it, after explicit `DELETE` confirmation.
 
 This option affects HTML presentation only. Raw artifacts, troubleshooting
 logs, and normalized JSON remain private diagnostic output and can contain
@@ -503,6 +513,10 @@ Use `--reset-profile` to replace the saved profile:
 ```bash
 ./aletheiauc.py --reset-profile
 ```
+
+For an existing named profile, `--reset-technology cuc` re-prompts only for
+that technology's full connection details. The interactive equivalent is
+**Manage connection profiles → Edit connection details**.
 
 Use `--no-save-credentials` to avoid storing passwords for the current run:
 
