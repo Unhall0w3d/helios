@@ -430,7 +430,9 @@ and `utils service list`. Each output is retained as a command artifact for
 offline review. The shared UCOS SSH layer uses a PTY-backed interactive shell
 and waits for the `admin:` prompt after each command; it is intended for CUCM,
 CUC, IM&P, and CER collectors. SSH host keys must already be trusted by the
-local system; the collector deliberately does not accept unknown host keys.
+local system. On first connection to an assessment target, the collector stores
+the presented key in the user's `~/.ssh/known_hosts`; subsequent connections
+verify that saved key and fail if it changes.
 CUCM remains the default product. CUC Platform credentials are stored through
 the existing encrypted OS/SSH credential path for upcoming CLI collection.
 
