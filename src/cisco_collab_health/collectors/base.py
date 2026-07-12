@@ -68,7 +68,14 @@ class TargetPipelineCollector:
         target_context = self.target_context
         for collector in self.collectors:
             result = collector.collect(target_context)
-            facts.merge(result.facts)
+            tagged_facts = replace(
+                result.facts,
+                nodes=[
+                    replace(node, technology=self.technology, target_id=self.target_id)
+                    for node in result.facts.nodes
+                ],
+            )
+            facts.merge(tagged_facts)
             warnings.extend(f"{collector.name}: {item}" for item in result.warnings)
             errors.extend(result.errors)
             evidence.extend(result.evidence)
@@ -76,14 +83,19 @@ class TargetPipelineCollector:
             flags.extend(result.status_flags)
             target_context = replace(
                 target_context,
-                discovered_nodes=tuple(dict.fromkeys(
-                    node.address or node.name for node in facts.nodes
-                )),
-                discovered_device_names=tuple(dict.fromkeys(
-                    device.name for device in facts.devices if device.name
-                )),
+                discovered_nodes=tuple(
+                    dict.fromkeys(node.address or node.name for node in facts.nodes)
+                ),
+                discovered_device_names=tuple(
+                    dict.fromkeys(device.name for device in facts.devices if device.name)
+                ),
             )
         return CollectionResult(
-            collector_name=self.name, facts=facts, warnings=warnings, errors=errors,
-            evidence=evidence, notes=notes, status_flags=flags,
+            collector_name=self.name,
+            facts=facts,
+            warnings=warnings,
+            errors=errors,
+            evidence=evidence,
+            notes=notes,
+            status_flags=flags,
         )

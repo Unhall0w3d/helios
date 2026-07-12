@@ -24,6 +24,8 @@ class CollaborationNode:
     address: str
     role: str
     reachable: bool | None = None
+    technology: str | None = None
+    target_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -203,6 +205,8 @@ class AssessmentFacts:
             address=existing.address or node.address,
             role=_merge_role(existing.role, node.role),
             reachable=_merge_reachability(existing.reachable, node.reachable),
+            technology=existing.technology or node.technology,
+            target_id=existing.target_id or node.target_id,
         )
 
     def _node_index(self, node: CollaborationNode) -> int | None:

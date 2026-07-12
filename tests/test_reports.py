@@ -14,6 +14,7 @@ from cisco_collab_health.models.assessment import AssessmentReport
 from cisco_collab_health.models.facts import (
     AssessmentFacts,
     ClusterIdentity,
+    CollaborationNode,
     DeviceInventoryFact,
     DeviceLoadDefaultFact,
     DeviceRegistrationFact,
@@ -55,14 +56,25 @@ class ReportBuilderTests(unittest.TestCase):
 
     def test_multi_target_scope_is_visible_in_html_and_summary(self) -> None:
         report = AssessmentReport(
-            facts=self.report.facts, collector_results=self.report.collector_results,
+            facts=self.report.facts,
+            collector_results=self.report.collector_results,
             findings=self.report.findings,
-            runtime_metadata={"targets": [
-                {"target_id": "call-control", "technology": "cucm",
-                 "address": "192.0.2.10", "connection_profile": "cucm-lab"},
-                {"target_id": "voicemail", "technology": "cuc",
-                 "address": "192.0.2.20", "connection_profile": "cuc-lab"},
-            ]},
+            runtime_metadata={
+                "targets": [
+                    {
+                        "target_id": "call-control",
+                        "technology": "cucm",
+                        "address": "192.0.2.10",
+                        "connection_profile": "cucm-lab",
+                    },
+                    {
+                        "target_id": "voicemail",
+                        "technology": "cuc",
+                        "address": "192.0.2.20",
+                        "connection_profile": "cuc-lab",
+                    },
+                ]
+            },
         )
 
         html = HtmlReportBuilder().build(report)
@@ -132,6 +144,25 @@ class ReportBuilderTests(unittest.TestCase):
         self.assertIn("Call Manager Group", payload)
         self.assertIn("Region", payload)
 
+    def test_node_rows_put_publishers_first_within_each_technology(self) -> None:
+        report = AssessmentReport(
+            facts=AssessmentFacts(
+                nodes=[
+                    CollaborationNode("cucm-sub", "192.0.2.12", "subscriber", technology="cucm"),
+                    CollaborationNode("cuc-pub", "192.0.2.21", "publisher", technology="cuc"),
+                    CollaborationNode("cucm-pub", "192.0.2.11", "publisher", technology="cucm"),
+                    CollaborationNode("cuc-sub", "192.0.2.22", "subscriber", technology="cuc"),
+                ]
+            ),
+            collector_results=[],
+            findings=[],
+        )
+
+        html = HtmlReportBuilder().build(report)
+
+        self.assertLess(html.index("cuc-pub"), html.index("cuc-sub"))
+        self.assertLess(html.index("cucm-pub"), html.index("cucm-sub"))
+
     def test_html_report_puts_summaries_before_detailed_device_tables(self) -> None:
         payload = HtmlReportBuilder().build(self.report)
 
@@ -182,21 +213,35 @@ class ReportBuilderTests(unittest.TestCase):
         facts = AssessmentFacts(
             devices=[
                 DeviceInventoryFact(
-                    name="SEP000000000001", description=None, model="Cisco 8845",
-                    protocol="SIP", device_pool="Default", call_manager_group=None,
-                    location=None, region=None, configured_load="sip8845.pilot", source="fixture",
+                    name="SEP000000000001",
+                    description=None,
+                    model="Cisco 8845",
+                    protocol="SIP",
+                    device_pool="Default",
+                    call_manager_group=None,
+                    location=None,
+                    region=None,
+                    configured_load="sip8845.pilot",
+                    source="fixture",
                 )
             ],
             device_load_defaults=[
                 DeviceLoadDefaultFact(
-                    model="Cisco 8845", protocol="SIP", default_load="sip8845.default",
+                    model="Cisco 8845",
+                    protocol="SIP",
+                    default_load="sip8845.default",
                     source="fixture",
                 )
             ],
             registrations=[
                 DeviceRegistrationFact(
-                    name="SEP000000000001", status="registered", registered_node="pub",
-                    ip_address=None, model="Cisco 8845", protocol="SIP", source="fixture",
+                    name="SEP000000000001",
+                    status="registered",
+                    registered_node="pub",
+                    ip_address=None,
+                    model="Cisco 8845",
+                    protocol="SIP",
+                    source="fixture",
                     active_load="sip8845.pilot",
                 )
             ],
@@ -213,32 +258,59 @@ class ReportBuilderTests(unittest.TestCase):
         facts = AssessmentFacts(
             devices=[
                 DeviceInventoryFact(
-                    name="SEP1", description=None, model="Cisco 7841", protocol="SIP",
-                    device_pool=None, call_manager_group=None, location=None, region=None,
-                    configured_load=None, source="fixture",
+                    name="SEP1",
+                    description=None,
+                    model="Cisco 7841",
+                    protocol="SIP",
+                    device_pool=None,
+                    call_manager_group=None,
+                    location=None,
+                    region=None,
+                    configured_load=None,
+                    source="fixture",
                 ),
                 DeviceInventoryFact(
-                    name="CTI1", description=None, model="CTI Port", protocol="SCCP",
-                    device_pool=None, call_manager_group=None, location=None, region=None,
-                    configured_load=None, source="fixture",
+                    name="CTI1",
+                    description=None,
+                    model="CTI Port",
+                    protocol="SCCP",
+                    device_pool=None,
+                    call_manager_group=None,
+                    location=None,
+                    region=None,
+                    configured_load=None,
+                    source="fixture",
                 ),
             ],
             device_load_defaults=[
                 DeviceLoadDefaultFact(
-                    model="Cisco 7841", protocol="SIP", default_load="sip78.current",
+                    model="Cisco 7841",
+                    protocol="SIP",
+                    default_load="sip78.current",
                     source="fixture",
                 )
             ],
             registrations=[
                 DeviceRegistrationFact(
-                    name="SEP1", status="registered", registered_node="sub1", ip_address=None,
-                    model="Cisco 7841", protocol="SIP", source="fixture",
-                    active_load="sip78.old", download_status="Failed",
+                    name="SEP1",
+                    status="registered",
+                    registered_node="sub1",
+                    ip_address=None,
+                    model="Cisco 7841",
+                    protocol="SIP",
+                    source="fixture",
+                    active_load="sip78.old",
+                    download_status="Failed",
                     download_failure_reason="No Tftp server set",
                 ),
                 DeviceRegistrationFact(
-                    name="CTI1", status="registered", registered_node="sub1", ip_address=None,
-                    model="CTI Port", protocol="SCCP", source="fixture",
+                    name="CTI1",
+                    status="registered",
+                    registered_node="sub1",
+                    ip_address=None,
+                    model="CTI Port",
+                    protocol="SCCP",
+                    source="fixture",
                 ),
             ],
         )

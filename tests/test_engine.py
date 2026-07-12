@@ -61,10 +61,13 @@ class AssessmentEngineTests(unittest.TestCase):
     def test_target_pipeline_keeps_discovery_inside_target_context(self) -> None:
         recorder = ContextRecordingCollector()
         pipeline = TargetPipelineCollector(
-            target_id="call-control", technology="cucm",
+            target_id="call-control",
+            technology="cucm",
             collectors=(NodeCollector(), recorder),
             target_context=CollectionContext(
-                product="cucm", publisher_ip="192.0.2.10", gui_username="cucm-admin",
+                product="cucm",
+                publisher_ip="192.0.2.10",
+                gui_username="cucm-admin",
             ),
         )
 
@@ -73,6 +76,8 @@ class AssessmentEngineTests(unittest.TestCase):
         self.assertEqual(result.collector_name, "call-control[cucm]")
         self.assertEqual(recorder.discovered_nodes, ("192.0.2.10",))
         self.assertEqual(len(result.facts.nodes), 1)
+        self.assertEqual(result.facts.nodes[0].technology, "cucm")
+        self.assertEqual(result.facts.nodes[0].target_id, "call-control")
 
     def test_sample_assessment_runs_end_to_end(self) -> None:
         engine = AssessmentEngine(

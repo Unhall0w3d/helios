@@ -7,7 +7,11 @@ from hashlib import sha256
 from html import escape
 
 from cisco_collab_health.models.assessment import AssessmentReport
-from cisco_collab_health.models.facts import CertificateFact, DeviceInventoryFact, DeviceRegistrationFact
+from cisco_collab_health.models.facts import (
+    CertificateFact,
+    DeviceInventoryFact,
+    DeviceRegistrationFact,
+)
 from cisco_collab_health.models.findings import FindingSeverity, HealthFinding
 from cisco_collab_health.reports.coverage import build_report_coverage
 from cisco_collab_health.reports.formatting import (
@@ -35,9 +39,7 @@ class HtmlReportBuilder:
         collector_issue_count = sum(
             len(result.warnings) + len(result.errors) for result in report.collector_results
         )
-        collector_evidence_count = sum(
-            len(result.evidence) for result in report.collector_results
-        )
+        collector_evidence_count = sum(len(result.evidence) for result in report.collector_results)
         methodology_scope_section = self._methodology_scope_section(report)
         target_scope_section = self._target_scope_section(report)
         cluster_section = self._cluster_section(report)
@@ -47,7 +49,7 @@ class HtmlReportBuilder:
         device_load_rows = self._device_load_summary_rows(report)
         device_load_note = (
             '<p class="meta">Device load defaults were unavailable; static overrides remain '
-            'identifiable, but default comparison is unavailable.</p>'
+            "identifiable, but default comparison is unavailable.</p>"
             if report.facts.devices and not report.facts.device_load_defaults
             else ""
         )
@@ -80,9 +82,7 @@ class HtmlReportBuilder:
         collector_issues_section = self._collector_issues_section(report)
         collector_notes_section = self._collector_notes_section(report)
         collector_evidence_section = self._collector_evidence_section(report)
-        finding_sections = "\n".join(
-            self._finding_section(finding) for finding in report.findings
-        )
+        finding_sections = "\n".join(self._finding_section(finding) for finding in report.findings)
         if not finding_sections:
             finding_sections = "<p>No findings generated.</p>"
 
@@ -251,7 +251,7 @@ class HtmlReportBuilder:
       <h2>Discovered Nodes</h2>
       {_source_caption("Discovered Nodes", report)}
       <table>
-        <thead><tr><th>Name</th><th>Address</th><th>Role</th><th>Reachable</th></tr></thead>
+        <thead><tr><th>Technology</th><th>Name</th><th>Address</th><th>Role</th><th>Reachable</th></tr></thead>
         <tbody>
           {node_rows}
         </tbody>
@@ -522,9 +522,7 @@ class HtmlReportBuilder:
         collector_issue_count = sum(
             len(result.warnings) + len(result.errors) for result in report.collector_results
         )
-        collector_evidence_count = sum(
-            len(result.evidence) for result in report.collector_results
-        )
+        collector_evidence_count = sum(len(result.evidence) for result in report.collector_results)
         sample_mode = _is_sample_report(report)
         metadata = report.runtime_metadata
         synthetic_notice = ""
@@ -558,14 +556,19 @@ class HtmlReportBuilder:
             ),
             ("Artifacts enabled", "Yes" if metadata.get("artifacts_enabled") else "No"),
             ("Artifact redaction mode", display_text(metadata.get("artifact_redaction"))),
-            ("TLS verification mode", "Enabled" if metadata.get("tls_verification") else "Disabled"),
-            ("Phone inventory scope", "Enabled" if metadata.get("phone_inventory_enabled") else "Skipped"),
+            (
+                "TLS verification mode",
+                "Enabled" if metadata.get("tls_verification") else "Disabled",
+            ),
+            (
+                "Phone inventory scope",
+                "Enabled" if metadata.get("phone_inventory_enabled") else "Skipped",
+            ),
             ("Diagnostic capture", "Enabled" if metadata.get("diagnostic_capture") else "Disabled"),
             ("Customer-safe HTML", "Enabled" if self.customer_safe else "Disabled"),
         ]
         rendered_rows = "".join(
-            f"<tr><th>{escape(name)}</th><td>{escape(value)}</td></tr>"
-            for name, value in rows
+            f"<tr><th>{escape(name)}</th><td>{escape(value)}</td></tr>" for name, value in rows
         )
         return f"""
     <section>
@@ -630,18 +633,27 @@ class HtmlReportBuilder:
 
     def _node_rows(self, report: AssessmentReport) -> str:
         if not report.facts.nodes:
-            return '<tr><td colspan="4">No nodes discovered.</td></tr>'
+            return '<tr><td colspan="5">No nodes discovered.</td></tr>'
 
         return "\n".join(
             (
                 "<tr>"
+                f"<td>{escape(display_text(node.technology, empty='Single cluster').upper())}</td>"
                 f"<td>{escape(self._identifier(node.name, 'Node'))}</td>"
                 f"<td>{escape(self._identifier(node.address, 'Address'))}</td>"
                 f"<td>{escape(node.role)}</td>"
                 f"<td>{escape(display_bool(node.reachable))}</td>"
                 "</tr>"
             )
-            for node in report.facts.nodes
+            for node in sorted(
+                report.facts.nodes,
+                key=lambda item: (
+                    item.technology or "",
+                    item.role.strip().lower() != "publisher",
+                    item.name.lower(),
+                    item.address.lower(),
+                ),
+            )
         )
 
     def _device_rows(self, report: AssessmentReport) -> str:
@@ -711,8 +723,14 @@ class HtmlReportBuilder:
             model, protocol = key
             default_load = default_by_key.get(key)
             overrides = [device for device in devices if device.configured_load]
-            matching_count = sum(1 for device in overrides if _loads_equal(device.configured_load, default_load))
-            differing_count = sum(1 for device in overrides if default_load and not _loads_equal(device.configured_load, default_load))
+            matching_count = sum(
+                1 for device in overrides if _loads_equal(device.configured_load, default_load)
+            )
+            differing_count = sum(
+                1
+                for device in overrides
+                if default_load and not _loads_equal(device.configured_load, default_load)
+            )
             unknown_count = len(overrides) if not default_load else 0
             inherited_count = len(devices) - len(overrides)
             rows.append(
@@ -730,7 +748,8 @@ class HtmlReportBuilder:
     def _static_load_summary_rows(self, report: AssessmentReport) -> str:
         counts = Counter(
             (device.model or "Unknown model", device.protocol or "Unknown", device.configured_load)
-            for device in report.facts.devices if device.configured_load
+            for device in report.facts.devices
+            if device.configured_load
         )
         if not counts:
             return '<tr><td colspan="4">No static Phone Load overrides found.</td></tr>'
@@ -789,7 +808,9 @@ class HtmlReportBuilder:
                 model=registration.model,
                 protocol=registration.protocol,
             )
-            counts.setdefault(category, Counter())[_registration_status_bucket(registration.status)] += 1
+            counts.setdefault(category, Counter())[
+                _registration_status_bucket(registration.status)
+            ] += 1
 
         rows = []
         for category in ("Phones", "Gateways/endpoints", "SIP trunks"):
@@ -991,11 +1012,14 @@ class HtmlReportBuilder:
             "RegisteredHardwarePhones",
         }
         counters = [
-            counter for counter in report.facts.perf_counters
+            counter
+            for counter in report.facts.perf_counters
             if counter.counter_name in preferred and counter.instance in {None, "_Total"}
         ]
         if not counters:
-            return '<tr><td colspan="4">No selected performance summary counters collected.</td></tr>'
+            return (
+                '<tr><td colspan="4">No selected performance summary counters collected.</td></tr>'
+            )
         cpu_zero_only = _cpu_counters_are_zero_only(report)
         return "\n".join(
             "<tr>"
@@ -1012,8 +1036,8 @@ class HtmlReportBuilder:
             return ""
         return (
             '<p class="meta"><strong>CPU percentage unavailable:</strong> all collected CPU '
-            'percentage samples were zero. The raw counters are retained, but this report '
-            'does not interpret them as actual zero utilization.</p>'
+            "percentage samples were zero. The raw counters are retained, but this report "
+            "does not interpret them as actual zero utilization.</p>"
         )
 
     def _target_scope_section(self, report: AssessmentReport) -> str:
@@ -1025,7 +1049,9 @@ class HtmlReportBuilder:
             if not isinstance(target, dict):
                 continue
             address = "Omitted" if self.customer_safe else display_text(target.get("address"))
-            profile = "Omitted" if self.customer_safe else display_text(target.get("connection_profile"))
+            profile = (
+                "Omitted" if self.customer_safe else display_text(target.get("connection_profile"))
+            )
             rows.append(
                 "<tr>"
                 f"<td>{escape(display_text(target.get('target_id')))}</td>"
@@ -1035,10 +1061,11 @@ class HtmlReportBuilder:
             )
         return (
             "<section><h2>Assessment Targets</h2>"
-            "<p class=\"meta\">Each target uses an independent connection and credential profile.</p>"
-            "<div class=\"table-scroll\"><table><thead><tr><th>Target</th><th>Technology</th>"
+            '<p class="meta">Each target uses an independent connection and credential profile.</p>'
+            '<div class="table-scroll"><table><thead><tr><th>Target</th><th>Technology</th>'
             "<th>Address</th><th>Connection Profile</th></tr></thead><tbody>"
-            + "".join(rows) + "</tbody></table></div></section>"
+            + "".join(rows)
+            + "</tbody></table></div></section>"
         )
 
     def _configuration_summary_rows(self, report: AssessmentReport) -> str:
@@ -1052,8 +1079,14 @@ class HtmlReportBuilder:
 
     def _route_pattern_relationship_rows(self, report: AssessmentReport) -> str:
         if self.customer_safe:
-            return '<tr><td colspan="5">Dial-plan names omitted from customer-safe report.</td></tr>'
-        patterns = [item for item in report.facts.configuration_objects if item.object_type == "RoutePattern"]
+            return (
+                '<tr><td colspan="5">Dial-plan names omitted from customer-safe report.</td></tr>'
+            )
+        patterns = [
+            item
+            for item in report.facts.configuration_objects
+            if item.object_type == "RoutePattern"
+        ]
         if not patterns:
             return '<tr><td colspan="5">No route patterns collected.</td></tr>'
         return "\n".join(
@@ -1061,13 +1094,19 @@ class HtmlReportBuilder:
             f"<td>{escape(display_text(item.details.get('route_filter')))}</td>"
             f"<td>{escape(display_text(item.details.get('dial_plan')))}</td>"
             f"<td>{escape(display_text(item.details.get('destination'), empty='Relationship unavailable'))}</td></tr>"
-            for item in sorted(patterns, key=lambda item: (item.name, item.details.get("partition", "")))
+            for item in sorted(
+                patterns, key=lambda item: (item.name, item.details.get("partition", ""))
+            )
         )
 
     def _route_list_relationship_rows(self, report: AssessmentReport) -> str:
         if self.customer_safe:
-            return '<tr><td colspan="2">Route-list names omitted from customer-safe report.</td></tr>'
-        route_lists = [item for item in report.facts.configuration_objects if item.object_type == "RouteList"]
+            return (
+                '<tr><td colspan="2">Route-list names omitted from customer-safe report.</td></tr>'
+            )
+        route_lists = [
+            item for item in report.facts.configuration_objects if item.object_type == "RouteList"
+        ]
         if not route_lists:
             return '<tr><td colspan="2">No route lists collected.</td></tr>'
         return "\n".join(
@@ -1079,13 +1118,19 @@ class HtmlReportBuilder:
     def _css_partition_coverage_rows(self, report: AssessmentReport) -> str:
         if self.customer_safe:
             return '<tr><td colspan="3">CSS and partition names omitted from customer-safe report.</td></tr>'
-        css_items = [item for item in report.facts.configuration_objects if item.object_type == "Css"]
+        css_items = [
+            item for item in report.facts.configuration_objects if item.object_type == "Css"
+        ]
         if not css_items:
             return '<tr><td colspan="3">No calling search spaces collected.</td></tr>'
         rows = []
         for item in sorted(css_items, key=lambda item: item.name):
             partitions = item.details.get("partitions")
-            count = len([value for value in (partitions or "").split(",") if value.strip()]) if partitions else 0
+            count = (
+                len([value for value in (partitions or "").split(",") if value.strip()])
+                if partitions
+                else 0
+            )
             rows.append(
                 f"<tr><td>{escape(item.name)}</td>"
                 f"<td>{escape(display_text(partitions, empty='Membership unavailable'))}</td>"
@@ -1145,7 +1190,8 @@ class HtmlReportBuilder:
 
     def _certificate_rows(self, report: AssessmentReport) -> str:
         selected = [
-            item for item in report.facts.certificates
+            item
+            for item in report.facts.certificates
             if (item.days_remaining is not None and item.days_remaining <= 60)
         ]
         if not report.facts.certificates:
@@ -1154,7 +1200,12 @@ class HtmlReportBuilder:
             return '<tr><td colspan="10">No expired or 60-day certificates found.</td></tr>'
         grouped: dict[object, list[CertificateFact]] = {}
         for item in selected:
-            key = item.fingerprint_sha256 or (item.subject, item.serial_number, item.valid_until, item.name)
+            key = item.fingerprint_sha256 or (
+                item.subject,
+                item.serial_number,
+                item.valid_until,
+                item.name,
+            )
             grouped.setdefault(key, []).append(item)
         return "\n".join(
             "<tr>"
@@ -1227,14 +1278,11 @@ class HtmlReportBuilder:
                     else note
                 )
                 rows.append(
-                    "<tr>"
-                    f"<td>{escape(result.collector_name)}</td>"
-                    f"<td>{escape(note_text)}</td>"
-                    "</tr>"
+                    f"<tr><td>{escape(result.collector_name)}</td><td>{escape(note_text)}</td></tr>"
                 )
 
         if not rows:
-            body = '<p>No collector notes recorded.</p>'
+            body = "<p>No collector notes recorded.</p>"
         else:
             body = f"""
       <table>
@@ -1272,7 +1320,7 @@ class HtmlReportBuilder:
                 )
 
         if not rows:
-            body = '<p>No collector evidence references recorded.</p>'
+            body = "<p>No collector evidence references recorded.</p>"
         else:
             body = f"""
       <table>
@@ -1313,12 +1361,17 @@ class HtmlReportBuilder:
                 ("Configured inventory devices", reconciliation.inventory_count),
                 ("Runtime registration records", reconciliation.runtime_count),
                 ("Matched devices", len(reconciliation.matched_names)),
-                ("Inventory-only registration-capable/unclassified", len(reconciliation.registration_capable_or_unclassified)),
+                (
+                    "Inventory-only registration-capable/unclassified",
+                    len(reconciliation.registration_capable_or_unclassified),
+                ),
                 ("Known non-runtime inventory objects", len(reconciliation.known_non_runtime)),
                 ("Runtime-only devices", len(reconciliation.runtime_only)),
             )
         )
-        inventory_only_rows = self._inventory_only_rows(reconciliation.registration_capable_or_unclassified)
+        inventory_only_rows = self._inventory_only_rows(
+            reconciliation.registration_capable_or_unclassified
+        )
         inventory_model_rows = self._inventory_only_summary_rows(
             reconciliation.registration_capable_or_unclassified, "model"
         )
@@ -1391,7 +1444,9 @@ class HtmlReportBuilder:
 
     def _inventory_only_rows(self, devices: list[DeviceInventoryFact]) -> str:
         if not devices:
-            return '<tr><td colspan="6">No configured devices absent from the RIS response.</td></tr>'
+            return (
+                '<tr><td colspan="6">No configured devices absent from the RIS response.</td></tr>'
+            )
         if self.customer_safe:
             return '<tr><td colspan="6">Inventory-only identifiers omitted from customer-safe report.</td></tr>'
         return "\n".join(
@@ -1412,7 +1467,9 @@ class HtmlReportBuilder:
         self, devices: list[DeviceInventoryFact], attribute: str
     ) -> str:
         if self.customer_safe and attribute == "device_pool":
-            return '<tr><td colspan="2">Device-pool names omitted from customer-safe report.</td></tr>'
+            return (
+                '<tr><td colspan="2">Device-pool names omitted from customer-safe report.</td></tr>'
+            )
         counts = Counter(getattr(device, attribute) or "Unavailable" for device in devices)
         if not counts:
             return '<tr><td colspan="2">No inventory-only devices found.</td></tr>'
@@ -1431,9 +1488,7 @@ class HtmlReportBuilder:
         recommendation = ""
         if finding.recommendation:
             escaped_recommendation = escape(finding.recommendation)
-            recommendation = (
-                f"<p><strong>Recommendation:</strong> {escaped_recommendation}</p>"
-            )
+            recommendation = f"<p><strong>Recommendation:</strong> {escaped_recommendation}</p>"
         evidence = self._evidence_list(finding)
 
         return f"""
@@ -1605,7 +1660,8 @@ def _firmware_registrations(report: AssessmentReport) -> list[DeviceRegistration
                 or (
                     (device.model or "").strip().lower(),
                     (device.protocol or "").strip().lower(),
-                ) in default_keys
+                )
+                in default_keys
             )
         )
     ]
@@ -1632,7 +1688,11 @@ def _firmware_exceptions(
         )
         intended = device.configured_load or default
         failed = (registration.download_status or "").strip().lower() == "failed"
-        if failed or (registration.active_load and intended and not _loads_equal(registration.active_load, intended)):
+        if failed or (
+            registration.active_load
+            and intended
+            and not _loads_equal(registration.active_load, intended)
+        ):
             exceptions.append((registration, device, default))
     return exceptions
 
