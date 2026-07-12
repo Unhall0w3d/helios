@@ -86,6 +86,7 @@ class HtmlReportBuilder:
         methodology_scope_section = self._methodology_scope_section(report)
         target_scope_section = self._target_scope_section(report)
         cuc_inventory_section = self._cuc_inventory_section(report)
+        cuc_platform_section = self._cuc_platform_section(report)
         cluster_section = self._cluster_section(report)
         node_rows = self._node_rows(report)
         device_rows = self._device_rows(report)
@@ -517,6 +518,7 @@ class HtmlReportBuilder:
     {methodology_scope_section}
     {target_scope_section}
     {cuc_inventory_section}
+    {cuc_platform_section}
     {coverage_section}
     {cluster_section}
     <section>
@@ -1417,6 +1419,37 @@ class HtmlReportBuilder:
       </table>
     </section>
 """
+
+    def _cuc_platform_section(self, report: AssessmentReport) -> str:
+        checks = [item for item in report.facts.platform_checks if item.source == "CUC.UCOS.CLI"]
+        if not checks:
+            return ""
+        labels = {
+            "utils diagnose test": "Diagnostic tests",
+            "utils service list": "Services",
+            "show cuc cluster status": "Cluster replication",
+            "show network eth0 detail": "Ethernet 0",
+            "utils core active list": "Active core files",
+        }
+        rows = []
+        for check in checks:
+            if check.check_name not in labels:
+                continue
+            details = check.details
+            if check.check_name == "utils diagnose test":
+                summary = f"{details.get('passed', '0')} passed; {details.get('failed', '0')} failed; {details.get('skipped', '0')} skipped"
+            elif check.check_name == "utils service list":
+                summary = f"{details.get('started', '0')} started; {details.get('stopped', '0')} stopped; {details.get('not_activated', '0')} not activated"
+            elif check.check_name == "show cuc cluster status":
+                summary = f"{details.get('primary_nodes', '0')} primary; {details.get('secondary_nodes', '0')} secondary; {details.get('connected_peers', '0')} connected peers"
+            elif check.check_name == "show network eth0 detail":
+                summary = f"Link {details.get('link_status', 'unknown')}; duplicate IP {details.get('duplicate_ip', 'unknown')}"
+            else:
+                summary = "No core files found" if details.get("core_files") == "0" else "Core files present"
+            rows.append(f"<tr><td>{escape(labels[check.check_name])}</td><td>{escape(check.status)}</td><td>{escape(summary)}</td></tr>")
+        if not rows:
+            return ""
+        return "<section class=\"technology-section cuc-section\"><h2>Unity Connection Platform Health</h2><p class=\"meta\">Source: bounded UCOS diagnostic commands. Full output remains in the private engineering artifact bundle.</p><table><thead><tr><th>Check</th><th>Status</th><th>Summary</th></tr></thead><tbody>" + "".join(rows) + "</tbody></table></section>"
 
     def _configuration_summary_rows(self, report: AssessmentReport) -> str:
         if not report.facts.configuration_objects:

@@ -11,6 +11,7 @@ from cisco_collab_health.collectors.cuc_platform import (
     CUC_COMMAND_CATALOG,
     CUC_SAFE_CLI_COMMANDS,
     CucPlatformCollector,
+    _cuc_cli_summary,
 )
 from cisco_collab_health.models.runtime import CollectionContext
 from cisco_collab_health.transport.ssh import SshCommandResult, SshCommandTimeout
@@ -38,6 +39,17 @@ class CucPlatformCollectorTests(unittest.TestCase):
         self.assertEqual(len({item.command_id for item in CUC_COMMAND_CATALOG}), len(CUC_COMMAND_CATALOG))
         self.assertTrue(all(item.timeout_seconds > 0 for item in CUC_COMMAND_CATALOG))
         self.assertEqual(tuple(item.command for item in CUC_COMMAND_CATALOG), CUC_SAFE_CLI_COMMANDS)
+
+    def test_cli_summaries_parse_diagnostics_services_and_core_state(self) -> None:
+        self.assertEqual(
+            _cuc_cli_summary("utils diagnose test", "test - a : Passed\nskip - b : later")["passed"],
+            "1",
+        )
+        self.assertEqual(
+            _cuc_cli_summary("utils service list", "A[STARTED]\nB[STOPPED]  Service Not Activated")["stopped"],
+            "1",
+        )
+        self.assertEqual(_cuc_cli_summary("utils core active list", "No core files found")["core_files"], "0")
 
     def test_collector_records_only_safe_commands_and_artifacts(self) -> None:
         commands: list[str] = []

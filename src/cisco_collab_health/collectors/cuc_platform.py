@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
@@ -111,6 +112,7 @@ class CucPlatformCollector:
                                 "command_id": definition.command_id,
                                 "timeout_seconds": str(definition.timeout_seconds),
                                 "diagnostic_only": str(definition.diagnostic_only).lower(),
+                                **_cuc_cli_summary(command, result.output),
                             },
                             source="CUC.UCOS.CLI",
                         )
@@ -118,3 +120,37 @@ class CucPlatformCollector:
         except Exception as exc:
             warnings.append(f"CUC SSH session failed: {exc}")
         return CollectionResult(self.name, facts, warnings=warnings)
+
+
+def _cuc_cli_summary(command: str, output: str) -> dict[str, str]:
+    """Extract conservative health summaries while retaining the full CLI artifact."""
+
+    if command == "utils diagnose test":
+        return {
+            "passed": str(len(re.findall(r"(?im)^test\s+-.*:\s*Passed", output))),
+            "failed": str(len(re.findall(r"(?im)^test\s+-.*:\s*Failed", output))),
+            "skipped": str(len(re.findall(r"(?im)^skip\s+-", output))),
+        }
+    if command == "utils service list":
+        return {
+            "started": str(len(re.findall(r"\[STARTED\]", output))),
+            "stopped": str(len(re.findall(r"\[STOPPED\]", output))),
+            "not_activated": str(output.count("Service Not Activated")),
+        }
+    if command == "show cuc cluster status":
+        return {
+            "primary_nodes": str(len(re.findall(r"\bPrimary\b", output))),
+            "secondary_nodes": str(len(re.findall(r"\bSecondary\b", output))),
+            "connected_peers": str(len(re.findall(r"\bConnected\b", output))),
+            "unhealthy_states": str(len(re.findall(r"(?im)\b(?:failed|error|inactive)\b", output))),
+        }
+    if command == "utils core active list":
+        return {"core_files": "0" if "No core files found" in output else "present"}
+    if command == "show network eth0 detail":
+        status = re.search(r"Status\s*:\s*(\w+)", output)
+        duplicate = re.search(r"Duplicate IP\s*:\s*(\w+)", output)
+        return {
+            "link_status": status.group(1).lower() if status else "unknown",
+            "duplicate_ip": duplicate.group(1).lower() if duplicate else "unknown",
+        }
+    return {}
