@@ -85,6 +85,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="Local connection profile name. If omitted, choose from saved profiles or create one.",
     )
     parser.add_argument(
+        "--product",
+        choices=("cucm", "cuc"),
+        default="cucm",
+        help="Target product: Cisco Unified CM (cucm) or Unity Connection (cuc).",
+    )
+    parser.add_argument(
         "--reset-profile",
         action="store_true",
         help="Replace the saved local profile and stored credentials.",

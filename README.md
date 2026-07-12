@@ -338,7 +338,8 @@ adds raw request/response evidence for:
 - PerfMon object/counter discovery plus two samples of `Processor`, `Memory`, and `Cisco CallManager` counters on every discovered node
 - Bounded AXL configuration discovery for call-manager groups, regions, locations,
   SIP trunks, route patterns, partitions, CSSes, route groups/lists, translation
-  patterns, media resources, and lines
+  patterns and media resources. Full line inventory is intentionally excluded
+  because CUCM may ignore AXL paging limits and return an unbounded response.
 - Up to 500 bounded AXL `get` reads to recover route-list, route-group, and CSS
   relationships that CUCM omits from list responses
 - One `first 500` read-only SQL relationship query for route-pattern destinations
@@ -395,6 +396,18 @@ paths:
 ```bash
 ./aletheiauc.py --customer-safe-report
 ```
+
+To establish a bounded Cisco Unity Connection CUPI baseline with a dedicated
+CUC profile:
+
+```bash
+./aletheiauc.py --product cuc --profile MyCucProfile --diagnostic-capture
+```
+
+The initial CUC collector requests one user row from `/vmrest/users`, records
+the aggregate total and raw exchange, and does not collect mailbox identities.
+CUCM remains the default product. CUC Platform credentials are stored through
+the existing encrypted OS/SSH credential path for upcoming CLI collection.
 
 This option affects HTML presentation only. Raw artifacts, troubleshooting
 logs, and normalized JSON remain private diagnostic output and can contain

@@ -52,6 +52,7 @@ def run_assessment(
 
     tls_policy = tls_policy_from_args(args)
     context = CollectionContext(
+        product=args.product,
         tls=tls_policy,
         collect_phone_inventory=args.collect_phone_inventory,
         phone_inventory_page_size=args.phone_inventory_page_size,
@@ -80,6 +81,7 @@ def run_assessment(
         context = CollectionContext(
             target=runtime_profile.stored.publisher_ip,
             username=runtime_profile.stored.gui_username,
+            product=args.product,
             publisher_ip=runtime_profile.stored.publisher_ip,
             gui_username=runtime_profile.stored.gui_username,
             gui_password=runtime_profile.gui_password,
@@ -111,22 +113,25 @@ def run_assessment(
         )
         status.ok(f"Profile loaded: {runtime_profile.stored.name}")
         _print_tls_status(tls_policy, status)
-        status.stage(f"Running Publisher preflight: {runtime_profile.stored.publisher_ip}")
-        preflight = run_publisher_preflight(
-            context,
-            axl_port=args.axl_port,
-            risport_port=args.risport_port,
-            control_center_port=args.control_center_port,
-            perfmon_port=args.perfmon_port,
-        )
-        _print_preflight_status(preflight, status)
-        if artifact_store:
-            write_preflight_artifacts(
-                artifact_store,
-                runtime_profile.stored.publisher_ip,
-                preflight,
+        if args.product == "cucm":
+            status.stage(f"Running Publisher preflight: {runtime_profile.stored.publisher_ip}")
+            preflight = run_publisher_preflight(
+                context,
+                axl_port=args.axl_port,
+                risport_port=args.risport_port,
+                control_center_port=args.control_center_port,
+                perfmon_port=args.perfmon_port,
             )
-            status.ok(f"Preflight artifacts written: {artifact_store.root}")
+            _print_preflight_status(preflight, status)
+            if artifact_store:
+                write_preflight_artifacts(
+                    artifact_store,
+                    runtime_profile.stored.publisher_ip,
+                    preflight,
+                )
+                status.ok(f"Preflight artifacts written: {artifact_store.root}")
+        else:
+            status.info("Unity Connection target: CUCM AXL/serviceability preflight skipped")
     else:
         log_store = _create_log_store(args, status, profile_name, run_started)
         _write_log_manifest(log_store, profile_name=profile_name, publisher_ip=None)
@@ -147,6 +152,7 @@ def run_assessment(
         preflight if runtime_profile is not None else None,
         smoke_test=runtime_profile is None,
         diagnostic_capture=args.diagnostic_capture and runtime_profile is not None,
+        product=args.product,
     )
     if collectors:
         status.info("Collectors enabled: " + ", ".join(collector.name for collector in collectors))

@@ -6,6 +6,7 @@ from cisco_collab_health.collectors.axl import AxlCollector
 from cisco_collab_health.collectors.base import Collector
 from cisco_collab_health.collectors.diagnostic import DiagnosticCaptureCollector
 from cisco_collab_health.collectors.sample import SampleCollector
+from cisco_collab_health.collectors.cuc import CucCollector
 from cisco_collab_health.interfaces import PreflightResult
 
 
@@ -14,11 +15,14 @@ def select_collectors(
     *,
     smoke_test: bool = False,
     diagnostic_capture: bool = False,
+    product: str = "cucm",
 ) -> list[Collector]:
     """Select collectors for the current runtime mode and preflight result."""
 
     if smoke_test:
         return [SampleCollector()]
+    if product == "cuc":
+        return [CucCollector()]
     if preflight is None:
         return []
 

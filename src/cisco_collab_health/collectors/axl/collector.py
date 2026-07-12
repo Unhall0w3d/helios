@@ -81,7 +81,6 @@ DIAGNOSTIC_AXL_OPERATIONS = (
     ("listConferenceBridge", "name", ("name", "devicePoolName")),
     ("listTranscoder", "name", ("name", "devicePoolName")),
     ("listMtp", "name", ("name", "devicePoolName")),
-    ("listLine", "pattern", ("pattern", "routePartitionName", "description")),
 )
 
 DIAGNOSTIC_AXL_GET_RELATIONSHIPS = {
