@@ -95,6 +95,7 @@ class HtmlReportBuilder:
         collector_evidence_count = sum(len(result.evidence) for result in report.collector_results)
         header_metadata = self._header_metadata(report)
         is_comsource = self.template.key == "comsource"
+        is_aletheiauc = self.template.key == "aletheiauc"
         hero_image = (
             _comsource_asset_data_uri("comsource-cover-network.svg")
             if is_comsource
@@ -108,13 +109,25 @@ class HtmlReportBuilder:
         watermark_image = (
             _comsource_asset_data_uri("comsource-watermark.svg") if is_comsource else ""
         )
+        ritual_image = (
+            _aletheiauc_asset_data_uri("aletheiauc-report-ritual-landscape.png")
+            if is_aletheiauc
+            else ""
+        )
         logo_image = _comsource_asset_data_uri("ComSource_Logo.svg") if is_comsource else ""
         emblem_image = "" if is_comsource else _aletheiauc_asset_data_uri("aletheiauc-report-emblem.png")
-        template_css = self._comsource_css() if is_comsource else ""
+        template_css = (
+            self._comsource_css()
+            if is_comsource
+            else self._aletheiauc_css() if is_aletheiauc else ""
+        )
         template_header = self._template_header(
             header_metadata, logo_image=logo_image, is_comsource=is_comsource
         )
         template_footer = self._template_footer(logo_image=logo_image, is_comsource=is_comsource)
+        brand_feature_panel = (
+            self._aletheiauc_feature_panel() if is_aletheiauc else ""
+        )
         methodology_scope_section = self._methodology_scope_section(report)
         target_scope_section = self._target_scope_section(report)
         cuc_inventory_section = self._cuc_inventory_section(report)
@@ -508,35 +521,36 @@ class HtmlReportBuilder:
   </style>
 </head>
 <body class="{escape(self.template.key)}-report">
-  <div class="report-shell" style="--divider-image: url('{divider_image}'); --emblem-image: url('{emblem_image}'); --watermark-image: url('{watermark_image}');">
+  <div class="report-shell" style="--divider-image: url('{divider_image}'); --emblem-image: url('{emblem_image}'); --watermark-image: url('{watermark_image}'); --ritual-image: url('{ritual_image}');">
   <header class="report-hero" style="--hero-image: url('{hero_image}');">
     {template_header}
   </header>
   <div class="visual-divider" aria-hidden="true"></div>
   <main>
-    <section>
-      <h2>Executive Overview</h2>
-      <div class="summary-grid">
-        <div class="metric"><strong>{len(report.facts.nodes)}</strong><span>Nodes</span></div>
-        <div class="metric"><strong>{len(report.facts.devices)}</strong><span>Devices</span></div>
-        <div class="metric"><strong>{len(report.facts.registrations)}</strong>
+    <section class="section executive-section">
+      <header class="section-heading"><h2>Executive Overview</h2></header>
+      <div class="section-body"><div class="metric-grid">
+        <div class="metric-card"><strong>{len(report.facts.nodes)}</strong><span>Nodes</span></div>
+        <div class="metric-card"><strong>{len(report.facts.devices)}</strong><span>Devices</span></div>
+        <div class="metric-card"><strong>{len(report.facts.registrations)}</strong>
           <span>Registrations</span></div>
-        <div class="metric"><strong>{len(report.facts.services)}</strong><span>Services</span></div>
-        <div class="metric"><strong>{len(report.facts.perf_counters)}</strong>
+        <div class="metric-card"><strong>{len(report.facts.services)}</strong><span>Services</span></div>
+        <div class="metric-card"><strong>{len(report.facts.perf_counters)}</strong>
           <span>Perf Counters</span></div>
-        <div class="metric"><strong>{len(report.facts.platform_checks)}</strong>
+        <div class="metric-card"><strong>{len(report.facts.platform_checks)}</strong>
           <span>Platform Checks</span></div>
-        <div class="metric"><strong>{severity_counts[FindingSeverity.CRITICAL]}</strong>
+        <div class="metric-card critical"><strong>{severity_counts[FindingSeverity.CRITICAL]}</strong>
           <span>Critical</span></div>
-        <div class="metric"><strong>{severity_counts[FindingSeverity.WARNING]}</strong>
+        <div class="metric-card warning"><strong>{severity_counts[FindingSeverity.WARNING]}</strong>
           <span>Warnings</span></div>
-        <div class="metric"><strong>{severity_counts[FindingSeverity.INFO]}</strong>
+        <div class="metric-card info"><strong>{severity_counts[FindingSeverity.INFO]}</strong>
           <span>Informational</span></div>
-        <div class="metric"><strong>{collector_note_count}</strong><span>Collector Notes</span></div>
-        <div class="metric"><strong>{collector_issue_count}</strong><span>Collector Issues</span></div>
-        <div class="metric"><strong>{collector_evidence_count}</strong><span>API Evidence</span></div>
-      </div>
+        <div class="metric-card"><strong>{collector_note_count}</strong><span>Collector Notes</span></div>
+        <div class="metric-card"><strong>{collector_issue_count}</strong><span>Collector Issues</span></div>
+        <div class="metric-card"><strong>{collector_evidence_count}</strong><span>API Evidence</span></div>
+      </div></div>
     </section>
+    {brand_feature_panel}
     {methodology_scope_section}
     {target_scope_section}
     {cuc_inventory_section}
@@ -830,18 +844,32 @@ class HtmlReportBuilder:
     <div class=\"header-meta\">{header_metadata}</div>"""
 
         return f"""
-    <div class=\"masthead\">
-      <div>
-        <p class=\"eyebrow\">{escape(self.template.eyebrow)}</p>
-        <h1>{escape(self.template.title)}</h1>
-        <p>{escape(self.template.tagline)}</p>
-      </div>
-      <div class=\"beacon\" aria-hidden=\"true\">✦</div>
+    <div class="hero-brand-copy sr-only">
+      <span>{escape(self.template.title)}</span>
+      <span>{escape(self.template.tagline)}</span>
     </div>
-    <div class=\"capability-row\">
+    <div class="capability-row sr-only">
       <span>Assess</span><span>Diagnose</span><span>Improve</span><span>Optimize</span>
     </div>
-    <div class=\"header-meta\">{header_metadata}</div>"""
+    <div class="header-meta">{header_metadata}</div>"""
+
+    @staticmethod
+    def _aletheiauc_feature_panel() -> str:
+        """Provide a visual context transition without changing assessment content."""
+
+        return """
+    <section class="report-feature" aria-label="Assessment context">
+      <div class="report-feature-copy">
+        <p class="eyebrow">Assessment context</p>
+        <h2>Evidence-led collaboration health review</h2>
+        <p>Normalized facts, collection coverage, and findings follow in the sections below.
+        Raw command and API detail remains in the private engineering artifact bundle.</p>
+        <div class="feature-points">
+          <span>Bounded collection</span><span>Evidence linked</span><span>Clear findings</span>
+        </div>
+      </div>
+      <div class="report-feature-art" aria-hidden="true"></div>
+    </section>"""
 
     @staticmethod
     def _template_footer(*, logo_image: str, is_comsource: bool) -> str:
@@ -852,6 +880,115 @@ class HtmlReportBuilder:
     <div class=\"footer-logo\"><img src=\"{logo_image}\" alt=\"ComSource\"></div>
     <small>Prepared by ComSource, Inc. · Confidential customer report</small>
   </footer>"""
+
+    @staticmethod
+    def _aletheiauc_css() -> str:
+        """Beaconveil composition layer for the default AletheiaUC template."""
+
+        return """
+    body.aletheiauc-report::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      opacity: .22;
+      background-image: linear-gradient(rgba(47, 124, 255, .045) 1px, transparent 1px), linear-gradient(90deg, rgba(47, 124, 255, .045) 1px, transparent 1px);
+      background-size: 34px 34px;
+      mask-image: linear-gradient(to bottom, black, transparent 72%);
+    }
+    .aletheiauc-report .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+    .aletheiauc-report .report-shell { position: relative; }
+    .aletheiauc-report .report-hero {
+      min-height: clamp(280px, 32vw, 480px);
+      padding: 0;
+      background: #050812 var(--hero-image) center / cover no-repeat;
+    }
+    .aletheiauc-report .report-hero::after {
+      inset: auto 0 0;
+      width: auto;
+      height: 5px;
+      background: linear-gradient(90deg, #6a4cff, #22d3ee, #ffc75e);
+    }
+    .aletheiauc-report .report-hero .header-meta {
+      position: absolute;
+      z-index: 2;
+      right: clamp(20px, 4vw, 56px);
+      bottom: 30px;
+      left: clamp(20px, 4vw, 56px);
+      justify-content: flex-start;
+      max-width: none;
+      margin: 0;
+    }
+    .aletheiauc-report .meta-chip { background: rgba(5, 8, 18, .55); backdrop-filter: blur(5px); }
+    .aletheiauc-report .visual-divider { height: 78px; margin: 0 5%; opacity: .9; }
+    .aletheiauc-report main { display: grid; gap: 25px; }
+    .aletheiauc-report main > section { margin: 0; }
+    .aletheiauc-report .section-heading {
+      position: relative;
+      z-index: 1;
+      margin: 0;
+      padding: 0;
+      border-bottom: 1px solid var(--line);
+      background: linear-gradient(90deg, rgba(106, 76, 255, .13), rgba(34, 211, 238, .025));
+    }
+    .aletheiauc-report .section-heading h2 {
+      margin: 0;
+      padding: 17px 20px;
+      border: 0;
+      background: none;
+    }
+    .aletheiauc-report .section-body { position: relative; z-index: 1; margin: 0; padding: 20px; }
+    .aletheiauc-report .metric-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 12px;
+    }
+    .aletheiauc-report .metric-card {
+      min-height: 102px;
+      padding: 15px;
+      border: 1px solid rgba(38, 52, 81, .95);
+      border-top: 3px solid #2f7cff;
+      border-radius: 10px;
+      background: linear-gradient(145deg, rgba(21, 31, 54, .96), rgba(5, 8, 18, .66));
+      box-shadow: inset 0 2px 0 rgba(47, 124, 255, .14);
+    }
+    .aletheiauc-report .metric-card strong { display: block; margin-bottom: 4px; font-size: 26px; }
+    .aletheiauc-report .metric-card span { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .06em; }
+    .aletheiauc-report .metric-card.critical { border-top-color: var(--critical); }
+    .aletheiauc-report .metric-card.warning { border-top-color: var(--warning); }
+    .aletheiauc-report .metric-card.info { border-top-color: var(--info); }
+    .aletheiauc-report .report-feature {
+      display: grid;
+      grid-template-columns: minmax(0, 1.08fr) minmax(300px, .92fr);
+      min-height: 300px;
+      overflow: hidden;
+      border-color: rgba(106, 76, 255, .38);
+      background: linear-gradient(135deg, rgba(21, 31, 54, .98), rgba(8, 13, 29, .94));
+    }
+    .aletheiauc-report .report-feature::before { opacity: .035; background: var(--emblem-image) 8% 50% / 360px no-repeat; }
+    .aletheiauc-report .report-feature-copy { position: relative; z-index: 1; margin: 0; padding: clamp(28px, 4vw, 52px); }
+    .aletheiauc-report .report-feature-copy .eyebrow { color: var(--gold); }
+    .aletheiauc-report .report-feature-copy h2 { margin: 8px 0 12px; padding: 0; border: 0; background: none; font-size: clamp(25px, 3vw, 34px); }
+    .aletheiauc-report .report-feature-copy p { max-width: 620px; color: var(--muted); }
+    .aletheiauc-report .feature-points { display: flex; flex-wrap: wrap; gap: 9px; margin-top: 22px; }
+    .aletheiauc-report .feature-points span { padding: 7px 10px; border: 1px solid rgba(34, 211, 238, .27); border-radius: 999px; color: #d8fbff; background: rgba(5, 8, 18, .28); font-size: 12px; font-weight: 700; }
+    .aletheiauc-report .report-feature-art { position: relative; min-height: 300px; margin: 0; background: linear-gradient(90deg, rgba(16, 24, 43, .92), transparent 32%), var(--ritual-image) center / cover no-repeat; }
+    .aletheiauc-report .report-feature-art::after { content: ""; position: absolute; inset: 0; background: radial-gradient(circle at 68% 55%, rgba(255, 199, 94, .17), transparent 35%); }
+    .aletheiauc-report section > h2 { margin-bottom: 0; }
+    .aletheiauc-report .finding { border-left-width: 4px; }
+    .aletheiauc-report th { position: sticky; top: 0; color: var(--cyan); background: #0d1528; letter-spacing: .07em; font-size: 11px; }
+    @media (max-width: 900px) {
+      .aletheiauc-report .report-feature { grid-template-columns: 1fr; }
+      .aletheiauc-report .report-feature-art { min-height: 340px; order: -1; background: linear-gradient(180deg, transparent 58%, rgba(16, 24, 43, .9)), var(--ritual-image) center / cover no-repeat; }
+    }
+    @media print {
+      .aletheiauc-report::before, .aletheiauc-report .visual-divider, .aletheiauc-report .report-feature-art { display: none !important; }
+      .aletheiauc-report .report-hero { min-height: 155px; background: #fff !important; border: 2px solid #20283a; }
+      .aletheiauc-report .report-hero::before { content: "AletheiaUC Assessment"; position: absolute; left: 24px; top: 34px; color: #111; font-size: 34px; font-weight: 750; }
+      .aletheiauc-report .report-hero .header-meta { right: 24px; bottom: 20px; left: 24px; }
+      .aletheiauc-report .report-feature { display: block; min-height: 0; }
+      .aletheiauc-report .metric-card { background: #fff !important; color: #111 !important; box-shadow: none; }
+    }"""
 
     @staticmethod
     def _comsource_css() -> str:

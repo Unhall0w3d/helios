@@ -26,3 +26,11 @@ taglines, capability row, or powered-by attribution. Its purple and cyan are
 identity/navigation colors; report severity states retain their independent,
 text-labeled meanings. The template supports narrow layouts and browser print
 preview.
+
+## Review bundles
+
+With `--export-review-zip`, the private troubleshooting bundle includes the
+selected report as `report.html` and a separately rendered,
+always-masked `customer_safe_report.html`. This permits side-by-side review of
+the customer deliverable while retaining the engineering artifacts in the same
+private bundle.

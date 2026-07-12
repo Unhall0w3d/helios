@@ -218,6 +218,7 @@ def run_assessment(
         status.ok(f"Assessment artifacts written: {artifact_store.root}")
 
     html_report_path = None
+    customer_safe_html_report_path = None
     if not args.no_html_report:
         status.stage("Writing HTML report")
         try:
@@ -228,6 +229,14 @@ def run_assessment(
                 template=args.html_template,
             )
             status.ok(f"HTML report written: {html_report_path}")
+            if log_store:
+                customer_safe_html_report_path = _write_html_report(
+                    report,
+                    str(_customer_safe_report_path(html_report_path)),
+                    customer_safe=True,
+                    template=args.html_template,
+                )
+                status.ok("Customer-safe HTML staged for the review ZIP")
         except OSError as exc:
             status.fail(f"Unable to write HTML report: {exc}")
 
@@ -253,6 +262,7 @@ def run_assessment(
                 summary_text=summary_text,
                 artifact_store=artifact_store,
                 html_report_path=html_report_path,
+                customer_safe_html_report_path=customer_safe_html_report_path,
             )
         except Exception as exc:
             status.fail(f"Unable to finalize troubleshooting logs: {exc}")
@@ -400,6 +410,7 @@ def run_multi_assessment(
     if artifact_store:
         write_assessment_artifacts(artifact_store, report)
     html_report_path = None
+    customer_safe_html_report_path = None
     if not args.no_html_report:
         html_report_path = _write_html_report(
             report,
@@ -408,6 +419,14 @@ def run_multi_assessment(
             template=args.html_template,
         )
         status.ok(f"HTML report written: {html_report_path}")
+        if log_store:
+            customer_safe_html_report_path = _write_html_report(
+                report,
+                str(_customer_safe_report_path(html_report_path)),
+                customer_safe=True,
+                template=args.html_template,
+            )
+            status.ok("Customer-safe HTML staged for the review ZIP")
     summary_text = ExecutiveSummaryBuilder().build(
         report,
         str(html_report_path) if html_report_path else None,
@@ -424,6 +443,7 @@ def run_multi_assessment(
                 summary_text=summary_text,
                 artifact_store=artifact_store,
                 html_report_path=html_report_path,
+                customer_safe_html_report_path=customer_safe_html_report_path,
             )
         except Exception as exc:
             status.fail(f"Unable to finalize troubleshooting logs: {exc}")
@@ -485,6 +505,12 @@ def _write_html_report(
         encoding="utf-8",
     )
     return path
+
+
+def _customer_safe_report_path(report_path: Path) -> Path:
+    """Keep the review copy adjacent to, but distinct from, the selected report."""
+
+    return report_path.with_name(f"{report_path.stem}-customer-safe{report_path.suffix}")
 
 
 def _create_artifact_store(

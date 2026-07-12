@@ -169,6 +169,16 @@ class ReportBuilderTests(unittest.TestCase):
         self.assertIn(".header-meta", engineering)
         self.assertIn("justify-content: center", engineering)
 
+    def test_aletheiauc_template_uses_beaconveil_feature_composition(self) -> None:
+        payload = HtmlReportBuilder().build(self.report)
+
+        self.assertIn("report-feature", payload)
+        self.assertIn("report-feature-art", payload)
+        self.assertIn("--ritual-image", payload)
+        self.assertIn("metric-card", payload)
+        self.assertIn("body.aletheiauc-report::before", payload)
+        self.assertIn("Assessment context", payload)
+
     def test_comsource_template_is_standalone_and_brand_isolated(self) -> None:
         payload = HtmlReportBuilder(customer_safe=True, template="comsource").build(self.report)
         logo_path = (

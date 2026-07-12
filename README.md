@@ -427,6 +427,12 @@ the same report facts and customer-safe masking behavior:
 Both templates embed their assets in the generated HTML, so reports have no
 remote font, script, image, analytics, or CDN dependency.
 
+When `--export-review-zip` is used, the troubleshooting bundle includes both
+`report.html` and `customer_safe_report.html`. The latter always applies
+customer-safe masking with the selected template and is included for review;
+the ZIP itself remains private diagnostic material because it can also contain
+raw evidence and engineering artifacts.
+
 To establish a bounded Cisco Unity Connection CUPI baseline with a dedicated
 CUC profile:
 

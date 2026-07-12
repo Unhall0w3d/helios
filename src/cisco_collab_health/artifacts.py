@@ -291,6 +291,7 @@ def write_log_bundle(
     summary_text: str,
     artifact_store: ArtifactStore | None,
     html_report_path: Path | None,
+    customer_safe_html_report_path: Path | None = None,
 ) -> list[Path]:
     """Write troubleshooting files that are easy to share for analysis."""
 
@@ -303,6 +304,7 @@ def write_log_bundle(
             "tls_verification": metadata.get("tls_verification"),
             "ssh_host_key_enrollment": metadata.get("ssh_accept_new_host_key", False),
             "customer_safe_report": metadata.get("customer_safe_report", False),
+            "customer_safe_html_included": bool(customer_safe_html_report_path),
             "target_technologies": sorted(
                 {
                     target.get("technology")
@@ -335,6 +337,8 @@ def write_log_bundle(
         )
     if html_report_path is not None and html_report_path.exists():
         paths.append(store.copy_file(html_report_path, "report.html"))
+    if customer_safe_html_report_path is not None and customer_safe_html_report_path.exists():
+        paths.append(store.copy_file(customer_safe_html_report_path, "customer_safe_report.html"))
     return paths
 
 

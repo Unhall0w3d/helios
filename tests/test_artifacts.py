@@ -160,6 +160,8 @@ class ArtifactStoreTests(unittest.TestCase):
             log_store = RunLogStore.create(Path(tmpdir) / "logs", "lab")
             html_report = Path(tmpdir) / "report.html"
             html_report.write_text("<html></html>", encoding="utf-8")
+            customer_safe_html_report = Path(tmpdir) / "report-customer-safe.html"
+            customer_safe_html_report.write_text("<html>safe</html>", encoding="utf-8")
             report = AssessmentReport(
                 facts=AssessmentFacts(),
                 collector_results=[
@@ -184,6 +186,7 @@ class ArtifactStoreTests(unittest.TestCase):
                 summary_text="Executive Summary\n",
                 artifact_store=artifact_store,
                 html_report_path=html_report,
+                customer_safe_html_report_path=customer_safe_html_report,
             )
 
             summary = log_store.root / "executive_summary.txt"
@@ -200,6 +203,7 @@ class ArtifactStoreTests(unittest.TestCase):
                 / "response.txt"
             )
             report_copy = log_store.root / "report.html"
+            customer_safe_report_copy = log_store.root / "customer_safe_report.html"
 
             self.assertTrue(summary.exists())
             self.assertTrue(warnings.exists())
@@ -211,9 +215,11 @@ class ArtifactStoreTests(unittest.TestCase):
             self.assertIn("response.txt", artifact_index.read_text(encoding="utf-8"))
             self.assertEqual(artifact_copy.read_text(encoding="utf-8"), "<xml />")
             self.assertTrue(report_copy.exists())
+            self.assertEqual(customer_safe_report_copy.read_text(encoding="utf-8"), "<html>safe</html>")
             manifest = json.loads((log_store.root / "manifest.json").read_text(encoding="utf-8"))
             self.assertEqual(manifest["sensitivity_classification"], "private diagnostic")
             self.assertTrue(manifest["raw_evidence_included"])
+            self.assertTrue(manifest["customer_safe_html_included"])
 
 
 if __name__ == "__main__":
