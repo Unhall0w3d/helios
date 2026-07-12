@@ -58,6 +58,43 @@ class ProfileSelection:
     reset: bool = False
 
 
+SUPPORTED_TECHNOLOGIES = frozenset({"cucm", "cuc"})
+
+
+@dataclass(frozen=True)
+class AssessmentTarget:
+    """One technology-specific connection profile in a combined assessment."""
+
+    target_id: str
+    technology: str
+    connection_profile: str
+
+    def __post_init__(self) -> None:
+        if not self.target_id.strip():
+            raise ValueError("Assessment target ID cannot be empty.")
+        if self.technology not in SUPPORTED_TECHNOLOGIES:
+            raise ValueError(f"Unsupported assessment technology: {self.technology}")
+        if not self.connection_profile.strip():
+            raise ValueError("Assessment target connection profile cannot be empty.")
+
+
+@dataclass(frozen=True)
+class AssessmentProfile:
+    """Named group of independently credentialed technology targets."""
+
+    name: str
+    targets: tuple[AssessmentTarget, ...]
+
+    def __post_init__(self) -> None:
+        if not self.name.strip():
+            raise ValueError("Assessment profile name cannot be empty.")
+        if not self.targets:
+            raise ValueError("Assessment profile must contain at least one target.")
+        ids = [target.target_id.lower() for target in self.targets]
+        if len(ids) != len(set(ids)):
+            raise ValueError("Assessment target IDs must be unique within a profile.")
+
+
 def resolve_publisher(value: str) -> str:
     """Resolve a Publisher IP or FQDN to an IPv4 address string."""
 
@@ -147,6 +184,79 @@ def load_profile_names(config_dir: Path | None = None) -> list[str]:
     names = set(payload.get("profile_names", []))
     names.update(payload.get("profiles", {}).keys())
     return sorted(names)
+
+
+def load_assessment_profiles(config_dir: Path | None = None) -> dict[str, AssessmentProfile]:
+    """Load multi-technology assessment groups without resolving credentials."""
+
+    path = profile_config_path(config_dir)
+    if not path.exists():
+        return {}
+    with path.open("r", encoding="utf-8") as handle:
+        payload = json.load(handle)
+    profiles = {}
+    for name, data in payload.get("assessment_profiles", {}).items():
+        profiles[name] = AssessmentProfile(
+            name=name,
+            targets=tuple(
+                AssessmentTarget(
+                    target_id=target["target_id"],
+                    technology=target["technology"],
+                    connection_profile=target["connection_profile"],
+                )
+                for target in data.get("targets", [])
+            ),
+        )
+    return profiles
+
+
+def save_assessment_profiles(
+    profiles: dict[str, AssessmentProfile], config_dir: Path | None = None,
+) -> Path:
+    """Persist assessment composition while leaving all secrets in target profiles."""
+
+    path = profile_config_path(config_dir)
+    payload: dict[str, object] = {}
+    if path.exists():
+        with path.open("r", encoding="utf-8") as handle:
+            payload = json.load(handle)
+    payload["assessment_profiles"] = {
+        name: {
+            "targets": [asdict(target) for target in profile.targets],
+        }
+        for name, profile in sorted(profiles.items())
+    }
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8") as handle:
+        json.dump(payload, handle, indent=2, sort_keys=True)
+        handle.write("\n")
+    try:
+        path.chmod(0o600)
+    except OSError:
+        pass
+    return path
+
+
+def resolve_assessment_targets(
+    assessment: AssessmentProfile, *, reset: bool = False, save_credentials: bool = True,
+    config_dir: Path | None = None, input_func: Callable[[str], str] = input,
+    getpass_func: Callable[[str], str] = getpass.getpass,
+    credential_store: CredentialStore | None = None, use_system_keyring: bool = True,
+) -> list[tuple[AssessmentTarget, RuntimeProfile]]:
+    """Resolve each target independently, prompting only for its missing credentials."""
+
+    return [
+        (
+            target,
+            ensure_runtime_profile(
+                target.connection_profile, reset=reset, save_credentials=save_credentials,
+                technology=target.technology,
+                config_dir=config_dir, input_func=input_func, getpass_func=getpass_func,
+                credential_store=credential_store, use_system_keyring=use_system_keyring,
+            ),
+        )
+        for target in assessment.targets
+    ]
 
 
 def save_profile_names(profile_names: list[str], config_dir: Path | None = None) -> Path:
@@ -314,17 +424,20 @@ def _prompt_new_profile_name(
 
 def prompt_for_profile(
     profile_name: str,
+    technology: str = "cucm",
     input_func: Callable[[str], str] = input,
     getpass_func: Callable[[str], str] = getpass.getpass,
 ) -> RuntimeProfile:
     """Prompt for profile values and return a runtime profile."""
 
-    publisher_input = input_func("Publisher IP or FQDN: ").strip()
+    label = "CUCM" if technology == "cucm" else "Unity Connection"
+    publisher_prompt = "Publisher IP or FQDN: " if technology == "cucm" else f"{label} Publisher IP or FQDN: "
+    publisher_input = input_func(publisher_prompt).strip()
     publisher_ip = resolve_publisher(publisher_input)
-    gui_username = input_func("CUCM GUI/API username: ").strip()
-    gui_password = getpass_func("CUCM GUI/API password: ")
-    os_username = input_func("CUCM Platform/CLI username: ").strip()
-    os_password = getpass_func("CUCM Platform/CLI password: ")
+    gui_username = input_func(f"{label} GUI/API username: ").strip()
+    gui_password = getpass_func(f"{label} GUI/API password: ")
+    os_username = input_func(f"{label} Platform/CLI username: ").strip()
+    os_password = getpass_func(f"{label} Platform/CLI password: ")
 
     if not gui_username:
         raise ValueError("CUCM GUI/API username cannot be empty.")
@@ -348,6 +461,7 @@ def ensure_runtime_profile(
     profile_name: str,
     *,
     reset: bool = False,
+    technology: str = "cucm",
     save_credentials: bool = True,
     config_dir: Path | None = None,
     input_func: Callable[[str], str] = input,
@@ -368,12 +482,13 @@ def ensure_runtime_profile(
             unregister_profile_name(profile_name, config_dir)
 
         runtime = _load_runtime_profile_from_store(
-            profile_name, store, input_func=input_func, getpass_func=getpass_func
+            profile_name, store, technology=technology,
+            input_func=input_func, getpass_func=getpass_func
         )
         if runtime is not None:
             return _store_or_warn(runtime, store, save_credentials)
 
-        runtime = prompt_for_profile(profile_name, input_func, getpass_func)
+        runtime = prompt_for_profile(profile_name, technology, input_func, getpass_func)
         runtime = _store_or_warn(runtime, store, save_credentials)
         if save_credentials and not any(
             "Unable to store encrypted profile" in warning for warning in runtime.warnings
@@ -388,7 +503,7 @@ def ensure_runtime_profile(
 
     stored = profiles.get(profile_name)
     if stored is None:
-        runtime = prompt_for_profile(profile_name, input_func, getpass_func)
+        runtime = prompt_for_profile(profile_name, technology, input_func, getpass_func)
         profiles[profile_name] = runtime.stored
         save_profiles(profiles, config_dir)
         register_profile_name(profile_name, config_dir)
@@ -429,6 +544,7 @@ def ensure_runtime_profile(
 
 def select_or_create_runtime_profile(
     *,
+    technology: str = "cucm",
     reset: bool = False,
     save_credentials: bool = True,
     config_dir: Path | None = None,
@@ -443,6 +559,7 @@ def select_or_create_runtime_profile(
     selection = prompt_for_profile_name(load_profile_names(config_dir), input_func, output_func)
     return ensure_runtime_profile(
         selection.profile_name,
+        technology=technology,
         reset=reset or selection.reset,
         save_credentials=save_credentials,
         config_dir=config_dir,
@@ -457,6 +574,7 @@ def _load_runtime_profile_from_store(
     profile_name: str,
     store: CredentialStore,
     *,
+    technology: str = "cucm",
     input_func: Callable[[str], str],
     getpass_func: Callable[[str], str],
 ) -> RuntimeProfile | None:
@@ -474,8 +592,9 @@ def _load_runtime_profile_from_store(
     os_password = str(data.get("os_password") or "")
     warnings = []
     if not platform_credentials_configured:
+        label = "CUCM" if technology == "cucm" else "Unity Connection"
         os_username = input_func(
-            "CUCM Platform/CLI username (required for certificate and CLI collection): "
+            f"{label} Platform/CLI username (required for certificate and CLI collection): "
         ).strip()
         if not os_username:
             raise ValueError("CUCM Platform/CLI username cannot be empty.")

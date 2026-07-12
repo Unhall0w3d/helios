@@ -240,11 +240,13 @@ def _run(args: argparse.Namespace, status: StatusPrinter) -> int:
     if args.profile:
         runtime_profile = ensure_runtime_profile(
             args.profile,
+            technology=args.product,
             reset=args.reset_profile,
             save_credentials=not args.no_save_credentials,
         )
     else:
         runtime_profile = select_or_create_runtime_profile(
+            technology=args.product,
             reset=args.reset_profile,
             save_credentials=not args.no_save_credentials,
         )

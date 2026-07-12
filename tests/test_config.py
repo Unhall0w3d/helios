@@ -7,13 +7,17 @@ import unittest
 from pathlib import Path
 
 from cisco_collab_health.config import (
+    AssessmentProfile,
+    AssessmentTarget,
     KEYRING_SERVICE,
     ensure_runtime_profile,
     load_profile_names,
     load_profiles,
+    load_assessment_profiles,
     profile_secret_key,
     register_profile_name,
     resolve_publisher,
+    save_assessment_profiles,
     select_or_create_runtime_profile,
 )
 
@@ -33,6 +37,28 @@ class FakeCredentialStore:
 
 
 class ConfigTests(unittest.TestCase):
+    def test_multi_technology_assessment_profile_round_trips_without_secrets(self) -> None:
+        assessment = AssessmentProfile("district", (
+            AssessmentTarget("call-control", "cucm", "YorktownCSD"),
+            AssessmentTarget("voicemail", "cuc", "YorktownCUC"),
+        ))
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config_dir = Path(tmpdir)
+            save_assessment_profiles({assessment.name: assessment}, config_dir)
+            loaded = load_assessment_profiles(config_dir)
+            payload = (config_dir / "profiles.json").read_text()
+
+        self.assertEqual(loaded["district"], assessment)
+        self.assertNotIn("password", payload.lower())
+
+    def test_assessment_profile_rejects_duplicate_target_ids(self) -> None:
+        with self.assertRaises(ValueError):
+            AssessmentProfile("invalid", (
+                AssessmentTarget("primary", "cucm", "one"),
+                AssessmentTarget("PRIMARY", "cuc", "two"),
+            ))
+
     def test_ip_publisher_is_accepted_without_resolution(self) -> None:
         self.assertEqual(resolve_publisher("192.0.2.10"), "192.0.2.10")
 

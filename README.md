@@ -409,6 +409,13 @@ the aggregate total and raw exchange, and does not collect mailbox identities.
 CUCM remains the default product. CUC Platform credentials are stored through
 the existing encrypted OS/SSH credential path for upcoming CLI collection.
 
+Multi-technology migration has started with an assessment-profile model. An
+assessment profile groups named targets such as `call-control` and `voicemail`;
+each target references its own connection profile and therefore its own GUI/API
+and Platform/SSH credentials. Group files contain no passwords. Existing
+single-target commands remain supported while combined orchestration and a
+single consolidated report are completed.
+
 This option affects HTML presentation only. Raw artifacts, troubleshooting
 logs, and normalized JSON remain private diagnostic output and can contain
 customer identifiers.
