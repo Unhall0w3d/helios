@@ -18,7 +18,9 @@ class CucCollector:
 
     name = "cuc"
 
-    def __init__(self, http_client: CapturedHttpClient | None = None) -> None:
+    def __init__(
+        self, http_client: CapturedHttpClient | None = None,
+    ) -> None:
         self.http_client = http_client or CapturedHttpClient()
 
     def collect(self, context: CollectionContext) -> CollectionResult:

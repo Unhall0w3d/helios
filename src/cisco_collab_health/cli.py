@@ -112,6 +112,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Replace the saved local profile and stored credentials.",
     )
     parser.add_argument(
+        "--reset-technology",
+        choices=("cucm", "cuc"),
+        help="Clear only one technology section in the selected profile and re-prompt for it.",
+    )
+    parser.add_argument(
         "--no-save-credentials",
         action="store_true",
         help="Prompt for passwords but do not store them in the OS credential store.",
@@ -237,6 +242,8 @@ def _validate_args(parser: argparse.ArgumentParser, args: argparse.Namespace) ->
         parser.error("--assessment-profile cannot be combined with --profile")
     if args.assessment_profile and args.product != "cucm":
         parser.error("--product is defined by each target in --assessment-profile")
+    if args.reset_technology and not args.profile:
+        parser.error("--reset-technology requires --profile")
     if args.assessment_target and not args.assessment_profile:
         parser.error("--assessment-target requires --assessment-profile")
     if args.ca_bundle and not args.verify_tls:
@@ -291,6 +298,7 @@ def _run(args: argparse.Namespace, status: StatusPrinter) -> int:
         runtime_profile = ensure_runtime_profile(
             args.profile,
             technology=args.product,
+            reset_technology=args.reset_technology == args.product,
             reset=args.reset_profile,
             save_credentials=not args.no_save_credentials,
         )

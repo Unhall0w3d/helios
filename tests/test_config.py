@@ -157,6 +157,26 @@ class ConfigTests(unittest.TestCase):
         self.assertIn('"gui_password": "cuc-secret"', payload)
         self.assertIn('"gui_password": "cucm-secret"', payload)
 
+    def test_reset_cuc_section_preserves_cucm_section(self) -> None:
+        store = FakeCredentialStore()
+        store.set_password(
+            KEYRING_SERVICE, profile_secret_key("shared"),
+            '{"gui_username":"cucm","gui_password":"one",'
+            '"technology_profiles":{"cucm":{"gui_password":"one"},'
+            '"cuc":{"gui_password":"two"}}}',
+        )
+        with tempfile.TemporaryDirectory() as tmpdir:
+            ensure_runtime_profile(
+                "shared", technology="cuc", reset_technology=True,
+                config_dir=Path(tmpdir),
+                input_func=lambda prompt: "10.0.0.20" if "FQDN" in prompt else "cuc-user",
+                getpass_func=lambda prompt: "secret", credential_store=store,
+            )
+        payload = store.get_password(KEYRING_SERVICE, profile_secret_key("shared")) or ""
+        self.assertIn('"cucm"', payload)
+        self.assertIn('"gui_password": "secret"', payload)
+        self.assertNotIn('"gui_password": "two"', payload)
+
     def test_unmarked_profile_does_not_treat_api_credentials_as_platform_credentials(self) -> None:
         store = FakeCredentialStore()
         store.set_password(

@@ -17,7 +17,9 @@ from cisco_collab_health.artifacts import (
 )
 from cisco_collab_health.collector_registry import select_collectors
 from cisco_collab_health.collectors.base import Collector, TargetPipelineCollector
-from cisco_collab_health.config import AssessmentTarget, RuntimeProfile
+from cisco_collab_health.config import (
+    AssessmentTarget, RuntimeProfile,
+)
 from cisco_collab_health.engine import AssessmentEngine
 from cisco_collab_health.interfaces import PreflightResult, run_publisher_preflight
 from cisco_collab_health.models.assessment import AssessmentReport
@@ -264,6 +266,19 @@ def run_multi_assessment(
     log_store = _create_log_store(args, status, assessment_name, run_started)
     _write_log_manifest(log_store, profile_name=assessment_name, publisher_ip=None)
     artifact_store = _create_artifact_store(args, status, assessment_name, run_started)
+    address_targets: dict[str, list[str]] = {}
+    for target, runtime in targets:
+        address_targets.setdefault(runtime.stored.publisher_ip.strip().lower(), []).append(target.target_id)
+    duplicate_addresses = [
+        f"{address}: {', '.join(ids)}"
+        for address, ids in address_targets.items() if len(ids) > 1
+    ]
+    if duplicate_addresses:
+        status.fail(
+            "Target addresses must be unique across technologies. Correct these before retrying: "
+            + "; ".join(duplicate_addresses)
+        )
+        return 1
     pipelines: list[Collector] = []
     target_metadata = []
     for target, runtime in targets:

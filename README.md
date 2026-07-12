@@ -416,6 +416,22 @@ and Platform/SSH credentials. Group files contain no passwords. Existing
 single-target commands remain supported alongside combined orchestration and
 consolidated reporting.
 
+To re-capture only the CUC section of a shared legacy profile, use:
+
+```powershell
+.\aletheiauc.py --profile YorktownCSD --product cuc --reset-technology cuc `
+  --diagnostic-capture --export-review-zip
+```
+
+This preserves the CUCM section and re-prompts for the CUC address, GUI/API
+credentials, and Platform/SSH credentials.
+
+Combined runs validate target addresses before collection. If CUCM, CUC, IMP,
+CER, or another technology resolves to the same address as another target, the
+run stops with the target IDs that must be corrected. A 401 does not trigger an
+unsolicited credential prompt; credentials are changed through the explicit
+technology reset flow.
+
 Create or replace a combined assessment profile and run it:
 
 ```bash

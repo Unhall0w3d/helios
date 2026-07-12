@@ -501,6 +501,7 @@ def ensure_runtime_profile(
     *,
     reset: bool = False,
     technology: str = "cucm",
+    reset_technology: bool = False,
     save_credentials: bool = True,
     config_dir: Path | None = None,
     input_func: Callable[[str], str] = input,
@@ -516,6 +517,8 @@ def ensure_runtime_profile(
         store = load_keyring()
 
     if store is not None:
+        if reset_technology:
+            _reset_encrypted_technology_profile(profile_name, technology, store)
         if reset:
             delete_profile_credentials(profile_name, store)
             unregister_profile_name(profile_name, config_dir)
@@ -579,6 +582,25 @@ def ensure_runtime_profile(
         warnings=warnings,
     )
     return _store_or_warn(runtime, store, save_credentials)
+
+
+def _reset_encrypted_technology_profile(
+    profile_name: str, technology: str, store: CredentialStore,
+) -> None:
+    """Remove one technology section while preserving other technology credentials."""
+
+    key = profile_secret_key(profile_name)
+    try:
+        payload_text = store.get_password(KEYRING_SERVICE, key)
+        if not payload_text:
+            return
+        payload = json.loads(payload_text)
+        sections = payload.get("technology_profiles")
+        if isinstance(sections, dict):
+            sections.pop(technology, None)
+            store.set_password(KEYRING_SERVICE, key, json.dumps(payload, sort_keys=True))
+    except (Exception,):
+        return
 
 
 def select_or_create_runtime_profile(
@@ -743,3 +765,17 @@ def _store_or_warn(
         runtime.stored, runtime.gui_password, runtime.os_password,
         runtime.technology, warnings,
     )
+
+
+def update_runtime_gui_credentials(
+    runtime: RuntimeProfile, username: str, password: str,
+    store: CredentialStore | None,
+) -> RuntimeProfile:
+    """Persist credentials re-entered after an authenticated API failure."""
+
+    updated = replace(
+        runtime,
+        stored=replace(runtime.stored, gui_username=username),
+        gui_password=password,
+    )
+    return _store_or_warn(updated, store, True)
