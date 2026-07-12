@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections import Counter
+from dataclasses import dataclass
 from hashlib import sha256
 from html import escape
 
@@ -27,11 +28,38 @@ from cisco_collab_health.reports.reconciliation import (
 )
 
 
+@dataclass(frozen=True)
+class ReportTemplate:
+    """Presentation metadata for a named HTML report template."""
+
+    key: str
+    title: str
+    eyebrow: str
+    tagline: str
+
+
+REPORT_TEMPLATES = {
+    "aletheiauc": ReportTemplate(
+        key="aletheiauc",
+        title="AletheiaUC Assessment",
+        eyebrow="Engineering health brief",
+        tagline="Bringing UC Health to Light",
+    ),
+}
+
+
 class HtmlReportBuilder:
     """Builds a styled standalone HTML report."""
 
-    def __init__(self, *, customer_safe: bool = False) -> None:
+    def __init__(self, *, customer_safe: bool = False, template: str = "aletheiauc") -> None:
         self.customer_safe = customer_safe
+        try:
+            self.template = REPORT_TEMPLATES[template]
+        except KeyError as exc:
+            available = ", ".join(sorted(REPORT_TEMPLATES))
+            raise ValueError(
+                f"Unknown HTML report template '{template}'. Available: {available}."
+            ) from exc
 
     def build(self, report: AssessmentReport) -> str:
         severity_counts = Counter(finding.severity for finding in report.findings)
@@ -91,38 +119,107 @@ class HtmlReportBuilder:
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>AletheiaUC Assessment</title>
+  <title>{escape(self.template.title)}</title>
   <style>
     :root {{
       color-scheme: light;
-      --bg: #f4f6fb;
-      --panel: #ffffff;
-      --text: #101a2d;
+      --bg: #eef2ff;
+      --panel: rgba(255, 255, 255, 0.94);
+      --text: #151a31;
       --muted: #526079;
-      --line: #d7ddee;
+      --line: #d9ddf0;
+      --midnight: #0a0f1e;
+      --violet: #6a4cff;
+      --blue: #2f7cff;
+      --cyan: #22d3ee;
+      --gold: #ffc75e;
       --critical: #b42318;
       --warning: #b54708;
       --info: #2f7cff;
     }}
     body {{
       margin: 0;
-      background: var(--bg);
+      background:
+        radial-gradient(circle at 10% -10%, rgba(47, 124, 255, 0.18), transparent 30rem),
+        radial-gradient(circle at 95% 4%, rgba(106, 76, 255, 0.14), transparent 26rem),
+        var(--bg);
       color: var(--text);
       font-family: Arial, Helvetica, sans-serif;
       line-height: 1.45;
     }}
     header {{
-      background: linear-gradient(120deg, #0a0f1e, #172554 68%, #302166);
+      position: relative;
+      overflow: hidden;
+      background: linear-gradient(118deg, var(--midnight), #172554 57%, #302166);
       color: white;
-      padding: 28px 32px;
+      padding: 30px max(32px, calc((100vw - 1120px) / 2 + 20px));
+    }}
+    header::after {{
+      content: "";
+      position: absolute;
+      width: 340px;
+      height: 340px;
+      right: -100px;
+      top: -185px;
+      background: radial-gradient(circle, rgba(34, 211, 238, 0.30), transparent 66%);
+      pointer-events: none;
+    }}
+    .masthead {{
+      position: relative;
+      z-index: 1;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 24px;
     }}
     header h1 {{
-      margin: 0 0 8px;
-      font-size: 28px;
+      margin: 4px 0 8px;
+      font-size: clamp(28px, 4vw, 38px);
+      letter-spacing: -0.03em;
     }}
     header p {{
       margin: 0;
-      color: #cdd9ff;
+      color: #d7e5ff;
+    }}
+    .eyebrow {{
+      color: var(--gold);
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: 0.13em;
+      text-transform: uppercase;
+    }}
+    .beacon {{
+      display: grid;
+      place-items: center;
+      width: 64px;
+      height: 64px;
+      border: 1px solid rgba(255, 255, 255, 0.30);
+      border-radius: 50%;
+      color: var(--gold);
+      font-size: 27px;
+      background: radial-gradient(circle, rgba(255, 199, 94, 0.24), rgba(34, 211, 238, 0.05));
+      box-shadow: 0 0 0 8px rgba(255, 255, 255, 0.04), 0 0 45px rgba(34, 211, 238, 0.22);
+    }}
+    .capability-row {{
+      position: relative;
+      z-index: 1;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+      margin-top: 22px;
+      color: #dce9ff;
+      font-size: 13px;
+    }}
+    .capability-row span {{
+      padding: 4px 9px;
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.06);
+    }}
+    .capability-row .edition {{
+      margin-left: auto;
+      color: var(--gold);
     }}
     main {{
       max-width: 1120px;
@@ -134,8 +231,8 @@ class HtmlReportBuilder:
       padding: 22px;
       background: var(--panel);
       border: 1px solid var(--line);
-      border-radius: 12px;
-      box-shadow: 0 8px 24px rgba(15, 23, 42, 0.05);
+      border-radius: 14px;
+      box-shadow: 0 12px 30px rgba(15, 23, 42, 0.07);
       overflow-x: auto;
     }}
     h2 {{
@@ -155,7 +252,8 @@ class HtmlReportBuilder:
       padding: 14px;
       border: 1px solid var(--line);
       border-radius: 10px;
-      background: linear-gradient(145deg, #ffffff, #f5f8ff);
+      background: linear-gradient(145deg, #ffffff, #f3f6ff);
+      box-shadow: inset 0 2px 0 rgba(47, 124, 255, 0.10);
     }}
     .metric strong {{
       display: block;
@@ -216,8 +314,18 @@ class HtmlReportBuilder:
 </head>
 <body>
   <header>
-    <h1>AletheiaUC Assessment</h1>
-    <p>Cisco Collaboration Health Assessment report</p>
+    <div class="masthead">
+      <div>
+        <p class="eyebrow">{escape(self.template.eyebrow)}</p>
+        <h1>{escape(self.template.title)}</h1>
+        <p>{escape(self.template.tagline)}</p>
+      </div>
+      <div class="beacon" aria-hidden="true">✦</div>
+    </div>
+    <div class="capability-row">
+      <span>Assess</span><span>Diagnose</span><span>Improve</span><span>Optimize</span>
+      <span class="edition">{"Customer deliverable" if self.customer_safe else "Engineering edition"}</span>
+    </div>
   </header>
   <main>
     <section>

@@ -42,6 +42,11 @@ class CliTests(unittest.TestCase):
 
         self.assertTrue(args.customer_safe_report)
 
+    def test_default_html_template_is_aletheiauc(self) -> None:
+        args = cli.build_parser().parse_args([])
+
+        self.assertEqual(args.html_template, "aletheiauc")
+
     def test_no_arguments_opens_menu_and_can_quit(self) -> None:
         output = io.StringIO()
         with (

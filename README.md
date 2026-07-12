@@ -396,6 +396,19 @@ paths:
 ./aletheiauc.py --customer-safe-report
 ```
 
+## HTML Report Templates
+
+HTML reports use the `aletheiauc` template by default. It draws on the project
+palette—midnight, violet, blue, cyan, and horizon gold—to create a beacon-like
+engineering brief without embedding or reproducing the repository artwork. The
+same visual system is used by both the full engineering report and the
+identifier-masked customer deliverable; customer-safe controls still determine
+which data appears.
+
+The template is selected with `--html-template aletheiauc`. Template selection
+is intentionally explicit in the report builder and CLI so future customer or
+partner templates can be added without changing collection or report facts.
+
 To establish a bounded Cisco Unity Connection CUPI baseline with a dedicated
 CUC profile:
 

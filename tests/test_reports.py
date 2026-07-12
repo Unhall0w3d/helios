@@ -144,6 +144,23 @@ class ReportBuilderTests(unittest.TestCase):
         self.assertIn("Call Manager Group", payload)
         self.assertIn("Region", payload)
 
+    def test_default_aletheiauc_template_brands_both_report_editions(self) -> None:
+        engineering = HtmlReportBuilder().build(self.report)
+        customer = HtmlReportBuilder(customer_safe=True).build(self.report)
+
+        for payload in (engineering, customer):
+            self.assertIn("Bringing UC Health to Light", payload)
+            self.assertIn("--midnight: #0a0f1e", payload)
+            self.assertIn("--violet: #6a4cff", payload)
+            self.assertIn("--cyan: #22d3ee", payload)
+            self.assertIn("capability-row", payload)
+        self.assertIn("Engineering edition", engineering)
+        self.assertIn("Customer deliverable", customer)
+
+    def test_unknown_html_template_is_rejected(self) -> None:
+        with self.assertRaisesRegex(ValueError, "Unknown HTML report template"):
+            HtmlReportBuilder(template="not-a-template")
+
     def test_node_rows_put_publishers_first_within_each_technology(self) -> None:
         report = AssessmentReport(
             facts=AssessmentFacts(

@@ -22,6 +22,7 @@ from cisco_collab_health.config import (
     technology_label,
 )
 from cisco_collab_health.status import StatusPrinter
+from cisco_collab_health.reports.html import REPORT_TEMPLATES
 
 RunAssessment = Callable[[argparse.Namespace, StatusPrinter, RuntimeProfile | None], int]
 RunMultiAssessment = Callable[
@@ -342,6 +343,11 @@ def _prompt_run_mode(args: argparse.Namespace) -> argparse.Namespace | None:
 
 
 def _configure_output(args: argparse.Namespace) -> None:
+    args.html_template = _choose_value(
+        "HTML report template",
+        {str(index): name for index, name in enumerate(sorted(REPORT_TEMPLATES), start=1)},
+        args.html_template,
+    )
     args.format = _choose_value("Terminal format", {"1": "summary", "2": "json"}, args.format)
     args.no_html_report = not _yes_no("Write HTML report?", default=not args.no_html_report)
     if not args.no_html_report:
