@@ -11,11 +11,16 @@ from cisco_collab_health import cli
 
 class CliTests(unittest.TestCase):
     def test_multi_target_arguments_are_repeatable(self) -> None:
-        args = cli.build_parser().parse_args([
-            "--assessment-profile", "district",
-            "--assessment-target", "call-control:cucm:YorktownCSD",
-            "--assessment-target", "voicemail:cuc:YorktownCUC",
-        ])
+        args = cli.build_parser().parse_args(
+            [
+                "--assessment-profile",
+                "district",
+                "--assessment-target",
+                "call-control:cucm:YorktownCSD",
+                "--assessment-target",
+                "voicemail:cuc:YorktownCUC",
+            ]
+        )
 
         self.assertEqual(args.assessment_profile, "district")
         self.assertEqual(len(args.assessment_target), 2)
@@ -55,7 +60,7 @@ class CliTests(unittest.TestCase):
         with (
             patch("cisco_collab_health.cli.StatusPrinter._should_color", return_value=False),
             patch("cisco_collab_health.cli.sys.stdout", output),
-            patch("builtins.input", side_effect=["t", "s"]),
+            patch("builtins.input", side_effect=["4", "s"]),
             patch("cisco_collab_health.cli.run_assessment", return_value=0) as run_assessment,
         ):
             result = cli.main([])
@@ -64,26 +69,36 @@ class CliTests(unittest.TestCase):
         self.assertIn("TEMP Test Options", output.getvalue())
         run_assessment.assert_called_once()
 
-    def test_guided_menu_builds_combined_assessment_and_review_capture(self) -> None:
+    def test_menu_selects_multiple_cluster_profiles_for_one_assessment(self) -> None:
         output = io.StringIO()
         with (
             patch("cisco_collab_health.cli.StatusPrinter._should_color", return_value=False),
             patch("cisco_collab_health.cli.sys.stdout", output),
-            patch("builtins.input", side_effect=["1", "District", "", "1", "y", "1", ""]),
+            patch("builtins.input", side_effect=["1", "1,2", "n", ""]),
             patch(
-                "cisco_collab_health.menu.load_profile_names_for_technology",
-                side_effect=lambda technology: ["CUCM"] if technology == "cucm" else ["CUC"],
+                "cisco_collab_health.menu.load_profile_names",
+                return_value=["CallControl", "Voicemail"],
             ),
-            patch("cisco_collab_health.menu.load_assessment_profiles", return_value={}),
-            patch("cisco_collab_health.menu.save_assessment_profiles") as save_profiles,
-            patch("cisco_collab_health.menu.resolve_assessment_targets", return_value=[]),
+            patch(
+                "cisco_collab_health.menu.load_connection_profile_details",
+                side_effect=[
+                    {"cucm": type("Profile", (), {"publisher_ip": "192.0.2.10"})()},
+                    {"cuc": type("Profile", (), {"publisher_ip": "192.0.2.20"})()},
+                ],
+            ),
+            patch(
+                "cisco_collab_health.menu.resolve_assessment_targets",
+                side_effect=lambda assessment, **_kwargs: [
+                    (target, None) for target in assessment.targets
+                ],
+            ),
             patch("cisco_collab_health.cli.run_multi_assessment", return_value=0) as run_multi,
         ):
             result = cli.main([])
 
         self.assertEqual(result, 0)
-        assessment = save_profiles.call_args.args[0]["District"]
-        self.assertEqual([target.technology for target in assessment.targets], ["cucm", "cuc"])
+        targets = run_multi.call_args.args[3]
+        self.assertEqual({target.technology for target, _runtime in targets}, {"cucm", "cuc"})
         run_args = run_multi.call_args.args[0]
         self.assertTrue(run_args.diagnostic_capture)
         self.assertTrue(run_args.export_review_zip)

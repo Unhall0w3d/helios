@@ -6,8 +6,14 @@ import argparse
 import sys
 from collections.abc import Sequence
 
-from cisco_collab_health.application import run_assessment, run_multi_assessment, tls_policy_from_args
+from cisco_collab_health.application import (
+    run_assessment,
+    run_multi_assessment,
+    tls_policy_from_args,
+)
 from cisco_collab_health.config import (
+    ASSESSABLE_TECHNOLOGIES,
+    SUPPORTED_TECHNOLOGIES,
     ensure_runtime_profile,
     AssessmentProfile,
     AssessmentTarget,
@@ -102,9 +108,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--product",
-        choices=("cucm", "cuc"),
+        choices=tuple(sorted(SUPPORTED_TECHNOLOGIES)),
         default="cucm",
-        help="Target product: Cisco Unified CM (cucm) or Unity Connection (cuc).",
+        help="Target technology. CUCM and CUC collectors are currently available.",
     )
     parser.add_argument(
         "--reset-profile",
@@ -113,7 +119,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--reset-technology",
-        choices=("cucm", "cuc"),
+        choices=tuple(sorted(SUPPORTED_TECHNOLOGIES)),
         help="Clear only one technology section in the selected profile and re-prompt for it.",
     )
     parser.add_argument(
@@ -242,6 +248,12 @@ def _validate_args(parser: argparse.ArgumentParser, args: argparse.Namespace) ->
         parser.error("--assessment-profile cannot be combined with --profile")
     if args.assessment_profile and args.product != "cucm":
         parser.error("--product is defined by each target in --assessment-profile")
+    if (
+        not args.assessment_profile
+        and not args.skip_profile
+        and args.product not in ASSESSABLE_TECHNOLOGIES
+    ):
+        parser.error(f"Assessment collectors are not available for --product {args.product}")
     if args.reset_technology and not args.profile:
         parser.error("--reset-technology requires --profile")
     if args.assessment_target and not args.assessment_profile:
@@ -274,9 +286,7 @@ def _run(args: argparse.Namespace, status: StatusPrinter) -> int:
             for specification in args.assessment_target:
                 parts = specification.split(":", 2)
                 if len(parts) != 3:
-                    raise ValueError(
-                        "Assessment targets must use ID:TECHNOLOGY:PROFILE format."
-                    )
+                    raise ValueError("Assessment targets must use ID:TECHNOLOGY:PROFILE format.")
                 parsed_targets.append(AssessmentTarget(*parts))
             assessment = AssessmentProfile(args.assessment_profile, tuple(parsed_targets))
             assessments[assessment.name] = assessment
@@ -289,7 +299,8 @@ def _run(args: argparse.Namespace, status: StatusPrinter) -> int:
                 f"Assessment profile '{args.assessment_profile}' was not found. Available: {available}."
             )
         targets = resolve_assessment_targets(
-            assessment, reset=args.reset_profile,
+            assessment,
+            reset=args.reset_profile,
             save_credentials=not args.no_save_credentials,
         )
         return run_multi_assessment(args, status, assessment.name, targets)

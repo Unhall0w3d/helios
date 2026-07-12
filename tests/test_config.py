@@ -10,6 +10,7 @@ from cisco_collab_health.config import (
     AssessmentProfile,
     AssessmentTarget,
     KEYRING_SERVICE,
+    delete_assessment_profile,
     delete_connection_profile,
     edit_connection_profile,
     ensure_runtime_profile,
@@ -20,6 +21,7 @@ from cisco_collab_health.config import (
     load_assessment_profiles,
     profile_secret_key,
     register_profile_name,
+    resolve_assessment_targets,
     resolve_publisher,
     save_assessment_profiles,
     select_or_create_runtime_profile,
@@ -268,7 +270,7 @@ class ConfigTests(unittest.TestCase):
 
         self.assertEqual(runtime.stored.name, "lab")
         self.assertEqual(prompts[0], "New profile name: ")
-        self.assertEqual(prompts[1], "Publisher IP or FQDN: ")
+        self.assertEqual(prompts[1], "Cisco Unified Communications Manager Publisher IP or FQDN: ")
 
     def test_select_or_create_can_use_existing_profile_by_number(self) -> None:
         store = FakeCredentialStore()
@@ -426,6 +428,25 @@ class ConfigTests(unittest.TestCase):
             self.assertEqual(load_profile_names(config_dir), [])
             self.assertEqual(load_assessment_profiles(config_dir), {})
         self.assertEqual(removed, ["district"])
+
+    def test_saved_assessment_can_be_deleted_without_deleting_profiles(self) -> None:
+        assessment = AssessmentProfile(
+            "Test2", (AssessmentTarget("call-control", "cucm", "cluster-a"),)
+        )
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config_dir = Path(tmpdir)
+            register_profile_name("cluster-a", config_dir)
+            save_assessment_profiles({"Test2": assessment}, config_dir)
+
+            self.assertTrue(delete_assessment_profile("Test2", config_dir))
+            self.assertEqual(load_assessment_profiles(config_dir), {})
+            self.assertEqual(load_profile_names(config_dir), ["cluster-a"])
+
+    def test_cer_profiles_are_storable_but_not_assessable_yet(self) -> None:
+        assessment = AssessmentProfile("emergency", (AssessmentTarget("cer-hq", "cer", "CER-HQ"),))
+
+        with self.assertRaisesRegex(ValueError, "Cisco Emergency Responder"):
+            resolve_assessment_targets(assessment, use_system_keyring=False)
 
 
 if __name__ == "__main__":

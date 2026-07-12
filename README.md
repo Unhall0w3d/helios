@@ -150,9 +150,8 @@ ccha --help
 
 Main menu options:
 
-- Guided assessment (CUCM, CUC, or both)
-- Run a saved multi-technology assessment
-- Run a single connection profile
+- Run an assessment by selecting one or more clusters
+- Manage saved assessment sets
 - Manage connection profiles
 - Test/framework options
 - Quit
@@ -162,10 +161,9 @@ terminal, writes a styled HTML report under `reports/`, and writes local
 parser/debug artifacts under `assessment_runs/` by default. It also writes a
 shareable troubleshooting log bundle under `logs/`.
 
-On startup, the CLI checks for saved connection profiles. If any exist, it asks
-whether to load an existing profile. Answering `Y` lets you choose the saved
-profile. Answering `N` starts new profile creation. If no profile exists, it
-prompts for a new profile name before collecting connection details.
+Connection profiles are the single source of truth for cluster addresses,
+usernames, and encrypted credentials. A saved assessment set only references
+one or more connection profiles; it never duplicates credentials.
 
 For a new profile, the CLI prompts for:
 
@@ -453,25 +451,31 @@ namespaces. Their facts, evidence, findings, and coverage are rendered into one
 HTML/JSON assessment and one review ZIP. A failure on one target is recorded
 without preventing other target pipelines from completing.
 
-Running `./aletheiauc.py` with no arguments opens the guided workflow. It can:
+Running `./aletheiauc.py` with no arguments opens the assessment workflow. It can:
 
-- Create a new assessment and select CUCM, CUC, or both
-- Show only connection profiles belonging to the selected technology
-- Create a missing technology profile and prompt for its address, GUI/API
+- Show every saved cluster as `<technology> <Publisher IP> <profile name>` and
+  let you select one cluster for a single-cluster assessment or any number of
+  clusters for a consolidated assessment
+- Save an ad-hoc selection as a reusable assessment set
+- Create, run, edit cluster membership for, or delete saved assessment sets
+- Create a connection profile and prompt once for its address, GUI/API
   credentials, and Platform/SSH credentials
-- Run a saved multi-technology assessment
 - Combine diagnostic capture and Downloads-folder review ZIP export into one
   recommended menu choice
-- Run a single technology profile when a consolidated assessment is not needed
 - Configure the same report, artifact, log, diagnostic, inventory, port, and TLS
   settings available as command-line options before starting an assessment
 
 The **Manage connection profiles** menu lets you select a profile and view its
 non-secret address and username details, edit the full connection details for
-CUCM or CUC (including replacement passwords), or delete it. Editing one
+CUCM, CUC, CER, or IM&P (including replacement passwords), or delete it. Editing one
 technology preserves the other technology section of a shared profile.
 Passwords are never displayed. Deleting a profile also removes saved combined
 assessments that reference it, after explicit `DELETE` confirmation.
+
+CER and IM&P connection profiles can be stored now so that the profile model is
+ready for multi-cluster environments. Their assessment collectors are not yet
+implemented; selecting either in an assessment gives a clear availability error
+instead of producing an empty or misleading report.
 
 This option affects HTML presentation only. Raw artifacts, troubleshooting
 logs, and normalized JSON remain private diagnostic output and can contain

@@ -60,7 +60,20 @@ class ProfileSelection:
     reset: bool = False
 
 
-SUPPORTED_TECHNOLOGIES = frozenset({"cucm", "cuc"})
+SUPPORTED_TECHNOLOGIES = frozenset({"cucm", "cuc", "cer", "imp"})
+ASSESSABLE_TECHNOLOGIES = frozenset({"cucm", "cuc"})
+TECHNOLOGY_LABELS = {
+    "cucm": "Cisco Unified Communications Manager",
+    "cuc": "Cisco Unity Connection",
+    "cer": "Cisco Emergency Responder",
+    "imp": "Cisco IM and Presence",
+}
+
+
+def technology_label(technology: str) -> str:
+    """Return the user-facing label for a supported technology."""
+
+    return TECHNOLOGY_LABELS.get(technology, technology.upper())
 
 
 @dataclass(frozen=True)
@@ -265,6 +278,24 @@ def save_assessment_profiles(
     return path
 
 
+def delete_assessment_profile(name: str, config_dir: Path | None = None) -> bool:
+    """Remove one saved assessment set without affecting connection profiles."""
+
+    path = profile_config_path(config_dir)
+    if not path.exists():
+        return False
+    with path.open("r", encoding="utf-8") as handle:
+        payload = json.load(handle)
+    assessments = payload.get("assessment_profiles")
+    if not isinstance(assessments, dict) or name not in assessments:
+        return False
+    assessments.pop(name)
+    with path.open("w", encoding="utf-8") as handle:
+        json.dump(payload, handle, indent=2, sort_keys=True)
+        handle.write("\n")
+    return True
+
+
 def resolve_assessment_targets(
     assessment: AssessmentProfile,
     *,
@@ -277,6 +308,16 @@ def resolve_assessment_targets(
     use_system_keyring: bool = True,
 ) -> list[tuple[AssessmentTarget, RuntimeProfile]]:
     """Resolve each target independently, prompting only for its missing credentials."""
+
+    unsupported = sorted(
+        {target.technology for target in assessment.targets} - ASSESSABLE_TECHNOLOGIES
+    )
+    if unsupported:
+        raise ValueError(
+            "Assessment collectors are not available for: "
+            + ", ".join(technology_label(technology) for technology in unsupported)
+            + ". You can save and manage these connection profiles, but cannot assess them yet."
+        )
 
     return [
         (
@@ -615,10 +656,8 @@ def prompt_for_profile(
 ) -> RuntimeProfile:
     """Prompt for profile values and return a runtime profile."""
 
-    label = "CUCM" if technology == "cucm" else "Unity Connection"
-    publisher_prompt = (
-        "Publisher IP or FQDN: " if technology == "cucm" else f"{label} Publisher IP or FQDN: "
-    )
+    label = technology_label(technology)
+    publisher_prompt = f"{label} Publisher IP or FQDN: "
     publisher_input = input_func(publisher_prompt).strip()
     publisher_ip = resolve_publisher(publisher_input)
     gui_username = input_func(f"{label} GUI/API username: ").strip()
@@ -627,9 +666,9 @@ def prompt_for_profile(
     os_password = getpass_func(f"{label} Platform/CLI password: ")
 
     if not gui_username:
-        raise ValueError("CUCM GUI/API username cannot be empty.")
+        raise ValueError(f"{label} GUI/API username cannot be empty.")
     if not os_username:
-        raise ValueError("CUCM Platform/CLI username cannot be empty.")
+        raise ValueError(f"{label} Platform/CLI username cannot be empty.")
 
     return RuntimeProfile(
         stored=StoredProfile(

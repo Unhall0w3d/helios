@@ -9,15 +9,17 @@ from cisco_collab_health.config import (
     AssessmentProfile,
     AssessmentTarget,
     RuntimeProfile,
+    SUPPORTED_TECHNOLOGIES,
+    delete_assessment_profile,
     delete_connection_profile,
     edit_connection_profile,
     ensure_runtime_profile,
     load_connection_profile_details,
     load_assessment_profiles,
-    load_profile_names_for_technology,
     load_profile_names,
     resolve_assessment_targets,
     save_assessment_profiles,
+    technology_label,
 )
 from cisco_collab_health.status import StatusPrinter
 
@@ -37,23 +39,20 @@ def run_menu(
 
     while True:
         print("\nAletheiaUC Main Menu\n====================")
-        print("1. Guided assessment (select technologies and profiles)")
-        print("2. Run saved multi-technology assessment")
-        print("3. Run single connection profile")
-        print("M. Manage connection profiles")
-        print("T. Test/framework options")
+        print("1. Run assessment (select one or more clusters)")
+        print("2. Manage saved assessment sets")
+        print("3. Manage connection profiles")
+        print("4. Test/framework options")
         print("Q. Quit\n")
         choice = input("Selection: ").strip().lower()
-        if choice in {"1", "g"}:
-            result = _guided_assessment(args, status, run_multi_assessment)
-        elif choice in {"2", "a"}:
-            result = _saved_assessment(args, status, run_multi_assessment)
-        elif choice in {"3", "p", "l"}:
-            result = _single_profile(args, status, run_assessment)
-        elif choice == "m":
+        if choice == "1":
+            result = _run_selected_profiles(args, status, run_multi_assessment)
+        elif choice == "2":
+            result = _manage_assessment_sets(args, status, run_multi_assessment)
+        elif choice == "3":
             _manage_profiles(status)
             continue
-        elif choice == "t":
+        elif choice == "4":
             result = _test_options(args, status, run_assessment)
         elif choice == "q":
             status.info("Exiting AletheiaUC")
@@ -65,63 +64,80 @@ def run_menu(
             return result
 
 
-def _guided_assessment(
+def _run_selected_profiles(
     args: argparse.Namespace,
     status: StatusPrinter,
     run_multi: RunMultiAssessment,
 ) -> int | None:
-    assessments = load_assessment_profiles()
-    name = input("Assessment name (for example District): ").strip()
-    if not name:
-        status.warn("Assessment name cannot be empty")
+    targets = _select_assessment_targets(status)
+    if targets is None:
         return None
-    targets = []
-    for technology, label, default_id in (
-        ("cucm", "Cisco Unified Communications Manager", "call-control"),
-        ("cuc", "Cisco Unity Connection", "voicemail"),
-    ):
-        if not _yes_no(f"Include {label}?", default=technology == "cucm"):
-            continue
-        profile_name = _select_connection_profile(technology, label, status)
-        if profile_name is None:
+    name = "On-demand assessment"
+    if _yes_no("Save this cluster selection for later?", default=False):
+        name = _prompt_assessment_name(load_assessment_profiles(), status)
+        assessments = load_assessment_profiles()
+        assessments[name] = AssessmentProfile(name, targets)
+        save_assessment_profiles(assessments)
+        status.ok(f"Saved assessment set: {name}")
+    return _run_targets(args, status, run_multi, AssessmentProfile(name, targets))
+
+
+def _manage_assessment_sets(
+    args: argparse.Namespace,
+    status: StatusPrinter,
+    run_multi: RunMultiAssessment,
+) -> int | None:
+    while True:
+        assessments = load_assessment_profiles()
+        print("\nSaved Assessment Sets\n=====================")
+        for index, name in enumerate(sorted(assessments), start=1):
+            print(f"{index}. {name} ({len(assessments[name].targets)} clusters)")
+        print("C. Create from connection profiles\nR. Return")
+        choice = input("Selection: ").strip()
+        if choice.lower() == "r":
             return None
-        targets.append(AssessmentTarget(default_id, technology, profile_name))
-    if not targets:
-        status.warn("Select at least one technology")
-        return None
-    assessment = AssessmentProfile(name, tuple(targets))
-    assessments[name] = assessment
-    save_assessment_profiles(assessments)
-    status.ok(f"Assessment profile saved: {name}")
-    run_args = _prompt_run_mode(args)
-    if run_args is None:
-        return None
-    resolved = resolve_assessment_targets(
-        assessment,
-        save_credentials=not run_args.no_save_credentials,
-    )
-    return run_multi(run_args, status, name, resolved)
+        if choice.lower() == "c":
+            targets = _select_assessment_targets(status)
+            if targets is None:
+                continue
+            name = _prompt_assessment_name(assessments, status)
+            assessments[name] = AssessmentProfile(name, targets)
+            save_assessment_profiles(assessments)
+            status.ok(f"Saved assessment set: {name}")
+            continue
+        names = sorted(assessments)
+        if not choice.isdigit() or not 1 <= int(choice) <= len(names):
+            status.warn("Invalid selection")
+            continue
+        name = names[int(choice) - 1]
+        assessment = assessments[name]
+        _show_assessment_set(assessment)
+        action = input("R=Run, E=Edit clusters, D=Delete, B=Back: ").strip().lower()
+        if action == "r":
+            return _run_targets(args, status, run_multi, assessment)
+        if action == "e":
+            targets = _select_assessment_targets(status)
+            if targets is not None:
+                assessments[name] = AssessmentProfile(name, targets)
+                save_assessment_profiles(assessments)
+                status.ok(f"Updated assessment set: {name}")
+        elif action == "d":
+            if input(f"Type DELETE to remove assessment set '{name}': ").strip() == "DELETE":
+                delete_assessment_profile(name)
+                status.ok(f"Deleted assessment set: {name}")
+            else:
+                status.info("Assessment deletion cancelled")
+        elif action != "b":
+            status.warn("Invalid selection")
 
 
-def _saved_assessment(
+def _run_targets(
     args: argparse.Namespace,
     status: StatusPrinter,
     run_multi: RunMultiAssessment,
+    assessment: AssessmentProfile,
 ) -> int | None:
-    assessments = load_assessment_profiles()
-    if not assessments:
-        status.warn("No saved assessments found. Starting guided setup.")
-        return _guided_assessment(args, status, run_multi)
-    names = sorted(assessments)
-    selected = _choose_name("Saved Assessments", names, status)
-    if selected is None:
-        return None
-    assessment = assessments[selected]
-    print("Targets:")
-    for target in assessment.targets:
-        print(
-            f"  - {target.target_id}: {target.technology.upper()} using {target.connection_profile}"
-        )
+    _show_assessment_set(assessment)
     run_args = _prompt_run_mode(args)
     if run_args is None:
         return None
@@ -132,79 +148,105 @@ def _saved_assessment(
     return run_multi(run_args, status, assessment.name, resolved)
 
 
-def _single_profile(
-    args: argparse.Namespace,
-    status: StatusPrinter,
-    run_assessment: RunAssessment,
-) -> int | None:
-    technology = _choose_technology(status)
-    if technology is None:
+def _select_assessment_targets(status: StatusPrinter) -> tuple[AssessmentTarget, ...] | None:
+    entries = _connection_profile_entries()
+    if not entries:
+        status.warn("No connection profiles found. Create one first.")
         return None
-    label = "CUCM" if technology == "cucm" else "Unity Connection"
-    profile_name = _select_connection_profile(technology, label, status)
-    if profile_name is None:
-        return None
-    run_args = _prompt_run_mode(args)
-    if run_args is None:
-        return None
-    run_args.product = technology
-    runtime = ensure_runtime_profile(
-        profile_name,
-        technology=technology,
-        save_credentials=not run_args.no_save_credentials,
-    )
-    return run_assessment(run_args, status, runtime)
+    print("\nSelect clusters to assess")
+    for index, (technology, name, address) in enumerate(entries, start=1):
+        print(f"{index}. {technology.upper():4} {address:15} {name}")
+    print("Enter one or more numbers separated by commas, A for all, or R to return.")
+    while True:
+        choice = input("Clusters: ").strip().lower()
+        if choice == "r":
+            return None
+        selected = (
+            range(1, len(entries) + 1) if choice == "a" else _parse_numbers(choice, len(entries))
+        )
+        if selected is None:
+            status.warn("Enter valid cluster numbers separated by commas")
+            continue
+        targets = tuple(
+            AssessmentTarget(
+                f"{entries[index - 1][0]}-{entries[index - 1][1]}",
+                entries[index - 1][0],
+                entries[index - 1][1],
+            )
+            for index in selected
+        )
+        return targets
 
 
-def _select_connection_profile(
-    technology: str,
-    label: str,
-    status: StatusPrinter,
-) -> str | None:
-    names = sorted(set(load_profile_names_for_technology(technology)))
-    print(f"\n{label} connection profile")
-    if names:
-        for index, name in enumerate(names, start=1):
-            print(f"{index}. {name}")
-        print("N. Create a new profile")
-        print("R. Return")
-        while True:
-            choice = input("Profile number/name: ").strip()
-            if choice.lower() == "r":
-                return None
-            if choice.lower() == "n":
-                break
-            if choice.isdigit() and 1 <= int(choice) <= len(names):
-                return names[int(choice) - 1]
-            if choice in names:
-                return choice
-            status.warn("Invalid profile selection")
-    profile_name = _prompt_new_profile_name(names, status)
-    ensure_runtime_profile(profile_name, technology=technology)
-    return profile_name
+def _connection_profile_entries() -> list[tuple[str, str, str]]:
+    entries = []
+    for name in load_profile_names():
+        details = load_connection_profile_details(name)
+        for technology, profile in details.items():
+            entries.append((technology, name, profile.publisher_ip))
+    return sorted(entries, key=lambda entry: (entry[0], entry[2], entry[1].lower()))
+
+
+def _parse_numbers(value: str, maximum: int) -> list[int] | None:
+    try:
+        numbers = [int(item.strip()) for item in value.split(",")]
+    except ValueError:
+        return None
+    if (
+        not numbers
+        or len(numbers) != len(set(numbers))
+        or any(number not in range(1, maximum + 1) for number in numbers)
+    ):
+        return None
+    return numbers
+
+
+def _prompt_assessment_name(
+    assessments: dict[str, AssessmentProfile], status: StatusPrinter
+) -> str:
+    while True:
+        name = input("Assessment set name: ").strip()
+        if not name:
+            status.warn("Assessment set name cannot be empty")
+        elif name in assessments:
+            status.warn("Assessment set name already exists")
+        else:
+            return name
+
+
+def _show_assessment_set(assessment: AssessmentProfile) -> None:
+    print(f"\nAssessment: {assessment.name}")
+    for target in assessment.targets:
+        print(f"  - {target.technology.upper()} {target.connection_profile}")
 
 
 def _manage_profiles(status: StatusPrinter) -> None:
     """View, edit, or delete saved connection profiles."""
 
-    names = load_profile_names()
-    if not names:
-        status.info("No saved connection profiles")
-        return None
-    selected = _choose_name("Connection Profiles", names, status)
-    if selected is None:
-        return None
     while True:
-        print(f"\nProfile: {selected}")
-        print(
-            "V. View non-secret details\nE. Edit connection details\nD. Delete profile\nR. Return"
-        )
+        names = load_profile_names()
+        print("\nConnection Profiles\n===================")
+        for index, name in enumerate(names, start=1):
+            print(f"{index}. {name}")
+        print("C. Create profile\nR. Return")
         choice = input("Selection: ").strip().lower()
-        if choice == "v":
+        if choice == "r":
+            return None
+        if choice == "c":
+            _create_connection_profile(names, status)
+            continue
+        if not choice.isdigit() or not 1 <= int(choice) <= len(names):
+            status.warn("Invalid selection")
+            continue
+        selected = names[int(choice) - 1]
+        print(f"\nProfile: {selected}")
+        print("V. View non-secret details\nE. Edit connection details\nD. Delete profile\nB. Back")
+        action = input("Selection: ").strip().lower()
+        if action == "v":
             _show_profile_details(selected, status)
-        elif choice == "e":
+        elif action == "e":
             _edit_profile(selected, status)
-        elif choice == "d":
+        elif action == "d":
             confirmation = input(f"Type DELETE to permanently remove '{selected}': ").strip()
             if confirmation != "DELETE":
                 status.info("Profile deletion cancelled")
@@ -216,11 +258,19 @@ def _manage_profiles(status: StatusPrinter) -> None:
                     "Removed saved assessments that referenced the deleted profile: "
                     + ", ".join(removed)
                 )
-            return None
-        elif choice == "r":
-            return None
-        else:
+        elif action != "b":
             status.warn("Invalid selection")
+
+
+def _create_connection_profile(existing: list[str], status: StatusPrinter) -> None:
+    technology = _choose_technology(status)
+    if technology is None:
+        return
+    profile_name = _prompt_new_profile_name(existing, status)
+    runtime = ensure_runtime_profile(profile_name, technology=technology)
+    status.ok(f"Created {technology.upper()} connection profile: {profile_name}")
+    for warning in runtime.warnings:
+        status.warn(warning)
 
 
 def _show_profile_details(profile_name: str, status: StatusPrinter) -> None:
@@ -230,7 +280,7 @@ def _show_profile_details(profile_name: str, status: StatusPrinter) -> None:
         return
     print("\nNon-secret connection details")
     for technology, profile in sorted(details.items()):
-        label = "CUCM" if technology == "cucm" else "Unity Connection"
+        label = technology_label(technology)
         print(
             f"{label}:\n  Address: {profile.publisher_input}\n  Resolved IP: {profile.publisher_ip}"
         )
@@ -407,11 +457,15 @@ def _bounded_integer(prompt: str, current: int, minimum: int, maximum: int | Non
 
 def _choose_technology(status: StatusPrinter) -> str | None:
     while True:
-        choice = input("Technology: 1=CUCM, 2=Unity Connection, R=Return: ").strip().lower()
-        if choice == "1":
-            return "cucm"
-        if choice == "2":
-            return "cuc"
+        options = list(sorted(SUPPORTED_TECHNOLOGIES))
+        display = ", ".join(
+            f"{index}={technology.upper()}" for index, technology in enumerate(options, 1)
+        )
+        choice = input(f"Technology: {display}, R=Return: ").strip().lower()
+        if choice.isdigit() and 1 <= int(choice) <= len(options):
+            return options[int(choice) - 1]
+        if choice in SUPPORTED_TECHNOLOGIES:
+            return choice
         if choice == "r":
             return None
         status.warn("Invalid technology selection")
