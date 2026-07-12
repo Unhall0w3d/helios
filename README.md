@@ -425,9 +425,11 @@ the normalized report records counts only.
 
 The same diagnostic mode runs the following read-only Unity Connection UCOS SSH
 commands when the platform account and `paramiko` dependency are available:
-`show status`, `show version`, `show network`, `show memory`, `show hardware`,
-and `utils service list`. Each output is retained as a command artifact for
-offline review. The shared UCOS SSH layer uses a PTY-backed interactive shell
+`show status`, `show version active`, `show version inactive`, `show hardware`,
+`show network cluster`, `show network eth0 detail`,
+`show perf query class Processor|Memory`, `utils diagnose test`,
+`utils service list`, `utils core active list`, and `show cuc cluster status`.
+Each output is retained as a command artifact for offline review. The shared UCOS SSH layer uses a PTY-backed interactive shell
 and waits for the `admin:` prompt after each command; it is intended for CUCM,
 CUC, IM&P, and CER collectors. SSH host keys must already be trusted by the
 local system. On first connection to an assessment target, the collector stores

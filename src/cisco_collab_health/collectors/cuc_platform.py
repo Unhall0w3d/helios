@@ -12,12 +12,16 @@ from cisco_collab_health.transport.ssh import SshCommandResult, UcosSshSession
 
 CUC_SAFE_CLI_COMMANDS = (
     "show status",
-    "show version",
-    "show network",
-    "show network eth0 detail",
-    "show memory",
+    "show version active",
+    "show version inactive",
     "show hardware",
+    "show network cluster",
+    "show network eth0 detail",
+    "show perf query class Processor|Memory",
+    "utils diagnose test",
     "utils service list",
+    "utils core active list",
+    "show cuc cluster status",
 )
 
 
