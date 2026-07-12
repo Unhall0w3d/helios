@@ -241,17 +241,25 @@ def run_assessment(
         print(summary_text)
 
     if log_store:
-        write_log_bundle(
-            log_store,
-            report=report,
-            summary_text=summary_text,
-            artifact_store=artifact_store,
-            html_report_path=html_report_path,
-        )
+        try:
+            write_log_bundle(
+                log_store,
+                report=report,
+                summary_text=summary_text,
+                artifact_store=artifact_store,
+                html_report_path=html_report_path,
+            )
+        except Exception as exc:
+            status.fail(f"Unable to finalize troubleshooting logs: {exc}")
+            return 1
         status.ok(f"Troubleshooting logs written: {log_store.root}")
         if args.export_review_zip:
             status.stage("Exporting review ZIP")
-            review_zip = export_review_zip(log_store)
+            try:
+                review_zip = export_review_zip(log_store)
+            except Exception as exc:
+                status.fail(f"Unable to export review ZIP: {exc}")
+                return 1
             status.ok(f"Review ZIP written: {review_zip}")
 
     return 0
@@ -401,15 +409,25 @@ def run_multi_assessment(
     else:
         print(summary_text)
     if log_store:
-        write_log_bundle(
-            log_store,
-            report=report,
-            summary_text=summary_text,
-            artifact_store=artifact_store,
-            html_report_path=html_report_path,
-        )
+        try:
+            write_log_bundle(
+                log_store,
+                report=report,
+                summary_text=summary_text,
+                artifact_store=artifact_store,
+                html_report_path=html_report_path,
+            )
+        except Exception as exc:
+            status.fail(f"Unable to finalize troubleshooting logs: {exc}")
+            return 1
+        status.ok(f"Troubleshooting logs written: {log_store.root}")
         if args.export_review_zip:
-            review_zip = export_review_zip(log_store)
+            status.stage("Exporting review ZIP")
+            try:
+                review_zip = export_review_zip(log_store)
+            except Exception as exc:
+                status.fail(f"Unable to export review ZIP: {exc}")
+                return 1
             status.ok(f"Review ZIP written: {review_zip}")
     return 0
 

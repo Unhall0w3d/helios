@@ -7,6 +7,7 @@ import unittest
 from unittest.mock import patch
 
 from cisco_collab_health import cli
+from cisco_collab_health import menu
 
 
 class CliTests(unittest.TestCase):
@@ -46,6 +47,15 @@ class CliTests(unittest.TestCase):
         args = cli.build_parser().parse_args([])
 
         self.assertEqual(args.html_template, "aletheiauc")
+
+    def test_start_key_uses_recommended_diagnostic_and_review_options(self) -> None:
+        args = cli.build_parser().parse_args([])
+        with patch("builtins.input", return_value="s"):
+            run_args = menu._prompt_run_mode(args)
+
+        self.assertIsNotNone(run_args)
+        self.assertTrue(run_args.diagnostic_capture)
+        self.assertTrue(run_args.export_review_zip)
 
     def test_no_arguments_opens_menu_and_can_quit(self) -> None:
         output = io.StringIO()

@@ -312,7 +312,7 @@ def _prompt_run_mode(args: argparse.Namespace) -> argparse.Namespace | None:
         print("2. Artifacts and logs")
         print("3. Collection and diagnostics")
         print("4. Network and TLS")
-        print("S. Start assessment\nR. Return")
+        print("S. Start recommended assessment\nR. Return")
         choice = input("Selection: ").strip().lower()
         if choice == "1":
             _configure_output(run_args)
@@ -323,11 +323,11 @@ def _prompt_run_mode(args: argparse.Namespace) -> argparse.Namespace | None:
         elif choice == "4":
             _configure_network(run_args)
         elif choice in {"", "s"}:
-            # Keep the guided workflow's established one-key default: a
-            # diagnostic capture with a review bundle. Explicit settings in
-            # the submenus always take precedence.
-            if not choice:
+            # The primary start action follows the established guided-workflow
+            # recommendation. Explicit settings in the relevant submenus win.
+            if not getattr(run_args, "_diagnostics_configured", False):
                 run_args.diagnostic_capture = True
+            if not getattr(run_args, "_storage_configured", False):
                 run_args.export_review_zip = True
                 run_args.no_logs = False
                 run_args.no_artifacts = False
@@ -358,6 +358,7 @@ def _configure_output(args: argparse.Namespace) -> None:
 
 
 def _configure_storage(args: argparse.Namespace) -> None:
+    args._storage_configured = True
     args.no_artifacts = not _yes_no("Write local artifacts?", default=not args.no_artifacts)
     if not args.no_artifacts:
         args.artifact_dir = _required_value("Artifact directory", args.artifact_dir)
@@ -373,6 +374,7 @@ def _configure_storage(args: argparse.Namespace) -> None:
 
 
 def _configure_collection(args: argparse.Namespace) -> None:
+    args._diagnostics_configured = True
     args.no_save_credentials = not _yes_no(
         "Save prompted passwords in the OS credential store?", default=not args.no_save_credentials
     )
