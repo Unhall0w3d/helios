@@ -57,7 +57,7 @@ class ArtifactStore:
         )
 
     def write_manifest(self, metadata: dict[str, Any]) -> Path:
-        payload = {
+        payload = _existing_manifest(self.root / "manifest.json") | {
             "run_id": self.run_id,
             "profile_name": self.profile_name,
             **metadata,
@@ -165,7 +165,7 @@ class RunLogStore:
         return stream
 
     def write_manifest(self, metadata: dict[str, Any]) -> Path:
-        payload = {
+        payload = _existing_manifest(self.root / "manifest.json") | {
             "run_id": self.run_id,
             "profile_name": self.profile_name,
             **metadata,
@@ -294,6 +294,25 @@ def write_log_bundle(
 ) -> list[Path]:
     """Write troubleshooting files that are easy to share for analysis."""
 
+    metadata = getattr(report, "runtime_metadata", {})
+    store.write_manifest(
+        {
+            "sensitivity_classification": "private diagnostic",
+            "raw_evidence_included": artifact_store is not None,
+            "artifact_redaction": metadata.get("artifact_redaction"),
+            "tls_verification": metadata.get("tls_verification"),
+            "ssh_host_key_enrollment": metadata.get("ssh_accept_new_host_key", False),
+            "customer_safe_report": metadata.get("customer_safe_report", False),
+            "target_technologies": sorted(
+                {
+                    target.get("technology")
+                    for target in metadata.get("targets", [])
+                    if isinstance(target, dict) and target.get("technology")
+                }
+            ),
+            "generated_at": datetime.now().astimezone().isoformat(),
+        }
+    )
     paths = [
         store.write_text("executive_summary.txt", summary_text),
         store.write_json("assessment_report.json", report),
@@ -322,6 +341,16 @@ def write_log_bundle(
 def _safe_name(value: str) -> str:
     sanitized = re.sub(r"[^A-Za-z0-9_.-]+", "_", value.strip())
     return sanitized.strip("._") or "unknown"
+
+
+def _existing_manifest(path: Path) -> dict[str, Any]:
+    if not path.exists():
+        return {}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return payload if isinstance(payload, dict) else {}
 
 
 def _sanitize_artifact_text(content: str, mode: ArtifactRedactionMode) -> str:

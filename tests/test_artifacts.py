@@ -211,6 +211,9 @@ class ArtifactStoreTests(unittest.TestCase):
             self.assertIn("response.txt", artifact_index.read_text(encoding="utf-8"))
             self.assertEqual(artifact_copy.read_text(encoding="utf-8"), "<xml />")
             self.assertTrue(report_copy.exists())
+            manifest = json.loads((log_store.root / "manifest.json").read_text(encoding="utf-8"))
+            self.assertEqual(manifest["sensitivity_classification"], "private diagnostic")
+            self.assertTrue(manifest["raw_evidence_included"])
 
 
 if __name__ == "__main__":

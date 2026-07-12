@@ -194,6 +194,7 @@ def run_assessment(
             "artifacts_enabled": artifact_store is not None,
             "artifact_redaction": args.artifact_redaction if artifact_store else None,
             "tls_verification": tls_policy.verify,
+            "ssh_accept_new_host_key": context.accept_new_host_key,
             "phone_inventory_enabled": context.collect_phone_inventory
             or context.diagnostic_capture,
             "diagnostic_capture": context.diagnostic_capture,
@@ -257,6 +258,7 @@ def run_assessment(
         status.ok(f"Troubleshooting logs written: {log_store.root}")
         if args.export_review_zip:
             status.stage("Exporting review ZIP")
+            status.warn("Review ZIP contains private diagnostic material; review before sharing.")
             try:
                 review_zip = export_review_zip(log_store)
             except Exception as exc:
@@ -382,6 +384,7 @@ def run_multi_assessment(
             "artifacts_enabled": artifact_store is not None,
             "artifact_redaction": args.artifact_redaction if artifact_store else None,
             "tls_verification": tls_policy.verify,
+            "ssh_accept_new_host_key": args.accept_new_host_key,
             "diagnostic_capture": args.diagnostic_capture,
             "customer_safe_report": args.customer_safe_report,
         },
@@ -426,6 +429,7 @@ def run_multi_assessment(
         status.ok(f"Troubleshooting logs written: {log_store.root}")
         if args.export_review_zip:
             status.stage("Exporting review ZIP")
+            status.warn("Review ZIP contains private diagnostic material; review before sharing.")
             try:
                 review_zip = export_review_zip(log_store)
             except Exception as exc:

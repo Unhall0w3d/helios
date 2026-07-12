@@ -8,6 +8,7 @@ from pathlib import Path
 
 from cisco_collab_health.artifacts import ArtifactStore
 from cisco_collab_health.collectors.cuc_platform import (
+    CUC_COMMAND_CATALOG,
     CUC_SAFE_CLI_COMMANDS,
     CucPlatformCollector,
 )
@@ -33,6 +34,11 @@ class FakeSession:
 
 
 class CucPlatformCollectorTests(unittest.TestCase):
+    def test_command_catalog_has_unique_stable_ids_and_bounded_timeouts(self) -> None:
+        self.assertEqual(len({item.command_id for item in CUC_COMMAND_CATALOG}), len(CUC_COMMAND_CATALOG))
+        self.assertTrue(all(item.timeout_seconds > 0 for item in CUC_COMMAND_CATALOG))
+        self.assertEqual(tuple(item.command for item in CUC_COMMAND_CATALOG), CUC_SAFE_CLI_COMMANDS)
+
     def test_collector_records_only_safe_commands_and_artifacts(self) -> None:
         commands: list[str] = []
 

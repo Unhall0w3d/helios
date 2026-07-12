@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Protocol
 
 from cisco_collab_health.collectors.base import CollectionResult
@@ -10,25 +11,31 @@ from cisco_collab_health.models.facts import AssessmentFacts, PlatformCheckFact
 from cisco_collab_health.models.runtime import CollectionContext
 from cisco_collab_health.transport.ssh import SshCommandResult, SshCommandTimeout, UcosSshSession
 
-CUC_SAFE_CLI_COMMANDS = (
-    "show status",
-    "show version active",
-    "show version inactive",
-    "show hardware",
-    "show network cluster",
-    "show network eth0 detail",
-    "show perf query class Processor|Memory",
-    "utils diagnose test",
-    "utils service list",
-    "utils core active list",
-    "show cuc cluster status",
-)
+@dataclass(frozen=True)
+class UcosCommand:
+    """Declarative metadata for a bounded, read-only UCOS command."""
 
-CUC_LONG_RUNNING_CLI_TIMEOUTS = {
-    "utils diagnose test": 180,
-    "utils service list": 120,
-    "utils core active list": 120,
-}
+    command_id: str
+    command: str
+    timeout_seconds: int
+    diagnostic_only: bool = True
+    output_sensitive: bool = True
+
+
+CUC_COMMAND_CATALOG = (
+    UcosCommand("cuc.show_status", "show status", 30),
+    UcosCommand("cuc.show_version_active", "show version active", 30),
+    UcosCommand("cuc.show_version_inactive", "show version inactive", 30),
+    UcosCommand("cuc.show_hardware", "show hardware", 30),
+    UcosCommand("cuc.show_network_cluster", "show network cluster", 30),
+    UcosCommand("cuc.show_network_eth0_detail", "show network eth0 detail", 30),
+    UcosCommand("cuc.show_perf_processor_memory", "show perf query class Processor|Memory", 30),
+    UcosCommand("cuc.utils_diagnose_test", "utils diagnose test", 180),
+    UcosCommand("cuc.utils_service_list", "utils service list", 120),
+    UcosCommand("cuc.utils_core_active_list", "utils core active list", 120),
+    UcosCommand("cuc.show_cluster_status", "show cuc cluster status", 30),
+)
+CUC_SAFE_CLI_COMMANDS = tuple(item.command for item in CUC_COMMAND_CATALOG)
 
 
 class CliSession(Protocol):
@@ -57,10 +64,10 @@ class CucPlatformCollector:
             return CollectionResult(self.name, facts, warnings=["CUC target is missing."])
         try:
             with self.session_factory(context) as session:
-                for command in CUC_SAFE_CLI_COMMANDS:
+                for definition in CUC_COMMAND_CATALOG:
+                    command = definition.command
                     try:
-                        timeout_seconds = CUC_LONG_RUNNING_CLI_TIMEOUTS.get(command)
-                        result = session.execute(command, timeout_seconds=timeout_seconds)
+                        result = session.execute(command, timeout_seconds=definition.timeout_seconds)
                     except SshCommandTimeout as exc:
                         partial_output = exc.output
                         if context.artifact_store is not None and partial_output:
@@ -76,9 +83,7 @@ class CucPlatformCollector:
                                     "paged": str(exc.paged).lower(),
                                     "completion": "prompt timeout",
                                     "timeout_seconds": str(
-                                        CUC_LONG_RUNNING_CLI_TIMEOUTS.get(
-                                            command, context.timeout_seconds
-                                        )
+                                        definition.timeout_seconds
                                     ),
                                 },
                                 source="CUC.UCOS.CLI",
@@ -103,6 +108,9 @@ class CucPlatformCollector:
                                 "output_captured": "true",
                                 "output_length": str(len(result.output)),
                                 "paged": str(result.paged).lower(),
+                                "command_id": definition.command_id,
+                                "timeout_seconds": str(definition.timeout_seconds),
+                                "diagnostic_only": str(definition.diagnostic_only).lower(),
                             },
                             source="CUC.UCOS.CLI",
                         )
