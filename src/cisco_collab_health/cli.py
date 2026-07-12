@@ -222,7 +222,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     try:
         if not provided_args:
-            return run_menu(args, status, run_assessment)
+            return run_menu(args, status, run_assessment, run_multi_assessment)
         return _run(args, status)
     except KeyboardInterrupt:
         status.warn("Interrupted by user")

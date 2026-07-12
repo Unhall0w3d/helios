@@ -436,6 +436,17 @@ namespaces. Their facts, evidence, findings, and coverage are rendered into one
 HTML/JSON assessment and one review ZIP. A failure on one target is recorded
 without preventing other target pipelines from completing.
 
+Running `./aletheiauc.py` with no arguments opens the guided workflow. It can:
+
+- Create a new assessment and select CUCM, CUC, or both
+- Show only connection profiles belonging to the selected technology
+- Create a missing technology profile and prompt for its address, GUI/API
+  credentials, and Platform/SSH credentials
+- Run a saved multi-technology assessment
+- Combine diagnostic capture and Downloads-folder review ZIP export into one
+  recommended menu choice
+- Run a single technology profile when a consolidated assessment is not needed
+
 This option affects HTML presentation only. Raw artifacts, troubleshooting
 logs, and normalized JSON remain private diagnostic output and can contain
 customer identifiers.

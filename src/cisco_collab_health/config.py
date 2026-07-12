@@ -191,6 +191,23 @@ def load_profile_names(config_dir: Path | None = None) -> list[str]:
     return sorted(names)
 
 
+def load_profile_names_for_technology(
+    technology: str, config_dir: Path | None = None,
+) -> list[str]:
+    """Return profiles owned by one technology; legacy profiles are CUCM."""
+
+    path = profile_config_path(config_dir)
+    if not path.exists():
+        return []
+    with path.open("r", encoding="utf-8") as handle:
+        payload = json.load(handle)
+    ownership = payload.get("profile_technologies", {})
+    return [
+        name for name in load_profile_names(config_dir)
+        if ownership.get(name, "cucm") == technology
+    ]
+
+
 def load_assessment_profiles(config_dir: Path | None = None) -> dict[str, AssessmentProfile]:
     """Load multi-technology assessment groups without resolving credentials."""
 
@@ -285,13 +302,24 @@ def save_profile_names(profile_names: list[str], config_dir: Path | None = None)
     return path
 
 
-def register_profile_name(profile_name: str, config_dir: Path | None = None) -> None:
+def register_profile_name(
+    profile_name: str, config_dir: Path | None = None, technology: str = "cucm",
+) -> None:
     """Add a profile name to the local registry."""
 
     names = load_profile_names(config_dir)
     if profile_name not in names:
         names.append(profile_name)
         save_profile_names(names, config_dir)
+    path = profile_config_path(config_dir)
+    with path.open("r", encoding="utf-8") as handle:
+        payload = json.load(handle)
+    ownership = payload.setdefault("profile_technologies", {})
+    if isinstance(ownership, dict):
+        ownership[profile_name] = technology
+    with path.open("w", encoding="utf-8") as handle:
+        json.dump(payload, handle, indent=2, sort_keys=True)
+        handle.write("\n")
 
 
 def unregister_profile_name(profile_name: str, config_dir: Path | None = None) -> None:
@@ -498,7 +526,7 @@ def ensure_runtime_profile(
         if save_credentials and not any(
             "Unable to store encrypted profile" in warning for warning in runtime.warnings
         ):
-            register_profile_name(profile_name, config_dir)
+            register_profile_name(profile_name, config_dir, technology)
         return runtime
 
     if reset and profile_name in profiles:
@@ -511,7 +539,7 @@ def ensure_runtime_profile(
         runtime = prompt_for_profile(profile_name, technology, input_func, getpass_func)
         profiles[profile_name] = runtime.stored
         save_profiles(profiles, config_dir)
-        register_profile_name(profile_name, config_dir)
+        register_profile_name(profile_name, config_dir, technology)
         return _store_or_warn(runtime, store, save_credentials)
 
     warnings: list[str] = []

@@ -12,6 +12,7 @@ from cisco_collab_health.config import (
     KEYRING_SERVICE,
     ensure_runtime_profile,
     load_profile_names,
+    load_profile_names_for_technology,
     load_profiles,
     load_assessment_profiles,
     profile_secret_key,
@@ -175,6 +176,15 @@ class ConfigTests(unittest.TestCase):
             profile_names = load_profile_names(config_dir)
 
         self.assertEqual(profile_names, ["lab"])
+
+    def test_connection_profiles_are_filtered_by_technology(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config_dir = Path(tmpdir)
+            register_profile_name("CUCM", config_dir, "cucm")
+            register_profile_name("CUC", config_dir, "cuc")
+
+            self.assertEqual(load_profile_names_for_technology("cucm", config_dir), ["CUCM"])
+            self.assertEqual(load_profile_names_for_technology("cuc", config_dir), ["CUC"])
 
     def test_select_or_create_prompts_for_new_profile_name_first(self) -> None:
         store = FakeCredentialStore()
