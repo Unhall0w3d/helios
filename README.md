@@ -427,8 +427,10 @@ The same diagnostic mode runs the following read-only Unity Connection UCOS SSH
 commands when the platform account and `paramiko` dependency are available:
 `show status`, `show version`, `show network`, `show memory`, `show hardware`,
 and `utils service list`. Each output is retained as a command artifact for
-offline review. SSH host keys must already be trusted by the local system; the
-collector deliberately does not accept unknown host keys.
+offline review. The shared UCOS SSH layer uses a PTY-backed interactive shell
+and waits for the `admin:` prompt after each command; it is intended for CUCM,
+CUC, IM&P, and CER collectors. SSH host keys must already be trusted by the
+local system; the collector deliberately does not accept unknown host keys.
 CUCM remains the default product. CUC Platform credentials are stored through
 the existing encrypted OS/SSH credential path for upcoming CLI collection.
 
