@@ -39,6 +39,7 @@ def build_report_coverage(report: AssessmentReport) -> list[ReportCoverageItem]:
         ),
         _device_coverage(report, collection_ran),
         _device_load_defaults_coverage(report, collection_ran),
+        _cuc_inventory_coverage(report, collection_ran),
         _count_coverage(
             "Configuration inventory",
             len(report.facts.configuration_objects),
@@ -180,6 +181,24 @@ def _device_load_defaults_coverage(
         collected_detail="Device default load facts were normalized.",
         empty_detail="Collection ran but no device default load facts were normalized.",
         not_collected_detail="No device default load collection result is available.",
+    )
+
+
+def _cuc_inventory_coverage(
+    report: AssessmentReport, collection_ran: bool
+) -> ReportCoverageItem:
+    inventory_types = {
+        item.object_type
+        for item in report.facts.configuration_objects
+        if item.source.startswith("CUC.CUPI")
+    }
+    return _count_coverage(
+        "Unity Connection inventory",
+        len(inventory_types),
+        collection_ran=collection_ran,
+        collected_detail="Bounded CUPI inventory counts were normalized by object type.",
+        empty_detail="Collection ran but no Unity Connection CUPI inventory was normalized.",
+        not_collected_detail="No Unity Connection CUPI inventory collection result is available.",
     )
 
 

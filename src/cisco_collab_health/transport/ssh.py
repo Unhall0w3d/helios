@@ -22,6 +22,16 @@ class SshCommandResult:
     command: str
     output: str
     paged: bool = False
+    completed: bool = True
+
+
+class SshCommandTimeout(TimeoutError):
+    """A command exceeded its budget after producing terminal output."""
+
+    def __init__(self, output: str, paged: bool) -> None:
+        super().__init__("Timed out waiting for the UCOS admin prompt")
+        self.output = output
+        self.paged = paged
 
 
 class UcosSshSession:
@@ -85,19 +95,19 @@ class UcosSshSession:
         if self.client is not None:
             self.client.close()
 
-    def execute(self, command: str) -> SshCommandResult:
+    def execute(self, command: str, *, timeout_seconds: int | None = None) -> SshCommandResult:
         if self.channel is None:
             raise RuntimeError("SSH shell session is not open")
         self.channel.send(command + "\n")
-        output, paged = self._read_until_prompt()
+        output, paged = self._read_until_prompt(timeout_seconds=timeout_seconds)
         return SshCommandResult(command=command, output=_strip_echo(output, command), paged=paged)
 
-    def _read_until_prompt(self) -> tuple[str, bool]:
+    def _read_until_prompt(self, *, timeout_seconds: int | None = None) -> tuple[str, bool]:
         if self.channel is None:
             raise RuntimeError("SSH shell session is not open")
         chunks: list[str] = []
         paged = False
-        deadline = monotonic() + self.context.timeout_seconds
+        deadline = monotonic() + (timeout_seconds or self.context.timeout_seconds)
         while monotonic() < deadline:
             if self.channel.recv_ready():
                 text = self.channel.recv(65535).decode("utf-8", errors="replace")
@@ -112,7 +122,7 @@ class UcosSshSession:
                     return current, paged
             else:
                 self.sleeper(0.05)
-        raise TimeoutError("Timed out waiting for the UCOS admin prompt")
+        raise SshCommandTimeout("".join(chunks), paged)
 
 
 def _strip_echo(output: str, command: str) -> str:

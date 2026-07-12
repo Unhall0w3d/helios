@@ -29,6 +29,9 @@ Issues = "https://github.com/unhall0w3d/aletheiauc/issues"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+cisco_collab_health = ["reports/assets/*.png"]
+
 [tool.ruff]
 line-length = 100
 target-version = "py311"

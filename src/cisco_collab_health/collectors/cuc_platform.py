@@ -8,7 +8,7 @@ from typing import Protocol
 from cisco_collab_health.collectors.base import CollectionResult
 from cisco_collab_health.models.facts import AssessmentFacts, PlatformCheckFact
 from cisco_collab_health.models.runtime import CollectionContext
-from cisco_collab_health.transport.ssh import SshCommandResult, UcosSshSession
+from cisco_collab_health.transport.ssh import SshCommandResult, SshCommandTimeout, UcosSshSession
 
 CUC_SAFE_CLI_COMMANDS = (
     "show status",
@@ -24,11 +24,19 @@ CUC_SAFE_CLI_COMMANDS = (
     "show cuc cluster status",
 )
 
+CUC_LONG_RUNNING_CLI_TIMEOUTS = {
+    "utils diagnose test": 180,
+    "utils service list": 120,
+    "utils core active list": 120,
+}
+
 
 class CliSession(Protocol):
     def __enter__(self) -> "CliSession": ...
     def __exit__(self, *_: object) -> None: ...
-    def execute(self, command: str) -> SshCommandResult: ...
+    def execute(
+        self, command: str, *, timeout_seconds: int | None = None
+    ) -> SshCommandResult: ...
 
 
 class CucPlatformCollector:
@@ -51,7 +59,36 @@ class CucPlatformCollector:
             with self.session_factory(context) as session:
                 for command in CUC_SAFE_CLI_COMMANDS:
                     try:
-                        result = session.execute(command)
+                        timeout_seconds = CUC_LONG_RUNNING_CLI_TIMEOUTS.get(command)
+                        result = session.execute(command, timeout_seconds=timeout_seconds)
+                    except SshCommandTimeout as exc:
+                        partial_output = exc.output
+                        if context.artifact_store is not None and partial_output:
+                            context.artifact_store.write_command_output(node, command, partial_output)
+                        facts.platform_checks.append(
+                            PlatformCheckFact(
+                                node=node,
+                                check_name=command,
+                                status="incomplete",
+                                details={
+                                    "output_captured": str(bool(partial_output)).lower(),
+                                    "output_length": str(len(partial_output)),
+                                    "paged": str(exc.paged).lower(),
+                                    "completion": "prompt timeout",
+                                    "timeout_seconds": str(
+                                        CUC_LONG_RUNNING_CLI_TIMEOUTS.get(
+                                            command, context.timeout_seconds
+                                        )
+                                    ),
+                                },
+                                source="CUC.UCOS.CLI",
+                            )
+                        )
+                        warnings.append(
+                            f"CUC CLI '{command}' did not return to the prompt; "
+                            f"retained {len(partial_output)} characters of partial output."
+                        )
+                        continue
                     except Exception as exc:
                         warnings.append(f"CUC CLI '{command}' failed: {exc}")
                         continue

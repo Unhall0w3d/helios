@@ -6,7 +6,10 @@ import unittest
 from pathlib import Path
 
 from cisco_collab_health.collectors.cuc import CucCollector, _cupi_total
+from cisco_collab_health.models.assessment import AssessmentReport
 from cisco_collab_health.models.runtime import CollectionContext
+from cisco_collab_health.reports.coverage import build_report_coverage
+from cisco_collab_health.reports.html import HtmlReportBuilder
 from cisco_collab_health.transport.http import CapturedHttpResponse
 
 
@@ -47,5 +50,24 @@ class CucCollectorTests(unittest.TestCase):
         self.assertTrue(
             all(
                 item.details["requested_rows"] == "1" for item in result.facts.configuration_objects
+            )
+        )
+
+    def test_cupi_inventory_is_visible_as_cuc_report_content(self) -> None:
+        result = CucCollector(http_client=FakeHttpClient(), diagnostic_capture=True).collect(
+            CollectionContext(product="cuc", publisher_ip="192.0.2.20")
+        )
+        report = AssessmentReport(result.facts, [result], [])
+
+        html = HtmlReportBuilder().build(report)
+        coverage = build_report_coverage(report)
+
+        self.assertIn("Unity Connection Inventory", html)
+        self.assertIn("Mailboxes", html)
+        self.assertIn("Bounded CUPI inventory counts", html)
+        self.assertTrue(
+            any(
+                item.name == "Unity Connection inventory" and item.status == "collected"
+                for item in coverage
             )
         )

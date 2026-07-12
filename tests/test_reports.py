@@ -158,6 +158,11 @@ class ReportBuilderTests(unittest.TestCase):
             self.assertIn("--violet: #6a4cff", payload)
             self.assertIn("--cyan: #22d3ee", payload)
             self.assertIn("capability-row", payload)
+            self.assertIn("report-shell", payload)
+            self.assertIn("report-hero", payload)
+            self.assertIn("visual-divider", payload)
+            self.assertIn("data:image/png;base64", payload)
+            self.assertNotIn("https://", payload)
         self.assertIn("Engineering edition", engineering)
         self.assertIn("Customer deliverable", customer)
         self.assertIn(".header-meta", engineering)
@@ -414,6 +419,7 @@ class ReportBuilderTests(unittest.TestCase):
                 "Cluster nodes",
                 "Device inventory",
                 "Device load defaults",
+                "Unity Connection inventory",
                 "Configuration inventory",
                 "Device registration",
                 "Services",
@@ -429,6 +435,7 @@ class ReportBuilderTests(unittest.TestCase):
         self.assertEqual(by_name["Cluster nodes"].status, "collected")
         self.assertEqual(by_name["Device inventory"].status, "collected")
         self.assertEqual(by_name["Device load defaults"].status, "collected")
+        self.assertEqual(by_name["Unity Connection inventory"].status, "empty")
         self.assertEqual(by_name["Device registration"].status, "collected")
         self.assertEqual(by_name["Services"].status, "collected")
         self.assertEqual(by_name["Performance counters"].status, "collected")

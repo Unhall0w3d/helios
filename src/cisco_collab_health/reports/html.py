@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+from base64 import b64encode
 from collections import Counter
 from dataclasses import dataclass
+from functools import lru_cache
 from hashlib import sha256
 from html import escape
+from pathlib import Path
 
 from cisco_collab_health.models.assessment import AssessmentReport
 from cisco_collab_health.models.facts import (
@@ -48,6 +51,14 @@ REPORT_TEMPLATES = {
 }
 
 
+@lru_cache(maxsize=None)
+def _aletheiauc_asset_data_uri(filename: str) -> str:
+    """Embed a template asset so generated reports remain standalone."""
+
+    path = Path(__file__).with_name("assets") / filename
+    return f"data:image/png;base64,{b64encode(path.read_bytes()).decode('ascii')}"
+
+
 class HtmlReportBuilder:
     """Builds a styled standalone HTML report."""
 
@@ -69,8 +80,12 @@ class HtmlReportBuilder:
         )
         collector_evidence_count = sum(len(result.evidence) for result in report.collector_results)
         header_metadata = self._aletheiauc_header_metadata(report)
+        hero_image = _aletheiauc_asset_data_uri("aletheiauc-report-hero.png")
+        divider_image = _aletheiauc_asset_data_uri("aletheiauc-report-divider.png")
+        emblem_image = _aletheiauc_asset_data_uri("aletheiauc-report-emblem.png")
         methodology_scope_section = self._methodology_scope_section(report)
         target_scope_section = self._target_scope_section(report)
+        cuc_inventory_section = self._cuc_inventory_section(report)
         cluster_section = self._cluster_section(report)
         node_rows = self._node_rows(report)
         device_rows = self._device_rows(report)
@@ -341,10 +356,126 @@ class HtmlReportBuilder:
       margin: 8px 0 0;
       padding-left: 20px;
     }}
+    /* AletheiaUC — Beaconveil standalone report treatment. */
+    :root {{
+      color-scheme: dark;
+      --bg: #050812;
+      --panel: #10182b;
+      --text: #e6e8f1;
+      --muted: #98a2b8;
+      --line: #263451;
+      --critical: #ff5576;
+      --warning: #ffc75e;
+      --info: #22d3ee;
+    }}
+    * {{ box-sizing: border-box; }}
+    body {{
+      background:
+        radial-gradient(circle at 82% 4%, rgba(106, 76, 255, 0.22), transparent 31rem),
+        radial-gradient(circle at 12% 2%, rgba(34, 211, 238, 0.11), transparent 28rem),
+        linear-gradient(180deg, #050812, var(--midnight) 34rem);
+      color: var(--text);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }}
+    .report-shell {{ width: min(1480px, calc(100% - 40px)); margin: 0 auto; padding: 30px 0 70px; }}
+    .report-hero {{
+      min-height: clamp(280px, 32vw, 440px);
+      padding: 32px clamp(24px, 5vw, 64px);
+      border: 1px solid rgba(106, 76, 255, 0.45);
+      border-radius: 18px;
+      background: linear-gradient(90deg, rgba(5, 8, 18, 0.84), rgba(5, 8, 18, 0.20)), var(--hero-image) center/cover;
+      box-shadow: 0 18px 45px rgba(0, 0, 0, 0.28);
+    }}
+    .report-hero::after {{
+      width: 420px;
+      height: 420px;
+      right: -110px;
+      top: -175px;
+      background: radial-gradient(circle, rgba(34, 211, 238, 0.24), transparent 67%);
+    }}
+    .report-hero .masthead {{ min-height: 185px; align-items: flex-start; }}
+    .report-hero h1 {{ font-size: clamp(32px, 4vw, 46px); max-width: 680px; }}
+    .report-hero .beacon {{ width: 72px; height: 72px; }}
+    .report-hero .header-meta {{ justify-content: flex-start; max-width: 760px; }}
+    .visual-divider {{
+      height: 72px;
+      margin: 0 5%;
+      background: var(--divider-image) center/contain no-repeat;
+      opacity: 0.78;
+    }}
+    main {{ max-width: none; padding: 0; }}
+    section {{
+      position: relative;
+      margin: 25px 0 0;
+      padding: 0;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: linear-gradient(180deg, rgba(21, 31, 54, 0.94), rgba(16, 24, 43, 0.94));
+      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.18);
+    }}
+    section::before {{
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      opacity: 0.055;
+      background: var(--emblem-image) 97% 14% / 310px no-repeat;
+    }}
+    section > * {{ position: relative; z-index: 1; }}
+    section > h2 {{
+      margin: 0 0 16px;
+      padding: 17px 20px;
+      border-bottom: 1px solid var(--line);
+      background: linear-gradient(90deg, rgba(106, 76, 255, 0.13), rgba(34, 211, 238, 0.025));
+      font-size: 20px;
+    }}
+    section > :not(h2) {{ margin-left: 20px; margin-right: 20px; }}
+    section > table, section > .table-scroll {{ width: calc(100% - 40px); }}
+    .summary-grid {{ padding: 0 20px 20px; }}
+    .metric {{
+      background: linear-gradient(145deg, rgba(21, 31, 54, 0.96), rgba(5, 8, 18, 0.66));
+      border-color: rgba(38, 52, 81, 0.95);
+      box-shadow: inset 0 2px 0 rgba(47, 124, 255, 0.14);
+    }}
+    th, td {{ border-bottom-color: rgba(38, 52, 81, 0.76); }}
+    th {{ color: var(--cyan); background: rgba(13, 21, 40, 0.86); }}
+    tbody tr:nth-child(even) {{ background: rgba(255, 255, 255, 0.018); }}
+    tbody tr:hover {{ background: rgba(47, 124, 255, 0.06); }}
+    .meta {{ color: var(--muted); }}
+    .technology-section.cuc-section {{ border-color: rgba(34, 211, 238, 0.40); }}
+    .finding {{
+      margin: 10px 20px;
+      padding: 14px 16px;
+      border: 1px solid var(--line);
+      border-left: 4px solid var(--info);
+      border-radius: 6px;
+      background: rgba(5, 8, 18, 0.38);
+    }}
+    @media (max-width: 720px) {{
+      .report-shell {{ width: min(100% - 20px, 1480px); padding-top: 10px; }}
+      .report-hero {{ min-height: 340px; }}
+      .report-hero .masthead {{ min-height: 195px; }}
+      .report-hero .beacon {{ display: none; }}
+      .report-hero .header-meta {{ justify-content: center; }}
+      .visual-divider {{ height: 48px; }}
+    }}
+    @media print {{
+      :root {{ color-scheme: light; }}
+      body {{ background: #fff !important; color: #111 !important; }}
+      .report-shell {{ width: 100%; padding: 0; }}
+      .report-hero {{ min-height: 155px; background: #fff !important; border: 2px solid #20283a; box-shadow: none; }}
+      .report-hero::after, .visual-divider, section::before, .beacon {{ display: none !important; }}
+      .report-hero h1, .report-hero p, .meta {{ color: #111 !important; }}
+      section, .metric, .finding {{ background: #fff !important; color: #111 !important; box-shadow: none !important; }}
+      section {{ border-color: #cbd1dc; break-inside: avoid; }}
+      th, td {{ border-color: #d8dce5; }}
+      th {{ color: #245ec9; background: #f2f5fa; }}
+    }}
   </style>
 </head>
-<body>
-  <header>
+<body class="aletheiauc-report">
+  <div class="report-shell" style="--divider-image: url('{divider_image}'); --emblem-image: url('{emblem_image}');">
+  <header class="report-hero" style="--hero-image: url('{hero_image}');">
     <div class="masthead">
       <div>
         <p class="eyebrow">{escape(self.template.eyebrow)}</p>
@@ -358,6 +489,7 @@ class HtmlReportBuilder:
     </div>
     <div class="header-meta">{header_metadata}</div>
   </header>
+  <div class="visual-divider" aria-hidden="true"></div>
   <main>
     <section>
       <h2>Executive Overview</h2>
@@ -384,6 +516,7 @@ class HtmlReportBuilder:
     </section>
     {methodology_scope_section}
     {target_scope_section}
+    {cuc_inventory_section}
     {coverage_section}
     {cluster_section}
     <section>
@@ -649,6 +782,7 @@ class HtmlReportBuilder:
       </details>
     </section>
   </main>
+  </div>
 </body>
 </html>
 """
@@ -1255,6 +1389,34 @@ class HtmlReportBuilder:
             + "".join(rows)
             + "</tbody></table></div></section>"
         )
+
+    def _cuc_inventory_section(self, report: AssessmentReport) -> str:
+        inventory = [
+            item
+            for item in report.facts.configuration_objects
+            if item.source.startswith("CUC.CUPI")
+        ]
+        if not inventory:
+            return ""
+        rows = "".join(
+            "<tr>"
+            f"<td>{escape(item.name)}</td>"
+            f"<td>{escape(display_text(item.details.get('total')))}</td>"
+            f"<td>{escape(display_text(item.details.get('requested_rows')))}</td>"
+            "</tr>"
+            for item in sorted(inventory, key=lambda item: item.name)
+        )
+        return f"""
+    <section class="technology-section cuc-section">
+      <h2>Unity Connection Inventory</h2>
+      <p class="meta">Source: bounded, read-only CUPI inventory probes. Counts are normalized
+      from collection metadata; individual mailbox and contact identities are not included here.</p>
+      <table>
+        <thead><tr><th>Inventory</th><th>Total</th><th>Probe rows</th></tr></thead>
+        <tbody>{rows}</tbody>
+      </table>
+    </section>
+"""
 
     def _configuration_summary_rows(self, report: AssessmentReport) -> str:
         if not report.facts.configuration_objects:
