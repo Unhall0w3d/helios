@@ -38,6 +38,7 @@ class StoredProfile:
     publisher_ip: str
     gui_username: str
     os_username: str
+    technology: str = "cucm"
 
 
 @dataclass(frozen=True)
@@ -47,6 +48,7 @@ class RuntimeProfile:
     stored: StoredProfile
     gui_password: str = field(repr=False)
     os_password: str = field(repr=False)
+    technology: str = "cucm"
     warnings: list[str] = field(default_factory=list)
 
 
@@ -93,11 +95,6 @@ class AssessmentProfile:
         ids = [target.target_id.lower() for target in self.targets]
         if len(ids) != len(set(ids)):
             raise ValueError("Assessment target IDs must be unique within a profile.")
-        connection_profiles = [target.connection_profile.lower() for target in self.targets]
-        if len(connection_profiles) != len(set(connection_profiles)):
-            raise ValueError(
-                "Each assessment target must use a distinct connection profile."
-            )
 
 
 def resolve_publisher(value: str) -> str:
@@ -171,6 +168,7 @@ def load_profiles(config_dir: Path | None = None) -> dict[str, StoredProfile]:
             publisher_ip=data["publisher_ip"],
             gui_username=data["gui_username"],
             os_username=data.get("os_username", ""),
+            technology=data.get("technology", "cucm"),
         )
         for name, data in profiles.items()
     }
@@ -204,7 +202,11 @@ def load_profile_names_for_technology(
     ownership = payload.get("profile_technologies", {})
     return [
         name for name in load_profile_names(config_dir)
-        if ownership.get(name, "cucm") == technology
+        if technology in (
+            ownership.get(name, "cucm")
+            if isinstance(ownership.get(name, "cucm"), list)
+            else [ownership.get(name, "cucm")]
+        )
     ]
 
 
@@ -316,7 +318,9 @@ def register_profile_name(
         payload = json.load(handle)
     ownership = payload.setdefault("profile_technologies", {})
     if isinstance(ownership, dict):
-        ownership[profile_name] = technology
+        current = ownership.get(profile_name, [])
+        values = current if isinstance(current, list) else [current]
+        ownership[profile_name] = sorted(set(values + [technology]))
     with path.open("w", encoding="utf-8") as handle:
         json.dump(payload, handle, indent=2, sort_keys=True)
         handle.write("\n")
@@ -484,9 +488,11 @@ def prompt_for_profile(
             publisher_ip=publisher_ip,
             gui_username=gui_username,
             os_username=os_username,
+            technology=technology,
         ),
         gui_password=gui_password,
         os_password=os_password,
+        technology=technology,
     )
 
 
@@ -620,9 +626,17 @@ def _load_runtime_profile_from_store(
         return None
 
     data = json.loads(payload)
-    platform_credentials_configured = data.get("platform_credentials_configured") is True
-    os_username = str(data.get("os_username") or "").strip()
-    os_password = str(data.get("os_password") or "")
+    technology_profiles = data.get("technology_profiles", {})
+    profile_data = technology_profiles.get(technology) if isinstance(technology_profiles, dict) else None
+    if profile_data is None:
+        # Legacy top-level fields are the CUCM section. For another technology,
+        # deliberately prompt for its address and credentials rather than reuse them.
+        if technology != "cucm":
+            return None
+        profile_data = data
+    platform_credentials_configured = profile_data.get("platform_credentials_configured") is True
+    os_username = str(profile_data.get("os_username") or "").strip()
+    os_password = str(profile_data.get("os_password") or "")
     warnings = []
     if not platform_credentials_configured:
         label = "CUCM" if technology == "cucm" else "Unity Connection"
@@ -636,13 +650,15 @@ def _load_runtime_profile_from_store(
     return RuntimeProfile(
         stored=StoredProfile(
             name=profile_name,
-            publisher_input=data["publisher_input"],
-            publisher_ip=data["publisher_ip"],
-            gui_username=data["gui_username"],
+            publisher_input=profile_data["publisher_input"],
+            publisher_ip=profile_data["publisher_ip"],
+            gui_username=profile_data["gui_username"],
             os_username=os_username,
+            technology=technology,
         ),
-        gui_password=data["gui_password"],
+        gui_password=profile_data["gui_password"],
         os_password=os_password,
+        technology=technology,
         warnings=list(dict.fromkeys(warnings)),
     )
 
@@ -679,16 +695,22 @@ def _store_or_warn(
         warnings.append(
             "Credential saving disabled; passwords will be requested again on future runs."
         )
-        return RuntimeProfile(runtime.stored, runtime.gui_password, runtime.os_password, warnings)
+        return RuntimeProfile(
+            runtime.stored, runtime.gui_password, runtime.os_password,
+            runtime.technology, warnings,
+        )
 
     if store is None:
         warnings.append(
             "Python keyring is not available; only non-secret profile details were saved locally. "
             "Passwords will be requested again."
         )
-        return RuntimeProfile(runtime.stored, runtime.gui_password, runtime.os_password, warnings)
+        return RuntimeProfile(
+            runtime.stored, runtime.gui_password, runtime.os_password,
+            runtime.technology, warnings,
+        )
 
-    payload = {
+    section = {
         "publisher_input": runtime.stored.publisher_input,
         "publisher_ip": runtime.stored.publisher_ip,
         "gui_username": runtime.stored.gui_username,
@@ -698,12 +720,26 @@ def _store_or_warn(
         "platform_credentials_configured": True,
     }
     try:
+        existing_payload: dict[str, object] = {}
+        profile_key = profile_secret_key(runtime.stored.name)
+        existing = store.get_password(KEYRING_SERVICE, profile_key)
+        if existing:
+            try:
+                existing_payload = json.loads(existing)
+            except json.JSONDecodeError:
+                existing_payload = {}
+        technology_profiles = existing_payload.setdefault("technology_profiles", {})
+        if isinstance(technology_profiles, dict):
+            technology_profiles[runtime.technology] = section
+        if runtime.technology == "cucm":
+            existing_payload.update(section)
         store.set_password(
-            KEYRING_SERVICE,
-            profile_secret_key(runtime.stored.name),
-            json.dumps(payload, sort_keys=True),
+            KEYRING_SERVICE, profile_key, json.dumps(existing_payload, sort_keys=True),
         )
     except Exception as exc:
         warnings.append(f"Unable to store encrypted profile in keyring: {exc}")
 
-    return RuntimeProfile(runtime.stored, runtime.gui_password, runtime.os_password, warnings)
+    return RuntimeProfile(
+        runtime.stored, runtime.gui_password, runtime.os_password,
+        runtime.technology, warnings,
+    )

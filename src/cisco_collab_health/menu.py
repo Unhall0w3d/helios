@@ -12,6 +12,7 @@ from cisco_collab_health.config import (
     ensure_runtime_profile,
     load_assessment_profiles,
     load_profile_names_for_technology,
+    load_profile_names,
     resolve_assessment_targets,
     save_assessment_profiles,
 )
@@ -132,7 +133,7 @@ def _single_profile(
 def _select_connection_profile(
     technology: str, label: str, status: StatusPrinter,
 ) -> str | None:
-    names = load_profile_names_for_technology(technology)
+    names = sorted(set(load_profile_names_for_technology(technology)) | set(load_profile_names()))
     print(f"\n{label} connection profile")
     if names:
         for index, name in enumerate(names, start=1):

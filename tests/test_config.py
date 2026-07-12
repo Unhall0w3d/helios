@@ -60,13 +60,6 @@ class ConfigTests(unittest.TestCase):
                 AssessmentTarget("PRIMARY", "cuc", "two"),
             ))
 
-    def test_assessment_profile_rejects_shared_connection_credentials(self) -> None:
-        with self.assertRaises(ValueError):
-            AssessmentProfile("invalid", (
-                AssessmentTarget("call-control", "cucm", "shared"),
-                AssessmentTarget("voicemail", "cuc", "shared"),
-            ))
-
     def test_ip_publisher_is_accepted_without_resolution(self) -> None:
         self.assertEqual(resolve_publisher("192.0.2.10"), "192.0.2.10")
 
@@ -138,6 +131,31 @@ class ConfigTests(unittest.TestCase):
         self.assertIn('"os_username": "osreader"', payload)
         self.assertIn('"os_password": "os-secret"', payload)
         self.assertIn('"platform_credentials_configured": true', payload)
+
+    def test_legacy_profile_can_add_cuc_section_without_overwriting_cucm(self) -> None:
+        store = FakeCredentialStore()
+        store.set_password(
+            KEYRING_SERVICE, profile_secret_key("YorktownCSD"),
+            '{"publisher_input":"10.0.0.8","publisher_ip":"10.0.0.8",'
+            '"gui_username":"cucm-api","gui_password":"cucm-secret",'
+            '"os_username":"cucm-platform","os_password":"cucm-os",'
+            '"platform_credentials_configured":true}',
+        )
+        inputs = iter(["10.0.0.20", "cuc-api", "cuc-platform"])
+        passwords = iter(["cuc-secret", "cuc-os"])
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            runtime = ensure_runtime_profile(
+                "YorktownCSD", technology="cuc", config_dir=Path(tmpdir),
+                input_func=lambda prompt: next(inputs),
+            getpass_func=lambda prompt: next(passwords), credential_store=store,
+            )
+        payload = store.get_password(KEYRING_SERVICE, profile_secret_key("YorktownCSD")) or ""
+
+        self.assertEqual(runtime.stored.publisher_ip, "10.0.0.20")
+        self.assertEqual(runtime.technology, "cuc")
+        self.assertIn('"gui_password": "cuc-secret"', payload)
+        self.assertIn('"gui_password": "cucm-secret"', payload)
 
     def test_unmarked_profile_does_not_treat_api_credentials_as_platform_credentials(self) -> None:
         store = FakeCredentialStore()
