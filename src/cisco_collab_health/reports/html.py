@@ -48,6 +48,12 @@ REPORT_TEMPLATES = {
         eyebrow="Engineering health brief",
         tagline="Bringing UC Health to Light",
     ),
+    "comsource": ReportTemplate(
+        key="comsource",
+        title="ComSource Collaboration Health Assessment",
+        eyebrow="Customer assessment report",
+        tagline="Collaboration platform health and readiness",
+    ),
 }
 
 
@@ -57,6 +63,14 @@ def _aletheiauc_asset_data_uri(filename: str) -> str:
 
     path = Path(__file__).with_name("assets") / filename
     return f"data:image/png;base64,{b64encode(path.read_bytes()).decode('ascii')}"
+
+
+@lru_cache(maxsize=None)
+def _comsource_asset_data_uri(filename: str) -> str:
+    """Embed supplied ComSource assets without external report dependencies."""
+
+    path = Path(__file__).with_name("assets") / "comsource" / filename
+    return f"data:image/svg+xml;base64,{b64encode(path.read_bytes()).decode('ascii')}"
 
 
 class HtmlReportBuilder:
@@ -79,10 +93,28 @@ class HtmlReportBuilder:
             len(result.warnings) + len(result.errors) for result in report.collector_results
         )
         collector_evidence_count = sum(len(result.evidence) for result in report.collector_results)
-        header_metadata = self._aletheiauc_header_metadata(report)
-        hero_image = _aletheiauc_asset_data_uri("aletheiauc-report-hero.png")
-        divider_image = _aletheiauc_asset_data_uri("aletheiauc-report-divider.png")
-        emblem_image = _aletheiauc_asset_data_uri("aletheiauc-report-emblem.png")
+        header_metadata = self._header_metadata(report)
+        is_comsource = self.template.key == "comsource"
+        hero_image = (
+            _comsource_asset_data_uri("comsource-cover-network.svg")
+            if is_comsource
+            else _aletheiauc_asset_data_uri("aletheiauc-report-hero.png")
+        )
+        divider_image = (
+            _comsource_asset_data_uri("comsource-divider.svg")
+            if is_comsource
+            else _aletheiauc_asset_data_uri("aletheiauc-report-divider.png")
+        )
+        watermark_image = (
+            _comsource_asset_data_uri("comsource-watermark.svg") if is_comsource else ""
+        )
+        logo_image = _comsource_asset_data_uri("ComSource_Logo.svg") if is_comsource else ""
+        emblem_image = "" if is_comsource else _aletheiauc_asset_data_uri("aletheiauc-report-emblem.png")
+        template_css = self._comsource_css() if is_comsource else ""
+        template_header = self._template_header(
+            header_metadata, logo_image=logo_image, is_comsource=is_comsource
+        )
+        template_footer = self._template_footer(logo_image=logo_image, is_comsource=is_comsource)
         methodology_scope_section = self._methodology_scope_section(report)
         target_scope_section = self._target_scope_section(report)
         cuc_inventory_section = self._cuc_inventory_section(report)
@@ -357,7 +389,7 @@ class HtmlReportBuilder:
       margin: 8px 0 0;
       padding-left: 20px;
     }}
-    /* AletheiaUC — Beaconveil standalone report treatment. */
+    /* Default standalone report treatment. */
     :root {{
       color-scheme: dark;
       --bg: #050812;
@@ -472,23 +504,13 @@ class HtmlReportBuilder:
       th, td {{ border-color: #d8dce5; }}
       th {{ color: #245ec9; background: #f2f5fa; }}
     }}
+    {template_css}
   </style>
 </head>
-<body class="aletheiauc-report">
-  <div class="report-shell" style="--divider-image: url('{divider_image}'); --emblem-image: url('{emblem_image}');">
+<body class="{escape(self.template.key)}-report">
+  <div class="report-shell" style="--divider-image: url('{divider_image}'); --emblem-image: url('{emblem_image}'); --watermark-image: url('{watermark_image}');">
   <header class="report-hero" style="--hero-image: url('{hero_image}');">
-    <div class="masthead">
-      <div>
-        <p class="eyebrow">{escape(self.template.eyebrow)}</p>
-        <h1>{escape(self.template.title)}</h1>
-        <p>{escape(self.template.tagline)}</p>
-      </div>
-      <div class="beacon" aria-hidden="true">✦</div>
-    </div>
-    <div class="capability-row">
-      <span>Assess</span><span>Diagnose</span><span>Improve</span><span>Optimize</span>
-    </div>
-    <div class="header-meta">{header_metadata}</div>
+    {template_header}
   </header>
   <div class="visual-divider" aria-hidden="true"></div>
   <main>
@@ -784,13 +806,165 @@ class HtmlReportBuilder:
       </details>
     </section>
   </main>
+  {template_footer}
   </div>
 </body>
 </html>
 """
 
-    def _aletheiauc_header_metadata(self, report: AssessmentReport) -> str:
-        """Render AletheiaUC-specific header chips from the actual assessment scope."""
+    def _template_header(
+        self, header_metadata: str, *, logo_image: str, is_comsource: bool
+    ) -> str:
+        """Render only the selected template's identity treatment."""
+
+        if is_comsource:
+            return f"""
+    <div class=\"masthead\">
+      <div>
+        <div class=\"logo-panel\"><img src=\"{logo_image}\" alt=\"ComSource\"></div>
+        <p class=\"eyebrow\">{escape(self.template.eyebrow)}</p>
+        <h1>{escape(self.template.title)}</h1>
+        <p>{escape(self.template.tagline)}</p>
+      </div>
+    </div>
+    <div class=\"header-meta\">{header_metadata}</div>"""
+
+        return f"""
+    <div class=\"masthead\">
+      <div>
+        <p class=\"eyebrow\">{escape(self.template.eyebrow)}</p>
+        <h1>{escape(self.template.title)}</h1>
+        <p>{escape(self.template.tagline)}</p>
+      </div>
+      <div class=\"beacon\" aria-hidden=\"true\">✦</div>
+    </div>
+    <div class=\"capability-row\">
+      <span>Assess</span><span>Diagnose</span><span>Improve</span><span>Optimize</span>
+    </div>
+    <div class=\"header-meta\">{header_metadata}</div>"""
+
+    @staticmethod
+    def _template_footer(*, logo_image: str, is_comsource: bool) -> str:
+        if not is_comsource:
+            return ""
+        return f"""
+  <footer class=\"template-footer\">
+    <div class=\"footer-logo\"><img src=\"{logo_image}\" alt=\"ComSource\"></div>
+    <small>Prepared by ComSource, Inc. · Confidential customer report</small>
+  </footer>"""
+
+    @staticmethod
+    def _comsource_css() -> str:
+        """ComSource-only visual layer, based on the supplied branding pack."""
+
+        return """
+    body.comsource-report {
+      background: #eef2f6;
+      color: #20283a;
+    }
+    .comsource-report .report-shell {
+      width: min(1450px, calc(100% - 36px));
+      margin: 24px auto 60px;
+      padding: 0;
+    }
+    .comsource-report .report-hero {
+      min-height: 330px;
+      padding: 34px 42px 46px;
+      border-radius: 16px;
+      background: linear-gradient(90deg, rgba(8, 13, 34, .97) 0%, rgba(16, 22, 51, .92) 49%, rgba(46, 29, 103, .45) 100%), var(--hero-image);
+      background-position: center;
+      background-size: cover;
+      box-shadow: 0 18px 45px rgba(16, 22, 51, .22);
+    }
+    .comsource-report .report-hero::after {
+      inset: auto 0 0;
+      width: auto;
+      height: 7px;
+      background: linear-gradient(90deg, #2e1d67, #0096d6);
+    }
+    .comsource-report .report-hero .masthead { min-height: 0; }
+    .comsource-report .logo-panel {
+      display: inline-flex;
+      align-items: center;
+      padding: 12px 16px;
+      border-radius: 10px;
+      background: #fff;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, .18);
+    }
+    .comsource-report .logo-panel img { display: block; width: 265px; max-width: 55vw; height: auto; }
+    .comsource-report .report-hero .eyebrow { margin-top: 30px; color: #62d4ff; }
+    .comsource-report .report-hero h1 { max-width: 780px; color: #fff; font-size: clamp(34px, 5vw, 52px); }
+    .comsource-report .report-hero p { color: #d9e7f5; }
+    .comsource-report .report-hero .header-meta { justify-content: flex-start; max-width: 780px; margin-top: 24px; }
+    .comsource-report .meta-chip { background: rgba(255, 255, 255, .08); color: #fff; }
+    .comsource-report .meta-chip::before { color: #62d4ff; }
+    .comsource-report .visual-divider { height: 26px; margin: 18px 0; background: var(--divider-image) center / 100% 24px no-repeat; }
+    .comsource-report main { display: grid; gap: 18px; }
+    .comsource-report section {
+      position: relative;
+      overflow: hidden;
+      margin: 0;
+      border: 1px solid #d8e1ea;
+      border-radius: 12px;
+      background: #fff;
+      box-shadow: 0 10px 28px rgba(16, 22, 51, .07);
+    }
+    .comsource-report section::before {
+      right: -45px;
+      bottom: -90px;
+      left: auto;
+      top: auto;
+      width: 280px;
+      height: 280px;
+      border: 0;
+      border-radius: 0;
+      background: var(--watermark-image) center / contain no-repeat;
+      opacity: .42;
+    }
+    .comsource-report section > h2 {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin: 0;
+      padding: 16px 20px;
+      border-bottom: 1px solid #d8e1ea;
+      background: linear-gradient(90deg, #f5f8fb, #fff);
+      color: #2e1d67;
+      font-size: 20px;
+    }
+    .comsource-report section > h2::before { content: \"\"; width: 5px; height: 27px; border-radius: 4px; background: linear-gradient(#2e1d67, #0096d6); }
+    .comsource-report section > :not(h2) { position: relative; z-index: 1; }
+    .comsource-report .summary-grid { padding: 20px; }
+    .comsource-report .metric { background: #fff; border-color: #d8e1ea; border-top: 4px solid #147cc1; box-shadow: none; }
+    .comsource-report .metric strong { color: #101633; }
+    .comsource-report .metric span, .comsource-report .meta { color: #667085; }
+    .comsource-report .finding { background: #fff; border-color: #d8e1ea; }
+    .comsource-report th { background: #101633; color: #fff; }
+    .comsource-report th, .comsource-report td { border-bottom-color: #d8e1ea; }
+    .comsource-report tbody tr:nth-child(even) { background: #f5f8fb; }
+    .comsource-report .template-footer { display: flex; align-items: center; justify-content: space-between; gap: 20px; margin-top: 18px; padding: 16px 20px; border-radius: 10px; background: #080d22; color: #fff; }
+    .comsource-report .footer-logo { padding: 7px 10px; border-radius: 7px; background: #fff; }
+    .comsource-report .footer-logo img { display: block; width: 180px; height: auto; }
+    .comsource-report .template-footer small { color: #d5e2ee; }
+    @media (max-width: 700px) {
+      .comsource-report .report-shell { width: calc(100% - 18px); margin-top: 9px; }
+      .comsource-report .report-hero { min-height: 0; padding: 24px 20px 38px; }
+      .comsource-report .template-footer { align-items: flex-start; flex-direction: column; }
+    }
+    @media print {
+      .comsource-report, .comsource-report body { background: #fff; }
+      .comsource-report .report-shell { width: 100%; margin: 0; }
+      .comsource-report .report-hero { min-height: auto; border: 1px solid #aab4c1; background: #101633 !important; }
+      .comsource-report .report-hero h1, .comsource-report .report-hero p { color: #fff !important; }
+      .comsource-report section { break-inside: avoid; }
+      .comsource-report .template-footer { border: 1px solid #cbd3dc; background: #fff; color: #20283a; }
+      .comsource-report .template-footer small { color: #667085; }
+    }"""
+
+    def _header_metadata(self, report: AssessmentReport) -> str:
+        """Render header chips from the actual assessment scope."""
 
         technologies = self._assessed_technologies(report)
         chips = [

@@ -412,8 +412,20 @@ identifier-masked customer deliverable; customer-safe controls still determine
 which data appears.
 
 The template is selected with `--html-template aletheiauc`. Template selection
-is intentionally explicit in the report builder and CLI so future customer or
-partner templates can be added without changing collection or report facts.
+is intentionally explicit in the report builder and CLI so customer or partner
+templates can be added without changing collection or report facts.
+
+`comsource` is an optional customer-facing template. It uses the supplied
+ComSource logo and purple/cyan print-friendly visual system, with no AletheiaUC
+name, marks, capability row, or attribution in its rendered output. It retains
+the same report facts and customer-safe masking behavior:
+
+```bash
+./aletheiauc.py --html-template comsource --customer-safe-report
+```
+
+Both templates embed their assets in the generated HTML, so reports have no
+remote font, script, image, analytics, or CDN dependency.
 
 To establish a bounded Cisco Unity Connection CUPI baseline with a dedicated
 CUC profile:

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import unittest
+from hashlib import sha256
 from pathlib import Path
 
 from cisco_collab_health.collectors.base import CollectionResult, CollectorError
@@ -167,6 +168,34 @@ class ReportBuilderTests(unittest.TestCase):
         self.assertIn("Customer deliverable", customer)
         self.assertIn(".header-meta", engineering)
         self.assertIn("justify-content: center", engineering)
+
+    def test_comsource_template_is_standalone_and_brand_isolated(self) -> None:
+        payload = HtmlReportBuilder(customer_safe=True, template="comsource").build(self.report)
+        logo_path = (
+            Path(__file__).parents[1]
+            / "src"
+            / "cisco_collab_health"
+            / "reports"
+            / "assets"
+            / "comsource"
+            / "ComSource_Logo.svg"
+        )
+
+        self.assertEqual(
+            sha256(logo_path.read_bytes()).hexdigest(),
+            "3424092f321d4950a46efd3b5065520c7bb0fe379da4455621b073d265a8fb7a",
+        )
+        self.assertIn("ComSource", payload)
+        self.assertIn("Prepared by ComSource, Inc.", payload)
+        self.assertIn("data:image/svg+xml;base64", payload)
+        self.assertIn("@media print", payload)
+        self.assertIn("Customer deliverable", payload)
+        self.assertIn("Assessment Methodology and Scope", payload)
+        self.assertNotIn("AletheiaUC", payload)
+        self.assertNotIn("powered by", payload.lower())
+        self.assertNotIn("Truth Constellation", payload)
+        self.assertNotIn("Beacon Horizon", payload)
+        self.assertNotIn("https://", payload)
 
     def test_aletheiauc_header_shows_diagnostic_state(self) -> None:
         report = AssessmentReport(

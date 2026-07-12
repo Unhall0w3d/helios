@@ -48,6 +48,11 @@ class CliTests(unittest.TestCase):
 
         self.assertEqual(args.html_template, "aletheiauc")
 
+    def test_comsource_html_template_is_available(self) -> None:
+        args = cli.build_parser().parse_args(["--html-template", "comsource"])
+
+        self.assertEqual(args.html_template, "comsource")
+
     def test_start_key_uses_recommended_diagnostic_and_review_options(self) -> None:
         args = cli.build_parser().parse_args([])
         with patch("builtins.input", return_value="s"):

@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 500" role="img" aria-label="Abstract connected technology landscape">
+<defs>
+  <linearGradient id="bg" x1="0" x2="1" y1="0" y2="1">
+    <stop stop-color="#080D22"/><stop offset=".55" stop-color="#17164E"/><stop offset="1" stop-color="#2E1D67"/>
+  </linearGradient>
+  <linearGradient id="wave" x1="0" x2="1">
+    <stop stop-color="#0096D6" stop-opacity=".15"/><stop offset=".48" stop-color="#4FD5FF"/><stop offset="1" stop-color="#0096D6" stop-opacity=".18"/>
+  </linearGradient>
+  <radialGradient id="glow"><stop stop-color="#0096D6" stop-opacity=".42"/><stop offset="1" stop-color="#0096D6" stop-opacity="0"/></radialGradient>
+  <pattern id="dots" width="32" height="32" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.5" fill="#FFFFFF" fill-opacity=".08"/></pattern>
+</defs>
+<rect width="1600" height="500" fill="url(#bg)"/><rect width="1600" height="500" fill="url(#dots)"/>
+<circle cx="1270" cy="155" r="340" fill="url(#glow)"/>
+<g fill="none" stroke="url(#wave)" stroke-width="2">
+  <path d="M600 386C790 245 928 300 1085 190s307-75 515-2"/>
+  <path d="M565 420C760 306 924 348 1102 235s305-95 498-48" opacity=".7"/>
+  <path d="M730 470C886 352 1010 401 1190 285s270-104 410-70" opacity=".45"/>
+</g>
+<g fill="#FFFFFF" stroke="#0096D6" stroke-width="3">
+  <circle cx="720" cy="315" r="7"/><circle cx="875" cy="286" r="7"/><circle cx="1010" cy="237" r="8"/>
+  <circle cx="1160" cy="157" r="8"/><circle cx="1325" cy="143" r="7"/><circle cx="1460" cy="178" r="7"/>
+</g>
+<g fill="none" stroke="#FFFFFF" stroke-opacity=".16">
+  <circle cx="1270" cy="155" r="105"/><circle cx="1270" cy="155" r="155"/><circle cx="1270" cy="155" r="205"/>
+</g>
+<g stroke="#0096D6" stroke-opacity=".35" fill="none">
+  <path d="M1030 64h250l54 54h170"/><path d="M1100 105h150l35 35h250"/>
+</g>
+</svg>
