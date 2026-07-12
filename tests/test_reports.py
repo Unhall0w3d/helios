@@ -82,6 +82,10 @@ class ReportBuilderTests(unittest.TestCase):
 
         self.assertIn("Assessment Targets", html)
         self.assertIn("voicemail", html)
+        self.assertIn('<span class="meta-chip scope">CUCM Cluster</span>', html)
+        self.assertIn('<span class="meta-chip scope">CUC Cluster</span>', html)
+        self.assertNotIn("CER Cluster", html)
+        self.assertNotIn("IM&amp;P Cluster", html)
         self.assertIn("Assessment targets: 2", summary)
         self.assertEqual(
             display_source("AXL.listPhone.summary, AXL.listDevicePool"),
@@ -156,6 +160,21 @@ class ReportBuilderTests(unittest.TestCase):
             self.assertIn("capability-row", payload)
         self.assertIn("Engineering edition", engineering)
         self.assertIn("Customer deliverable", customer)
+        self.assertIn(".header-meta", engineering)
+        self.assertIn("justify-content: center", engineering)
+
+    def test_aletheiauc_header_shows_diagnostic_state(self) -> None:
+        report = AssessmentReport(
+            facts=self.report.facts,
+            collector_results=self.report.collector_results,
+            findings=self.report.findings,
+            runtime_metadata={"diagnostic_capture": True},
+        )
+
+        html = HtmlReportBuilder().build(report)
+
+        self.assertIn("CUCM Cluster", html)
+        self.assertIn("Diagnostic capture enabled", html)
 
     def test_unknown_html_template_is_rejected(self) -> None:
         with self.assertRaisesRegex(ValueError, "Unknown HTML report template"):

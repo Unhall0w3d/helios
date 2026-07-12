@@ -68,6 +68,7 @@ class HtmlReportBuilder:
             len(result.warnings) + len(result.errors) for result in report.collector_results
         )
         collector_evidence_count = sum(len(result.evidence) for result in report.collector_results)
+        header_metadata = self._aletheiauc_header_metadata(report)
         methodology_scope_section = self._methodology_scope_section(report)
         target_scope_section = self._target_scope_section(report)
         cluster_section = self._cluster_section(report)
@@ -206,6 +207,7 @@ class HtmlReportBuilder:
       display: flex;
       flex-wrap: wrap;
       align-items: center;
+      justify-content: center;
       gap: 8px;
       margin-top: 22px;
       color: #dce9ff;
@@ -217,9 +219,38 @@ class HtmlReportBuilder:
       border-radius: 999px;
       background: rgba(255, 255, 255, 0.06);
     }}
-    .capability-row .edition {{
-      margin-left: auto;
-      color: var(--gold);
+    .header-meta {{
+      position: relative;
+      z-index: 1;
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 8px;
+      margin-top: 14px;
+    }}
+    .meta-chip {{
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 10px;
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      border-radius: 999px;
+      background: rgba(5, 8, 18, 0.28);
+      color: #eaf2ff;
+      font-size: 13px;
+      font-weight: 700;
+    }}
+    .meta-chip::before {{
+      content: "✦";
+      color: var(--violet);
+    }}
+    .meta-chip.scope {{
+      border-color: rgba(34, 211, 238, 0.48);
+      color: #d8fbff;
+    }}
+    .meta-chip.diagnostic {{
+      border-color: rgba(255, 199, 94, 0.48);
+      color: #fff0cf;
     }}
     main {{
       max-width: 1120px;
@@ -324,8 +355,8 @@ class HtmlReportBuilder:
     </div>
     <div class="capability-row">
       <span>Assess</span><span>Diagnose</span><span>Improve</span><span>Optimize</span>
-      <span class="edition">{"Customer deliverable" if self.customer_safe else "Engineering edition"}</span>
     </div>
+    <div class="header-meta">{header_metadata}</div>
   </header>
   <main>
     <section>
@@ -621,6 +652,55 @@ class HtmlReportBuilder:
 </body>
 </html>
 """
+
+    def _aletheiauc_header_metadata(self, report: AssessmentReport) -> str:
+        """Render AletheiaUC-specific header chips from the actual assessment scope."""
+
+        technologies = self._assessed_technologies(report)
+        chips = [
+            f'<span class="meta-chip scope">{escape(_technology_cluster_label(technology))}</span>'
+            for technology in technologies
+        ]
+        edition = "Customer deliverable" if self.customer_safe else "Engineering edition"
+        diagnostic = (
+            "Diagnostic capture enabled"
+            if report.runtime_metadata.get("diagnostic_capture")
+            else "Baseline collection"
+        )
+        chips.extend(
+            (
+                f'<span class="meta-chip">{edition}</span>',
+                f'<span class="meta-chip diagnostic">{diagnostic}</span>',
+            )
+        )
+        return "".join(chips)
+
+    def _assessed_technologies(self, report: AssessmentReport) -> list[str]:
+        """Return unique technologies in selection order, without inventing scope."""
+
+        technologies: list[str] = []
+        targets = report.runtime_metadata.get("targets")
+        if isinstance(targets, list):
+            for target in targets:
+                if isinstance(target, dict) and isinstance(target.get("technology"), str):
+                    technologies.append(target["technology"])
+
+        if not technologies:
+            clusters = [*report.facts.clusters]
+            if report.facts.cluster is not None:
+                clusters.append(report.facts.cluster)
+            technologies.extend(
+                technology
+                for cluster in clusters
+                if (technology := _technology_from_product(cluster.product)) is not None
+            )
+
+        unique: list[str] = []
+        for technology in technologies:
+            normalized = technology.strip().lower()
+            if normalized and normalized not in unique:
+                unique.append(normalized)
+        return unique
 
     def _methodology_scope_section(self, report: AssessmentReport) -> str:
         collector_names = ", ".join(result.collector_name for result in report.collector_results)
@@ -1818,6 +1898,29 @@ def _firmware_exception_impact(
 
 def _is_sample_report(report: AssessmentReport) -> bool:
     return any(result.collector_name == "sample" for result in report.collector_results)
+
+
+def _technology_cluster_label(technology: str) -> str:
+    labels = {
+        "cucm": "CUCM Cluster",
+        "cuc": "CUC Cluster",
+        "cer": "CER Cluster",
+        "imp": "IM&P Cluster",
+    }
+    return labels.get(technology.strip().lower(), f"{technology.strip().upper()} Cluster")
+
+
+def _technology_from_product(product: str) -> str | None:
+    normalized = product.lower()
+    if "unity connection" in normalized:
+        return "cuc"
+    if "emergency responder" in normalized:
+        return "cer"
+    if "im and presence" in normalized or "im&p" in normalized:
+        return "imp"
+    if "callmanager" in normalized or "unified communications manager" in normalized:
+        return "cucm"
+    return None
 
 
 def _cpu_counters_are_zero_only(report: AssessmentReport) -> bool:
