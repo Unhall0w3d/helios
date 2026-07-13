@@ -43,6 +43,7 @@ from cisco_collab_health.rules.basic import (
     RegistrationSummaryRule,
     ServiceSummaryRule,
     ServiceRuntimeRule,
+    SipTrunkRuntimeRule,
 )
 from cisco_collab_health.rules.base import HealthRule
 from cisco_collab_health.status import StatusPrinter
@@ -179,6 +180,7 @@ def run_assessment(
             DeviceLoadRule(),
             DeviceInventorySummaryRule(),
             RegistrationSummaryRule(),
+            SipTrunkRuntimeRule(),
             ServiceSummaryRule(),
             ServiceRuntimeRule(),
             PlatformCheckSummaryRule(),
@@ -471,6 +473,7 @@ def _assessment_rules() -> list[HealthRule]:
         DeviceLoadRule(),
         DeviceInventorySummaryRule(),
         RegistrationSummaryRule(),
+        SipTrunkRuntimeRule(),
         ServiceSummaryRule(),
         ServiceRuntimeRule(),
         PlatformCheckSummaryRule(),

@@ -388,6 +388,65 @@ class RegistrationSummaryRule:
         ]
 
 
+class SipTrunkRuntimeRule:
+    """Identify SIP trunks that are not currently registered in RIS."""
+
+    rule_id = "cucm.sip_trunk_runtime"
+
+    def evaluate(self, facts: AssessmentFacts) -> list[HealthFinding]:
+        trunks = [registration for registration in facts.registrations if _is_sip_trunk(registration)]
+        affected = [
+            registration
+            for registration in trunks
+            if registration.status.strip().lower() not in {"registered", "registered/matched"}
+        ]
+        if not affected:
+            return []
+
+        states = Counter(registration.status.strip() or "Unknown" for registration in affected)
+        names = ", ".join(sorted(registration.name for registration in affected))
+        operation = (
+            "selectCmDevice"
+            if any(registration.source == "RISPort70.selectCmDevice" for registration in affected)
+            else "selectCmDeviceExt"
+        )
+        return [
+            HealthFinding(
+                rule_id=self.rule_id,
+                title="One or more SIP trunks are not currently registered",
+                severity=FindingSeverity.WARNING,
+                recommendation_kind=RecommendationKind.ENGINEERING_RECOMMENDATION,
+                facts=[
+                    f"SIP trunks checked: {len(trunks)}",
+                    f"Affected trunks: {names}",
+                    *[f"{state}: {count}" for state, count in sorted(states.items())],
+                ],
+                reasoning=(
+                    "A trunk that is not registered may be unable to place or receive calls. "
+                    "RIS provides a point-in-time registration state; it does not establish "
+                    "how long that state has persisted or whether the trunk is intentionally idle."
+                ),
+                recommendation=(
+                    "Confirm whether each affected trunk is expected to be in service. If it is, "
+                    "have the UC administrator check the far-end or CUBE, SIP reachability and "
+                    "security, and the CUCM trunk and route configuration."
+                ),
+                evidence=[
+                    EvidenceRef(source="RISPort70", operation=operation, confidence="high")
+                ],
+            )
+        ]
+
+
+def _is_sip_trunk(registration: DeviceRegistrationFact) -> bool:
+    device_class = (registration.device_class or "").strip().lower()
+    if device_class in {"siptrunk", "sip trunk"}:
+        return True
+    return "trunk" in " ".join(
+        value for value in (registration.name, registration.model, registration.protocol) if value
+    ).lower()
+
+
 class ServiceSummaryRule:
     """Summarizes service status facts."""
 

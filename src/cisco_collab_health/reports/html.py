@@ -1759,7 +1759,7 @@ class HtmlReportBuilder:
                 continue
             technology = display_text(target.get("technology")).upper()
             technology_counts[technology] += 1
-            address = display_text(target.get("address"))
+            address = self._target_address(report, target)
             profile = (
                 "Omitted" if self.customer_safe else display_text(target.get("connection_profile"))
             )
@@ -1774,10 +1774,26 @@ class HtmlReportBuilder:
             "<section><h2>Assessment Targets</h2>"
             '<p class="meta">Each target uses an independent connection and credential profile.</p>'
             '<div class="table-scroll"><table><thead><tr><th>Target</th><th>Technology</th>'
-            "<th>Address</th><th>Connection Profile</th></tr></thead><tbody>"
+            "<th>Server address</th><th>Connection Profile</th></tr></thead><tbody>"
             + "".join(rows)
             + "</tbody></table></div></section>"
         )
+
+    @staticmethod
+    def _target_address(report: AssessmentReport, target: dict[object, object]) -> str:
+        """Use the configured address, or the discovered publisher, for target scope."""
+
+        configured_address = display_text(target.get("address"))
+        if configured_address != "—":
+            return configured_address
+        target_id = str(target.get("target_id") or "").strip()
+        matching_nodes = [node for node in report.facts.nodes if node.target_id == target_id]
+        publisher = next(
+            (node for node in matching_nodes if node.role.strip().lower() == "publisher"),
+            None,
+        )
+        node = publisher or next(iter(matching_nodes), None)
+        return display_text(node.address or node.name) if node else "—"
 
     def _cuc_inventory_section(self, report: AssessmentReport) -> str:
         inventory = [

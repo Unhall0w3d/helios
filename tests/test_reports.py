@@ -244,6 +244,31 @@ class ReportBuilderTests(unittest.TestCase):
         self.assertNotIn("Yorktown-Call-Control", payload)
         self.assertNotIn("Collector Evidence", payload)
 
+    def test_target_scope_uses_discovered_publisher_when_address_is_unavailable(self) -> None:
+        report = AssessmentReport(
+            facts=AssessmentFacts(
+                nodes=[
+                    CollaborationNode(
+                        "cucm-pub.example",
+                        "192.0.2.10",
+                        "publisher",
+                        target_id="voice",
+                        technology="cucm",
+                    )
+                ]
+            ),
+            collector_results=[],
+            findings=[],
+            runtime_metadata={
+                "targets": [{"target_id": "voice", "technology": "cucm", "address": None}]
+            },
+        )
+
+        for builder in (HtmlReportBuilder(), HtmlReportBuilder(customer_safe=True)):
+            payload = builder.build(report)
+            self.assertIn("Server address", payload)
+            self.assertIn("192.0.2.10", payload)
+
     def test_priority_findings_use_plain_language_and_hide_customer_evidence_ledger(self) -> None:
         finding = HealthFinding(
             rule_id="certificates.expired",

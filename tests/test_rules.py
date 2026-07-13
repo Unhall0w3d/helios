@@ -28,6 +28,7 @@ from cisco_collab_health.rules.basic import (
     RegistrationSummaryRule,
     ServiceSummaryRule,
     ServiceRuntimeRule,
+    SipTrunkRuntimeRule,
 )
 
 
@@ -323,6 +324,40 @@ class SummaryRuleTests(unittest.TestCase):
         self.assertEqual(findings[0].severity, FindingSeverity.INFO)
         self.assertIn("Registered: 1", findings[0].facts)
         self.assertIn("Unregistered: 1", findings[0].facts)
+
+    def test_unregistered_sip_trunks_create_an_actionable_warning(self) -> None:
+        findings = SipTrunkRuntimeRule().evaluate(
+            AssessmentFacts(
+                registrations=[
+                    DeviceRegistrationFact(
+                        name="provider-trunk",
+                        status="UnRegistered",
+                        registered_node="cucm-pub",
+                        ip_address=None,
+                        model="SIP Trunk",
+                        protocol="SIP",
+                        source="RISPort70.selectCmDevice",
+                        device_class="SIPTrunk",
+                    ),
+                    DeviceRegistrationFact(
+                        name="unity-trunk",
+                        status="Registered",
+                        registered_node="cucm-pub",
+                        ip_address=None,
+                        model="SIP Trunk",
+                        protocol="SIP",
+                        source="RISPort70.selectCmDevice",
+                        device_class="SIPTrunk",
+                    ),
+                ]
+            )
+        )
+
+        self.assertEqual(len(findings), 1)
+        self.assertEqual(findings[0].severity, FindingSeverity.WARNING)
+        self.assertIn("Affected trunks: provider-trunk", findings[0].facts)
+        self.assertIn("UnRegistered: 1", findings[0].facts)
+        self.assertEqual(findings[0].evidence[0].operation, "selectCmDevice")
 
     def test_service_summary_is_informational(self) -> None:
         findings = ServiceSummaryRule().evaluate(
