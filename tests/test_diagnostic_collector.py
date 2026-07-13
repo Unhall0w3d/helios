@@ -141,12 +141,18 @@ class DiagnosticCaptureCollectorTests(unittest.TestCase):
         self.assertEqual(result.warnings, [])
         self.assertIn("diagnostic_capture.enabled", result.status_flags)
         self.assertEqual(len(http.calls), 8)
-        self.assertEqual(len(soap.requests), 19)
+        self.assertEqual(len(soap.requests), 20)
         risport = next(
             request for request in soap.requests if request.operation == "selectCmDeviceExt"
         )
         self.assertIn("<ast:MaxReturnedDevices>321</ast:MaxReturnedDevices>", risport.body)
         self.assertIn("<ast:Item>SEP001</ast:Item>", risport.body)
+        supplemental_risport = next(
+            request
+            for request in soap.requests
+            if request.artifact_operation == "selectCmDevice_all_classes"
+        )
+        self.assertIn("<ast:Item>*</ast:Item>", supplemental_risport.body)
         control_nodes = {
             request.node
             for request in soap.requests

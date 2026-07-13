@@ -161,6 +161,7 @@ class ReportBuilderTests(unittest.TestCase):
             self.assertIn("capability-row", payload)
             self.assertIn("report-shell", payload)
             self.assertIn("report-hero", payload)
+            self.assertIn('class="hero-art"', payload)
             self.assertIn("visual-divider", payload)
             self.assertIn("data:image/png;base64", payload)
             self.assertNotIn("https://", payload)
@@ -230,8 +231,8 @@ class ReportBuilderTests(unittest.TestCase):
 
         self.assertIn("CUC Target 1", payload)
         self.assertIn("CUCM Target 1", payload)
-        self.assertIn("CUC Publisher", payload)
-        self.assertIn("CUCM Publisher", payload)
+        self.assertIn("cuc-pub", payload)
+        self.assertIn("cucm-pub", payload)
         self.assertIn("Collection Evidence", payload)
         self.assertIn("CUCM configuration discovery; Unity Connection cluster status", payload)
         self.assertNotIn("Yorktown-Voice", payload)
@@ -432,7 +433,7 @@ class ReportBuilderTests(unittest.TestCase):
 
         self.assertIn("Download failed; active load differs from intended load</td><td>1", payload)
         self.assertIn("No Tftp server set", payload)
-        self.assertIn("Failed transition; intended load not active", payload)
+        self.assertIn("Firmware differs from the intended load after a failed download", payload)
         self.assertNotIn("<td>CTI Port</td><td>SCCP</td><td>Unavailable</td>", payload)
 
     def test_html_report_marks_load_comparison_unavailable_without_defaults(self) -> None:
@@ -898,12 +899,12 @@ class ReportBuilderTests(unittest.TestCase):
 
         payload = HtmlReportBuilder(customer_safe=True).build(report)
 
-        self.assertNotIn("SEP001122334455", payload)
+        self.assertIn("SEP001122334455", payload)
         self.assertNotIn("PrivateCustomer", payload)
-        self.assertNotIn("private-publisher.example", payload)
+        self.assertIn("private-publisher.example", payload)
         self.assertNotIn("private/artifact/response.txt", payload)
         self.assertIn("Customer-safe HTML</th><td>Enabled", payload)
-        self.assertIn("Detailed device identifiers omitted", payload)
+        self.assertNotIn("Detailed device identifiers omitted", payload)
 
     def test_html_report_contains_collector_notes_and_evidence(self) -> None:
         report = AssessmentReport(

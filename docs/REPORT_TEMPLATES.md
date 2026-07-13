@@ -36,6 +36,7 @@ the customer deliverable while retaining the engineering artifacts in the same
 private bundle.
 
 Customer-safe reports use the same assessment facts as engineering reports.
-They do not use synthetic data; instead they replace target and node identifiers
-with neutral labels, omit detailed technical evidence inventories, and retain
-the findings and summarized collection coverage needed for customer review.
+They do not use synthetic data; instead they mask saved target/profile labels
+and private artifact paths, preserve operational node, device, and address data
+needed for customer understanding, omit detailed technical evidence inventories,
+and retain the findings and summarized collection coverage needed for review.

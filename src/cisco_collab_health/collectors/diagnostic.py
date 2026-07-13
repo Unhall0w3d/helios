@@ -491,6 +491,41 @@ class DiagnosticCaptureCollector:
         )
         if response is not None:
             facts.registrations.extend(_parse_risport_registrations(response.body))
+        if device_names:
+            supplemental_body = f"""<ast:selectCmDevice>
+          <ast:StateInfo></ast:StateInfo>
+          <ast:CmSelectionCriteria>
+            <ast:MaxReturnedDevices>{min(context.diagnostic_max_devices, 2000)}</ast:MaxReturnedDevices>
+            <ast:DeviceClass>Any</ast:DeviceClass>
+            <ast:Model>255</ast:Model>
+            <ast:Status>Any</ast:Status>
+            <ast:NodeName></ast:NodeName>
+            <ast:SelectBy>Name</ast:SelectBy>
+            <ast:SelectItems><ast:item><ast:Item>*</ast:Item></ast:item></ast:SelectItems>
+            <ast:Protocol>Any</ast:Protocol>
+            <ast:DownloadStatus>Any</ast:DownloadStatus>
+          </ast:CmSelectionCriteria>
+        </ast:selectCmDevice>"""
+            supplemental_response = self._capture_soap(
+                context,
+                node=context.publisher_ip,
+                endpoint=(
+                    f"https://{context.publisher_ip}:{context.risport_port}"
+                    "/realtimeservice2/services/RISService70"
+                ),
+                interface="risport70",
+                operation="selectCmDevice",
+                body=supplemental_body,
+                evidence=evidence,
+                warnings=warnings,
+                artifact_operation="selectCmDevice_all_classes",
+            )
+            if supplemental_response is not None:
+                facts.registrations.extend(
+                    _parse_risport_registrations(
+                        supplemental_response.body, source="RISPort70.selectCmDevice"
+                    )
+                )
 
     def _capture_control_center(
         self,
@@ -657,7 +692,9 @@ def _safe_operation(value: str) -> str:
     return "_".join(value.lower().split())
 
 
-def _parse_risport_registrations(response_text: str) -> list[DeviceRegistrationFact]:
+def _parse_risport_registrations(
+    response_text: str, *, source: str = "RISPort70.selectCmDeviceExt"
+) -> list[DeviceRegistrationFact]:
     root = _xml_root(response_text)
     if root is None:
         return []
@@ -686,7 +723,7 @@ def _parse_risport_registrations(response_text: str) -> list[DeviceRegistrationF
                             ip_address=ip_address,
                             model=model_code,
                             protocol=_child_text(device, "Protocol"),
-                            source="RISPort70.selectCmDeviceExt",
+                            source=source,
                             runtime_model_code=model_code,
                             device_class=_child_text(device, "DeviceClass"),
                             active_load=_child_text(device, "ActiveLoadID"),

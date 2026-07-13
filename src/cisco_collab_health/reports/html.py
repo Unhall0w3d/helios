@@ -122,7 +122,10 @@ class HtmlReportBuilder:
             else self._aletheiauc_css() if is_aletheiauc else ""
         )
         template_header = self._template_header(
-            header_metadata, logo_image=logo_image, is_comsource=is_comsource
+            header_metadata,
+            hero_image=hero_image,
+            logo_image=logo_image,
+            is_comsource=is_comsource,
         )
         template_footer = self._template_footer(logo_image=logo_image, is_comsource=is_comsource)
         brand_feature_panel = (
@@ -650,7 +653,7 @@ class HtmlReportBuilder:
       </table>
       <h3>Firmware Exceptions</h3>
       <table>
-        <thead><tr><th>Impact</th><th>Device</th><th>Model</th><th>Static Load</th><th>Default Load</th>
+        <thead><tr><th>Impact / next step</th><th>Device</th><th>Model</th><th>Static Load</th><th>Default Load</th>
         <th>Active Load</th><th>Download Status</th><th>Failure Reason</th><th>Node</th></tr></thead>
         <tbody>{firmware_exception_rows}</tbody>
       </table>
@@ -827,7 +830,7 @@ class HtmlReportBuilder:
 """
 
     def _template_header(
-        self, header_metadata: str, *, logo_image: str, is_comsource: bool
+        self, header_metadata: str, *, hero_image: str, logo_image: str, is_comsource: bool
     ) -> str:
         """Render only the selected template's identity treatment."""
 
@@ -844,9 +847,11 @@ class HtmlReportBuilder:
     <div class=\"header-meta\">{header_metadata}</div>"""
 
         return f"""
-    <div class="hero-brand-copy sr-only">
-      <span>{escape(self.template.title)}</span>
-      <span>{escape(self.template.tagline)}</span>
+    <img class="hero-art" src="{hero_image}" alt="AletheiaUC constellation and beacon artwork">
+    <div class="hero-copy">
+      <p class="eyebrow">Engineering health brief</p>
+      <h1>{escape(self.template.title)}</h1>
+      <p>{escape(self.template.tagline)}</p>
     </div>
     <div class="capability-row sr-only">
       <span>Assess</span><span>Diagnose</span><span>Improve</span><span>Optimize</span>
@@ -901,9 +906,15 @@ class HtmlReportBuilder:
     .aletheiauc-report .report-hero {
       min-height: clamp(280px, 32vw, 480px);
       padding: 0;
-      background: #050812 var(--hero-image) center / cover no-repeat;
+      background: #050812;
     }
+    .aletheiauc-report .hero-art { position: absolute; z-index: 0; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center; }
+    .aletheiauc-report .hero-copy { position: absolute; z-index: 1; top: clamp(24px, 4vw, 56px); left: clamp(20px, 4vw, 56px); max-width: min(460px, calc(100% - 40px)); padding: 16px 20px; border: 1px solid rgba(106, 76, 255, .36); border-radius: 12px; background: linear-gradient(100deg, rgba(5, 8, 18, .90), rgba(5, 8, 18, .58)); box-shadow: 0 12px 30px rgba(0, 0, 0, .22); }
+    .aletheiauc-report .hero-copy .eyebrow { margin: 0 0 5px; color: var(--gold); }
+    .aletheiauc-report .hero-copy h1 { margin: 0; color: #fff; font-size: clamp(25px, 3.6vw, 40px); }
+    .aletheiauc-report .hero-copy p:last-child { margin: 7px 0 0; color: #dce9ff; }
     .aletheiauc-report .report-hero::after {
+      z-index: 3;
       inset: auto 0 0;
       width: auto;
       height: 5px;
@@ -920,7 +931,7 @@ class HtmlReportBuilder:
       margin: 0;
     }
     .aletheiauc-report .meta-chip { background: rgba(5, 8, 18, .55); backdrop-filter: blur(5px); }
-    .aletheiauc-report .visual-divider { height: 78px; margin: 0 5%; opacity: .9; }
+    .aletheiauc-report .visual-divider { height: 58px; margin: 0; background-size: 100% 100%; opacity: .9; }
     .aletheiauc-report main { display: grid; gap: 25px; }
     .aletheiauc-report main > section { margin: 0; }
     .aletheiauc-report .section-heading {
@@ -982,7 +993,7 @@ class HtmlReportBuilder:
       .aletheiauc-report .report-feature-art { min-height: 340px; order: -1; background: linear-gradient(180deg, transparent 58%, rgba(16, 24, 43, .9)), var(--ritual-image) center / cover no-repeat; }
     }
     @media print {
-      .aletheiauc-report::before, .aletheiauc-report .visual-divider, .aletheiauc-report .report-feature-art { display: none !important; }
+      .aletheiauc-report::before, .aletheiauc-report .visual-divider, .aletheiauc-report .report-feature-art, .aletheiauc-report .hero-art { display: none !important; }
       .aletheiauc-report .report-hero { min-height: 155px; background: #fff !important; border: 2px solid #20283a; }
       .aletheiauc-report .report-hero::before { content: "AletheiaUC Assessment"; position: absolute; left: 24px; top: 34px; color: #111; font-size: 34px; font-weight: 750; }
       .aletheiauc-report .report-hero .header-meta { right: 24px; bottom: 20px; left: 24px; }
@@ -1293,26 +1304,6 @@ class HtmlReportBuilder:
                 item.address.lower(),
             ),
         )
-        if self.customer_safe:
-            role_counts: Counter[tuple[str, str]] = Counter()
-            rows = []
-            for node in nodes:
-                technology = display_text(node.technology, empty="Single cluster").upper()
-                role = node.role.strip().lower() or "member"
-                role_counts[(technology, role)] += 1
-                ordinal = role_counts[(technology, role)]
-                label = f"{technology} {role.title()}"
-                if role != "publisher":
-                    label = f"{label} {ordinal}"
-                rows.append(
-                    "<tr>"
-                    f"<td>{escape(technology)}</td><td>{escape(label)}</td>"
-                    "<td>Omitted</td>"
-                    f"<td>{escape(role)}</td><td>{escape(display_bool(node.reachable))}</td>"
-                    "</tr>"
-                )
-            return "\n".join(rows)
-
         return "\n".join(
             (
                 "<tr>"
@@ -1320,7 +1311,7 @@ class HtmlReportBuilder:
                 f"<td>{escape(self._identifier(node.name, 'Node'))}</td>"
                 f"<td>{escape(self._identifier(node.address, 'Address'))}</td>"
                 f"<td>{escape(node.role)}</td>"
-                f"<td>{escape(display_bool(node.reachable))}</td>"
+                f"<td>{escape(display_bool(node.reachable) if node.reachable is not None else 'Not individually probed')}</td>"
                 "</tr>"
             )
             for node in nodes
@@ -1329,9 +1320,6 @@ class HtmlReportBuilder:
     def _device_rows(self, report: AssessmentReport) -> str:
         if not report.facts.devices:
             return '<tr><td colspan="8">No devices inventoried.</td></tr>'
-        if self.customer_safe:
-            return '<tr><td colspan="8">Detailed device identifiers omitted from customer-safe report.</td></tr>'
-
         return "\n".join(
             (
                 "<tr>"
@@ -1441,9 +1429,6 @@ class HtmlReportBuilder:
     def _registration_rows(self, report: AssessmentReport) -> str:
         if not report.facts.registrations:
             return '<tr><td colspan="11">No device registration facts collected.</td></tr>'
-        if self.customer_safe:
-            return '<tr><td colspan="11">Detailed runtime identifiers omitted from customer-safe report.</td></tr>'
-
         return "\n".join(
             (
                 "<tr>"
@@ -1721,7 +1706,7 @@ class HtmlReportBuilder:
                 continue
             technology = display_text(target.get("technology")).upper()
             technology_counts[technology] += 1
-            address = "Omitted" if self.customer_safe else display_text(target.get("address"))
+            address = display_text(target.get("address"))
             profile = (
                 "Omitted" if self.customer_safe else display_text(target.get("connection_profile"))
             )
@@ -2312,7 +2297,7 @@ class HtmlReportBuilder:
 
     def _identifier(self, value: object | None, kind: str) -> str:
         text = display_text(value)
-        if not self.customer_safe or text == "—":
+        if not self.customer_safe or kind in {"Address", "Device", "Node"} or text == "—":
             return text
         digest = sha256(f"{kind}:{text}".encode()).hexdigest()[:8].upper()
         return f"{kind}-{digest}"
@@ -2488,8 +2473,8 @@ def _firmware_exception_impact(
 ) -> str:
     intended = device.configured_load or default_load
     if _loads_equal(registration.active_load, intended):
-        return "Failure status; intended load active"
-    return "Failed transition; intended load not active"
+        return "Download failure recorded, but active firmware matches the intended load; review if the status persists."
+    return "Firmware differs from the intended load after a failed download; investigate TFTP and the assigned firmware."
 
 
 def _is_sample_report(report: AssessmentReport) -> bool:
