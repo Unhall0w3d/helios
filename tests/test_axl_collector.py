@@ -11,6 +11,10 @@ from unittest.mock import patch
 
 from cisco_collab_health.artifacts import ArtifactStore
 from cisco_collab_health.collectors.axl import AxlCollector, AxlVersionPolicy
+from cisco_collab_health.collectors.axl.collector import (
+    DIAGNOSTIC_AXL_GET_RELATIONSHIPS,
+    DIAGNOSTIC_AXL_OPERATIONS,
+)
 from cisco_collab_health.collectors.axl.bodies import diagnostic_get_body, diagnostic_list_body
 from cisco_collab_health.collectors.axl.parsers import (
     parse_configuration_object_details,
@@ -236,6 +240,19 @@ def soap_response(body: str, operation: str = "operation") -> SoapResponse:
 
 
 class AxlCollectorTests(unittest.TestCase):
+    def test_diagnostic_catalog_covers_hunt_security_directory_and_media_relationships(self) -> None:
+        operations = {operation for operation, _, _ in DIAGNOSTIC_AXL_OPERATIONS}
+
+        self.assertTrue({
+            "listHuntPilot", "listHuntList", "listLineGroup", "listLine",
+            "listSipTrunkSecurityProfile", "listLdapDirectory",
+            "listPhoneSecurityProfile", "listMediaResourceList",
+        }.issubset(operations))
+        self.assertTrue({
+            "HuntList", "LineGroup", "SipTrunk", "MediaResourceGroup",
+            "MediaResourceList",
+        }.issubset(DIAGNOSTIC_AXL_GET_RELATIONSHIPS))
+
     def test_device_defaults_sql_is_bounded_to_configured_models_and_xml_safe(self) -> None:
         body = execute_sql_query_body(DEVICE_DEFAULTS_SQL)
 

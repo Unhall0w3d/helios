@@ -62,7 +62,15 @@ DIAGNOSTIC_AXL_OPERATIONS = (
     (
         "listSipTrunk",
         "name",
-        ("name", "description", "devicePoolName", "locationName", "sipProfileName"),
+        (
+            "name", "description", "devicePoolName", "locationName", "sipProfileName",
+            "securityProfileName",
+        ),
+    ),
+    ("listSipProfile", "name", ("name", "description")),
+    (
+        "listSipTrunkSecurityProfile", "name",
+        ("name", "description", "deviceSecurityMode", "incomingTransport", "outgoingTransport"),
     ),
     (
         "listRoutePattern", "pattern",
@@ -76,7 +84,36 @@ DIAGNOSTIC_AXL_OPERATIONS = (
     ("listRouteGroup", "name", ("name", "distributionAlgorithm", "members/member/deviceName")),
     ("listRouteList", "name", ("name", "description", "members/member/routeGroupName")),
     ("listTransPattern", "pattern", ("pattern", "routePartitionName")),
-    ("listMediaResourceGroup", "name", ("name",)),
+    (
+        "listHuntPilot", "pattern",
+        ("pattern", "routePartitionName", "huntListName", "alertingName"),
+    ),
+    (
+        "listHuntList", "name",
+        ("name", "description", "callManagerGroupName"),
+    ),
+    (
+        "listLineGroup", "name",
+        ("name", "distributionAlgorithm"),
+    ),
+    (
+        "listLine", "pattern",
+        (
+            "pattern", "routePartitionName", "usage",
+            "callForwardAll/destination", "callForwardAll/callingSearchSpaceName",
+            "callForwardBusy/destination", "callForwardNoAnswer/destination",
+            "callForwardNotRegistered/destination",
+        ),
+    ),
+    (
+        "listLdapDirectory", "name",
+        ("name", "ldapDn", "userSearchBase", "active", "repeatInterval", "nextSyncTime"),
+    ),
+    (
+        "listPhoneSecurityProfile", "name",
+        ("name", "description", "deviceSecurityMode", "authenticationMode", "keySize"),
+    ),
+    ("listMediaResourceGroup", "name", ("name", "multicast")),
     ("listMediaResourceList", "name", ("name",)),
     ("listConferenceBridge", "name", ("name", "devicePoolName")),
     ("listTranscoder", "name", ("name", "devicePoolName")),
@@ -87,6 +124,19 @@ DIAGNOSTIC_AXL_GET_RELATIONSHIPS = {
     "Css": ("getCss", ("members/member/routePartitionName",)),
     "RouteGroup": ("getRouteGroup", ("members/member/deviceName",)),
     "RouteList": ("getRouteList", ("members/member/routeGroupName",)),
+    "SipTrunk": (
+        "getSipTrunk",
+        ("securityProfileName", "destinations/destination/address", "destinations/destination/port"),
+    ),
+    "HuntList": ("getHuntList", ("members/member/lineGroupName",)),
+    "LineGroup": (
+        "getLineGroup",
+        ("members/member/directoryNumber", "members/member/routePartitionName"),
+    ),
+    "MediaResourceGroup": ("getMediaResourceGroup", ("members/member/deviceName",)),
+    "MediaResourceList": (
+        "getMediaResourceList", ("members/member/mediaResourceGroupName",),
+    ),
 }
 
 
@@ -420,7 +470,14 @@ class AxlCollector:
                 )
                 evidence.append(_evidence_from_soap_response(response, context.publisher_ip))
                 details = parse_configuration_object_details(response.body, operation, tags)
-                enriched.append(replace(fact, details={**fact.details, **details}))
+                enriched.append(replace(
+                    fact,
+                    details={
+                        **fact.details,
+                        **details,
+                        "relationship_collection": "collected",
+                    },
+                ))
                 succeeded += 1
             except AxlCollectionError as exc:
                 enriched.append(fact)

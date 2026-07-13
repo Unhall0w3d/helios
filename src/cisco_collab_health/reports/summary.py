@@ -61,6 +61,7 @@ class ExecutiveSummaryBuilder:
                 f"Services collected: {len(report.facts.services)}",
                 f"Perf counters collected: {len(report.facts.perf_counters)}",
                 f"Platform checks collected: {len(report.facts.platform_checks)}",
+                f"Configuration objects collected: {len(report.facts.configuration_objects)}",
                 f"Collector notes: {collector_note_count}",
                 f"Collector evidence refs: {collector_evidence_count}",
                 f"Findings: {critical_count} critical, {warning_count} warning, {info_count} info",

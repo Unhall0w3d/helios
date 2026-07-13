@@ -43,6 +43,13 @@ technical evidence inventories; and retain de-identified findings and summarized
 collection coverage needed for review. The pseudonyms are deterministic within
 a report so repeated references remain understandable.
 
+Engineering reports expose bounded CUC inventory and sanitized configuration in
+separate sections. CUCM configuration reporting includes dedicated expandable
+tables for hunt/directory-number topology, trunk/directory/device security, and
+media-resource membership. Customer-safe reports retain counts for these areas
+while omitting configuration names, dial-plan values, LDAP paths, destinations,
+and detailed settings.
+
 The standalone AletheiaUC report embeds only the artwork it actively renders;
 the hero image is not duplicated as a section watermark. This keeps the report
 self-contained while avoiding unnecessary bundle growth. Active service

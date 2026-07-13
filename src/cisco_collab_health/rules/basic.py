@@ -856,6 +856,91 @@ class DeviceLoadSummaryRule:
         ]
 
 
+class CucSmtpSecurityRule:
+    """Flag explicitly permissive untrusted SMTP settings reported by CUPI."""
+
+    rule_id = "cuc.smtp_untrusted_security"
+
+    def evaluate(self, facts: AssessmentFacts) -> list[HealthFinding]:
+        exposed = []
+        for item in facts.configuration_objects:
+            if item.object_type != "CucSmtpConfiguration":
+                continue
+            details = item.details
+            if not _is_true(details.get("allow_untrusted")):
+                continue
+            missing = [
+                control for control, field in (
+                    ("authentication", "require_auth_untrusted"),
+                    ("TLS", "require_tls_untrusted"),
+                )
+                if _is_false(details.get(field))
+            ]
+            if missing:
+                exposed.append(", ".join(missing))
+        if not exposed:
+            return []
+        return [HealthFinding(
+            rule_id=self.rule_id,
+            title="Unity Connection accepts untrusted SMTP without all protective controls",
+            severity=FindingSeverity.WARNING,
+            recommendation_kind=RecommendationKind.ENGINEERING_RECOMMENDATION,
+            facts=[f"Missing controls for untrusted SMTP: {value}" for value in exposed],
+            reasoning=(
+                "CUPI explicitly reports that connections from untrusted IP addresses are "
+                "allowed while authentication or TLS is disabled."
+            ),
+            recommendation=(
+                "Confirm the integration requirement, then require authentication and TLS or "
+                "restrict the permitted SMTP source addresses."
+            ),
+            evidence=[EvidenceRef(
+                source="CUC.CUPI", operation="CucSmtpConfiguration_bounded_get",
+                confidence="high",
+            )],
+        )]
+
+
+class CucmTopologyCompletenessRule:
+    """Report collected routing/media containers that have no configured members."""
+
+    rule_id = "cucm.topology_empty_membership"
+    membership_fields = {
+        "HuntList": "line_groups",
+        "LineGroup": "directory_numbers",
+        "MediaResourceGroup": "devices",
+        "MediaResourceList": "media_resource_groups",
+    }
+
+    def evaluate(self, facts: AssessmentFacts) -> list[HealthFinding]:
+        empty = [
+            item for item in facts.configuration_objects
+            if (field := self.membership_fields.get(item.object_type))
+            and item.details.get("relationship_collection") == "collected"
+            and not item.details.get(field)
+        ]
+        if not empty:
+            return []
+        return [HealthFinding(
+            rule_id=self.rule_id,
+            title="One or more call-routing or media-resource containers have no members",
+            severity=FindingSeverity.WARNING,
+            recommendation_kind=RecommendationKind.ENGINEERING_RECOMMENDATION,
+            facts=[f"{item.object_type}: {item.name}" for item in empty],
+            reasoning=(
+                "The bounded AXL get response completed successfully but returned no members "
+                "for the listed container. Calls depending on it may have no usable destination."
+            ),
+            recommendation=(
+                "Verify whether each empty object is unused; populate active dependencies or "
+                "remove obsolete references through the normal change process."
+            ),
+            evidence=[EvidenceRef(
+                source="AXL", operation="diagnostic_relationship_enrichment", confidence="high",
+            )],
+        )]
+
+
 class ConfigurationInventorySummaryRule:
     """Summarizes bounded AXL configuration objects without policy judgment."""
 
@@ -907,3 +992,11 @@ def _info_finding(
 
 def _protocol_key(protocol: str | None) -> str:
     return (protocol or "").strip().lower()
+
+
+def _is_true(value: str | None) -> bool:
+    return (value or "").strip().lower() in {"true", "1", "yes", "enabled"}
+
+
+def _is_false(value: str | None) -> bool:
+    return (value or "").strip().lower() in {"false", "0", "no", "disabled"}

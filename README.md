@@ -61,7 +61,9 @@ and the HTML/JSON reports visibly expose the new data.
 The current report renders executive metrics, collection coverage, cluster
 identity, discovered nodes, device inventory, device registration, services,
 performance counters, platform checks, collector issues, collector notes,
-collector evidence, reconciliation, and findings. Empty, skipped, unavailable,
+collector evidence, CUC inventory/configuration, CUCM hunt and line topology,
+integration/security configuration, media-resource topology, reconciliation,
+and findings. Empty, skipped, unavailable,
 and not-yet-implemented states are deliberately distinct. Sample-mode data is
 synthetic and exists only to exercise the report layout.
 
@@ -76,6 +78,10 @@ Current capabilities:
 - Bounded `executeSQLQuery` collection of configured-model Device Defaults and firmware facts
 - Inventory-only summaries by model and device pool
 - Diagnostic dial-plan relationships for route-pattern destinations, route-list/route-group membership, and CSS partitions
+- Diagnostic CUCM hunt, line-forwarding, SIP trunk/profile security, LDAP,
+  phone-security, and media-resource configuration with bounded relationship reads
+- Diagnostic CUC telephony integration, routing, schedule, mailbox-policy,
+  Unified Messaging, and SMTP-security configuration through bounded CUPI GETs
 - Per-node UC Certificate Management REST snapshots using OS read credentials
 - PEM/X.509 identity and trust parsing with SHA-256 deduplication, validity, key,
   signer, AKI/SKI, and best-available chain metadata
@@ -352,10 +358,13 @@ adds raw request/response evidence for:
 - PerfMon object/counter discovery plus two samples of `Processor`, `Memory`, and `Cisco CallManager` counters on every discovered node
 - Bounded AXL configuration discovery for call-manager groups, regions, locations,
   SIP trunks, route patterns, partitions, CSSes, route groups/lists, translation
-  patterns and media resources. Full line inventory is intentionally excluded
-  because CUCM may ignore AXL paging limits and return an unbounded response.
-- Up to 500 bounded AXL `get` reads to recover route-list, route-group, and CSS
-  relationships that CUCM omits from list responses
+  patterns, hunt pilots/lists, line groups, directory numbers and forwarding,
+  LDAP directories, SIP/device security profiles, and media resources. Every list
+  operation uses the configured per-operation cap; a CUCM response that ignores
+  the page size is retained and explicitly marked server-unbounded.
+- Up to 500 bounded AXL `get` reads to recover route-list, route-group, CSS, SIP
+  trunk destination/security, hunt-list/line-group, and MRG/MRGL relationships
+  that CUCM may omit from list responses
 - One `first 500` read-only SQL relationship query for route-pattern destinations
   and ordered route-group membership, keyed back to the AXL list UUID
 - UUID-preserving configuration normalization, including route-filter and dial-plan
@@ -449,12 +458,16 @@ CUC profile:
 ./aletheiauc.py --product cuc --profile MyCucProfile --diagnostic-capture
 ```
 
-The initial CUC collector requests one user row from `/vmrest/users`, records
-the aggregate total and raw exchange, and does not collect mailbox identities.
-When diagnostic capture is enabled, it also uses one-row, read-only CUPI probes
+The baseline CUC collector requests one row each from `/vmrest/users` and
+`/vmrest/externalservices`, records aggregate totals and raw exchanges, and does
+not normalize mailbox identities. Diagnostic capture adds one-row count probes
 for contacts, distribution lists, call handlers, classes of service, and system
-configuration values. Raw responses are retained in the private review bundle;
-the normalized report records counts only.
+configuration values. It also performs bounded, read-only CUPI GETs for phone
+systems, port groups/ports, SIP security profiles, routing rules, schedules,
+mailbox stores, message-aging policy, and SMTP configuration. Only an explicit
+allowlist of non-secret configuration fields is normalized; credentials, mailbox
+identities, addresses, and message content are excluded. Unsupported
+version-specific resources are reported as collection warnings.
 
 The same diagnostic mode runs the following read-only Unity Connection UCOS SSH
 commands when the platform account and `paramiko` dependency are available:

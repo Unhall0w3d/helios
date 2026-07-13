@@ -159,6 +159,7 @@ class HtmlReportBuilder:
         methodology_scope_section = self._methodology_scope_section(report)
         target_scope_section = self._target_scope_section(report)
         cuc_inventory_section = self._cuc_inventory_section(report)
+        cuc_configuration_section = self._cuc_configuration_section(report)
         cuc_platform_section = self._cuc_platform_section(report)
         cluster_section = self._cluster_section(report)
         node_rows = self._node_rows(report)
@@ -193,6 +194,16 @@ class HtmlReportBuilder:
         route_pattern_rows = self._route_pattern_relationship_rows(report)
         route_list_rows = self._route_list_relationship_rows(report)
         css_coverage_rows = self._css_partition_coverage_rows(report)
+        hunt_topology_rows = self._configuration_family_rows(
+            report, {"HuntPilot", "HuntList", "LineGroup", "Line"}
+        )
+        integration_security_rows = self._configuration_family_rows(
+            report,
+            {"SipTrunk", "SipProfile", "SipTrunkSecurityProfile", "LdapDirectory", "PhoneSecurityProfile"},
+        )
+        media_topology_rows = self._configuration_family_rows(
+            report, {"MediaResourceGroup", "MediaResourceList", "ConferenceBridge", "Transcoder", "Mtp"}
+        )
         service_deployment_rows = self._service_deployment_rows(report)
         configuration_rows = self._configuration_rows(report)
         platform_check_rows = self._platform_check_rows(report)
@@ -609,6 +620,7 @@ class HtmlReportBuilder:
     {methodology_scope_section}
     {target_scope_section}
     {cuc_inventory_section}
+    {cuc_configuration_section}
     {cuc_platform_section}
     {coverage_section}
     {cluster_section}
@@ -773,8 +785,8 @@ class HtmlReportBuilder:
     </section>
     <section>
       <h2>Configuration Inventory</h2>
-      <p class="meta">Source: bounded AXL configuration discovery. Counts reflect captured
-      list responses and do not imply dependency or policy validation.</p>
+      <p class="meta">Source: bounded, read-only AXL and CUPI configuration discovery. Counts
+      reflect captured responses and do not by themselves imply policy validation.</p>
       <table>
         <thead><tr><th>Object Type</th><th>Count</th></tr></thead>
         <tbody>{configuration_summary_rows}</tbody>
@@ -800,6 +812,24 @@ class HtmlReportBuilder:
         <tbody>{css_coverage_rows}</tbody>
       </table></div>
       </details>
+      <h3>Hunt and Directory-number Topology</h3>
+      <details><summary>Show hunt, line-group, and forwarding configuration</summary>
+      <div class="table-scroll"><table>
+        <thead><tr><th>Type</th><th>Name/Pattern</th><th>Configuration</th></tr></thead>
+        <tbody>{hunt_topology_rows}</tbody>
+      </table></div></details>
+      <h3>Trunk, Directory, and Device Security</h3>
+      <details><summary>Show integration and security configuration</summary>
+      <div class="table-scroll"><table>
+        <thead><tr><th>Type</th><th>Name</th><th>Configuration</th></tr></thead>
+        <tbody>{integration_security_rows}</tbody>
+      </table></div></details>
+      <h3>Media Resource Topology</h3>
+      <details><summary>Show media-resource configuration and membership</summary>
+      <div class="table-scroll"><table>
+        <thead><tr><th>Type</th><th>Name</th><th>Configuration</th></tr></thead>
+        <tbody>{media_topology_rows}</tbody>
+      </table></div></details>
       <details>
         <summary>Show captured configuration objects</summary>
         <table>
@@ -1855,7 +1885,7 @@ class HtmlReportBuilder:
         inventory = [
             item
             for item in report.facts.configuration_objects
-            if item.source.startswith("CUC.CUPI")
+            if item.source.startswith("CUC.CUPI") and item.object_type.endswith("Inventory")
         ]
         if not inventory:
             return ""
@@ -1876,6 +1906,43 @@ class HtmlReportBuilder:
         <thead><tr><th>Inventory</th><th>Total</th><th>Probe rows</th></tr></thead>
         <tbody>{rows}</tbody>
       </table>
+    </section>
+"""
+
+    def _cuc_configuration_section(self, report: AssessmentReport) -> str:
+        configuration = [
+            item for item in report.facts.configuration_objects
+            if item.source.startswith("CUC.CUPI") and not item.object_type.endswith("Inventory")
+        ]
+        if not configuration:
+            return ""
+        counts = Counter(item.object_type.removeprefix("Cuc") for item in configuration)
+        summary_rows = "".join(
+            f"<tr><td>{escape(object_type)}</td><td>{count}</td></tr>"
+            for object_type, count in sorted(counts.items())
+        )
+        if self.customer_safe:
+            detail_rows = (
+                '<tr><td colspan="3">Configuration names and details omitted from '
+                "customer-safe report.</td></tr>"
+            )
+        else:
+            detail_rows = "".join(
+                f"<tr><td>{escape(item.object_type.removeprefix('Cuc'))}</td>"
+                f"<td>{escape(item.name)}</td><td>{escape(display_details(item.details))}</td></tr>"
+                for item in sorted(configuration, key=lambda value: (value.object_type, value.name))
+            )
+        return f"""
+    <section class="technology-section cuc-section">
+      <h2>Unity Connection Configuration</h2>
+      <p class="meta">Source: bounded, read-only CUPI GET requests. Only reviewed non-secret
+      fields are normalized; mailbox identities, addresses, credentials, and message content
+      are excluded.</p>
+      <table><thead><tr><th>Configuration area</th><th>Records</th></tr></thead>
+      <tbody>{summary_rows}</tbody></table>
+      <details><summary>Show Unity Connection configuration details</summary>
+      <div class="table-scroll"><table><thead><tr><th>Type</th><th>Name</th><th>Configuration</th></tr></thead>
+      <tbody>{detail_rows}</tbody></table></div></details>
     </section>
 """
 
@@ -1990,6 +2057,27 @@ class HtmlReportBuilder:
                 f"<td>{count if partitions else '—'}</td></tr>"
             )
         return "\n".join(rows)
+
+    def _configuration_family_rows(
+        self, report: AssessmentReport, object_types: set[str],
+    ) -> str:
+        selected = [
+            item for item in report.facts.configuration_objects
+            if item.object_type in object_types
+        ]
+        if not selected:
+            return '<tr><td colspan="3">No matching configuration records collected.</td></tr>'
+        if self.customer_safe:
+            counts = Counter(item.object_type for item in selected)
+            return "".join(
+                f"<tr><td>{escape(object_type)}</td><td>Omitted</td><td>{count} record(s)</td></tr>"
+                for object_type, count in sorted(counts.items())
+            )
+        return "".join(
+            f"<tr><td>{escape(item.object_type)}</td><td>{escape(item.name)}</td>"
+            f"<td>{escape(display_details(item.details))}</td></tr>"
+            for item in sorted(selected, key=lambda value: (value.object_type, value.name))
+        )
 
     def _service_deployment_rows(self, report: AssessmentReport) -> str:
         grouped: dict[tuple[str, str], dict[str, list[str]]] = {}

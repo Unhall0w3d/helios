@@ -8,6 +8,7 @@ from cisco_collab_health.models.facts import (
     AssessmentFacts,
     CertificateFact,
     CollaborationNode,
+    ConfigurationObjectFact,
     CollectorIssueFact,
     DeviceInventoryFact,
     DeviceLoadDefaultFact,
@@ -20,7 +21,9 @@ from cisco_collab_health.rules.basic import (
     CollectorHealthRule,
     CertificateValidityRule,
     CucPlatformStatusRule,
+    CucSmtpSecurityRule,
     CucmPlatformHealthRule,
+    CucmTopologyCompletenessRule,
     CucServicePolicyRule,
     DeviceInventorySummaryRule,
     DeviceLoadRule,
@@ -33,6 +36,43 @@ from cisco_collab_health.rules.basic import (
     ServiceRuntimeRule,
     SipTrunkRuntimeRule,
 )
+
+
+class ConfigurationSecurityRuleTests(unittest.TestCase):
+    def test_cuc_smtp_rule_flags_untrusted_connection_without_auth_or_tls(self) -> None:
+        facts = AssessmentFacts(configuration_objects=[ConfigurationObjectFact(
+            object_type="CucSmtpConfiguration",
+            name="SMTP server configuration",
+            details={
+                "allow_untrusted": "true",
+                "require_auth_untrusted": "false",
+                "require_tls_untrusted": "false",
+            },
+            source="CUC.CUPI/vmrest/smtpserver/serverconfigs",
+        )])
+
+        findings = CucSmtpSecurityRule().evaluate(facts)
+
+        self.assertEqual(len(findings), 1)
+        self.assertEqual(findings[0].severity, FindingSeverity.WARNING)
+        self.assertIn("authentication, TLS", findings[0].facts[0])
+
+    def test_topology_rule_only_flags_successfully_collected_empty_membership(self) -> None:
+        facts = AssessmentFacts(configuration_objects=[
+            ConfigurationObjectFact(
+                object_type="HuntList", name="Empty-HL",
+                details={"relationship_collection": "collected"}, source="AXL.getHuntList",
+            ),
+            ConfigurationObjectFact(
+                object_type="LineGroup", name="Unknown-LG", details={}, source="AXL.listLineGroup",
+            ),
+        ])
+
+        findings = CucmTopologyCompletenessRule().evaluate(facts)
+
+        self.assertEqual(len(findings), 1)
+        self.assertIn("HuntList: Empty-HL", findings[0].facts)
+        self.assertNotIn("LineGroup: Unknown-LG", findings[0].facts)
 
 
 class FirmwareDownloadRuleTests(unittest.TestCase):

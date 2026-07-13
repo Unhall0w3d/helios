@@ -15,6 +15,12 @@ names. Operational summaries remain. Review the rendered HTML before sharing,
 because free-form titles, reasoning, and recommendations are authored report
 content rather than raw evidence.
 
+CUC detailed CUPI normalization uses per-resource field allowlists and excludes
+mailbox/user identities, email addresses, credentials, and message content.
+CUCM line, LDAP, routing, and integration names can still reveal customer dial
+plans or directory structure in engineering artifacts. Customer-safe HTML omits
+those names and detail fields; JSON and raw API evidence remain private.
+
 `--customer-safe-report` applies only to the HTML presentation. It does not
 make adjacent JSON, logs, artifacts, or review ZIPs safe to share. Review every
 bundle before external transfer and remove it according to the customer’s data

@@ -36,9 +36,13 @@ class CucPlugin:
             CucPlatformHealthRule,
             CucPlatformStatusRule,
             CucServicePolicyRule,
+            CucSmtpSecurityRule,
         )
 
-        return [CucPlatformHealthRule(), CucPlatformStatusRule(), CucServicePolicyRule()]
+        return [
+            CucPlatformHealthRule(), CucPlatformStatusRule(), CucServicePolicyRule(),
+            CucSmtpSecurityRule(),
+        ]
 
 
 def plugin() -> CucPlugin:

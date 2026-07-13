@@ -13,8 +13,27 @@ actually collects. A configured feature is not described as tested unless its
 result was collected as assessment evidence.
 
 The normal CUC CUPI pass records only bounded inventory counts for mailboxes
-and unified-messaging services. It does not retrieve per-user external-service
-account details, email addresses, or stored credentials.
+and unified-messaging services. Diagnostic capture uses GET only and caps each
+reviewed configuration resource at 500 records (or the lower configured AXL
+diagnostic record cap). Phone systems, port groups/ports, SIP security profiles,
+routing rules, schedules, mailbox stores, message-aging policy, and SMTP
+configuration normalize only explicit non-secret field allowlists. Per-user
+external-service accounts, email addresses, credentials, and message content are
+not normalized.
+
+CUCM diagnostic AXL permits only `list*`, `get*`, and the fixed
+`executeSQLQuery` statements defined in the source catalog. Added discovery
+covers hunt pilots/lists, line groups, bounded directory numbers and forwarding,
+SIP trunk/profile security, LDAP directories, phone-security profiles, and
+MRG/MRGL membership. A successful relationship GET is marked before empty
+membership can generate a finding, preventing a failed or unsupported API call
+from being interpreted as an empty configuration.
+
+No general SQL input is accepted. CUC Informix mailbox queries remain deferred
+until version-specific fixtures establish command syntax, result schemas, and
+acceptable execution time. CUCM SQL remains limited to the fixed Device Defaults
+and `first 500` route-pattern relationship queries; standard AXL list/get calls
+are preferred wherever available.
 
 | ID | Command | Timeout |
 | --- | --- | --- |

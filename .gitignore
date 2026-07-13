@@ -1,5 +1,6 @@
 # Private local project guidance; intentionally never published with the repository.
-Soul/
+/Soul/
+/soul/
 
 # Python bytecode and caches
 __pycache__/
