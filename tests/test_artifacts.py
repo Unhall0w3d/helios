@@ -8,6 +8,7 @@ import tempfile
 import unittest
 from datetime import datetime
 from pathlib import Path
+from unittest.mock import patch
 from zipfile import ZipFile
 
 from cisco_collab_health.artifacts import (
@@ -89,8 +90,7 @@ class ArtifactStoreTests(unittest.TestCase):
                 "axl",
                 "getCCMVersion",
                 request=(
-                    "POST /axl HTTP/1.1\nAuthorization: Basic abc123\n\n"
-                    "<password>secret</password>"
+                    "POST /axl HTTP/1.1\nAuthorization: Basic abc123\n\n<password>secret</password>"
                 ),
                 response="HTTP 200\nset-cookie: SESSION=abc123\n\n<token>secret</token>",
             )
@@ -116,7 +116,7 @@ class ArtifactStoreTests(unittest.TestCase):
                 "users",
                 request="GET /vmrest/users HTTP/1.1\nProxy-Authorization: Basic proxy-secret\n",
                 response=(
-                    'HTTP 200\nX-API-Key: header-secret\n\n'
+                    "HTTP 200\nX-API-Key: header-secret\n\n"
                     '{"password": "json-secret", "nested": {"token": "nested-secret"}}'
                 ),
             )
@@ -217,14 +217,18 @@ class ArtifactStoreTests(unittest.TestCase):
                 findings=[],
             )
 
-            write_log_bundle(
-                log_store,
-                report=report,
-                summary_text="Executive Summary\n",
-                artifact_store=artifact_store,
-                html_report_path=html_report,
-                customer_safe_html_report_path=customer_safe_html_report,
-            )
+            with patch(
+                "cisco_collab_health.reports.html.available_report_templates",
+                return_value=("aletheiauc",),
+            ):
+                write_log_bundle(
+                    log_store,
+                    report=report,
+                    summary_text="Executive Summary\n",
+                    artifact_store=artifact_store,
+                    html_report_path=html_report,
+                    customer_safe_html_report_path=customer_safe_html_report,
+                )
 
             summary = log_store.root / "executive_summary.txt"
             warnings = log_store.root / "collector_warnings.json"
@@ -252,14 +256,20 @@ class ArtifactStoreTests(unittest.TestCase):
             self.assertIn("response.txt", artifact_index.read_text(encoding="utf-8"))
             self.assertEqual(artifact_copy.read_text(encoding="utf-8"), "<xml />")
             self.assertTrue(report_copy.exists())
-            self.assertEqual(customer_safe_report_copy.read_text(encoding="utf-8"), "<html>safe</html>")
+            self.assertEqual(
+                customer_safe_report_copy.read_text(encoding="utf-8"), "<html>safe</html>"
+            )
             manifest = json.loads((log_store.root / "manifest.json").read_text(encoding="utf-8"))
             self.assertEqual(manifest["sensitivity_classification"], "private diagnostic")
             self.assertTrue(manifest["raw_evidence_included"])
             self.assertTrue(manifest["customer_safe_html_included"])
-            for theme in ("aletheiauc", "comsource"):
-                self.assertTrue((log_store.root / "reports" / theme / "engineering.html").exists())
-                self.assertTrue((log_store.root / "reports" / theme / "customer-facing.html").exists())
+            self.assertTrue(
+                (log_store.root / "reports" / "aletheiauc" / "engineering.html").exists()
+            )
+            self.assertTrue(
+                (log_store.root / "reports" / "aletheiauc" / "customer-facing.html").exists()
+            )
+            self.assertFalse((log_store.root / "reports" / "comsource").exists())
 
 
 if __name__ == "__main__":

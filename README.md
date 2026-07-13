@@ -444,27 +444,31 @@ presentation. The customer edition retains target names, hostnames, IP
 addresses, devices, dial-plan values, and configuration so customer engineers
 can interpret the assessment.
 
-The template is selected with `--html-template aletheiauc`. Template selection
-is intentionally explicit in the report builder and CLI so customer or partner
-templates can be added without changing collection or report facts.
+The default AletheiaUC assets are tracked in the repository.
+The CLI discovers other registered templates only when their complete local
+asset pack is present, so a clean clone remains fully functional. Template
+selection never changes collection, findings, or report facts.
 
-`comsource` is an optional customer-facing template. It uses the supplied
-ComSource logo and purple/cyan print-friendly visual system, with no AletheiaUC
-name, marks, capability row, or attribution in its rendered output. It retains
-the same report facts and customer-deliverable data policy:
+`comsource` is an optional customer-facing template. Its layout and theme rules
+remain supported in source, but its private artwork is local-only, ignored by
+Git, and excluded from packages. When its complete pack is installed, the CLI
+automatically offers it:
 
 ```bash
 ./aletheiauc.py --html-template comsource --customer-safe-report
 ```
 
-Both templates embed their assets in the generated HTML, so reports have no
-remote font, script, image, analytics, or CDN dependency.
+Every installed template embeds its assets in the generated HTML, so reports
+have no remote font, script, image, analytics, or CDN dependency.
 
 When `--export-review-zip` is used, the troubleshooting bundle includes both
 `report.html` and `customer_safe_report.html`. The latter applies the
 customer-deliverable policy with the selected template and is included for review;
 the ZIP itself remains private diagnostic material because it can also contain
 raw evidence and engineering artifacts.
+
+See [HTML Report Templates](docs/REPORT_TEMPLATES.md) for the local asset-pack
+contract and review-bundle behavior.
 
 To establish a bounded Cisco Unity Connection CUPI baseline with a dedicated
 CUC profile:

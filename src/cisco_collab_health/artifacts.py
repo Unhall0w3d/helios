@@ -121,7 +121,9 @@ class ArtifactStore:
 
     def write_command_output(self, node: str, command: str, output: str) -> Path:
         filename = f"{_safe_name(command)}.txt"
-        content = f"$ {command}\n\n{_sanitize_artifact_text(output, self.redaction_mode).rstrip()}\n"
+        content = (
+            f"$ {command}\n\n{_sanitize_artifact_text(output, self.redaction_mode).rstrip()}\n"
+        )
         return self.write_node_text(node, "cli", filename, content)
 
     def record_operation_attempt(self, payload: dict[str, Any]) -> Path:
@@ -225,9 +227,7 @@ def export_review_zip(
     """Export one self-contained troubleshooting bundle to the Downloads folder."""
 
     destination = (
-        Path(downloads_dir).expanduser()
-        if downloads_dir is not None
-        else Path.home() / "Downloads"
+        Path(downloads_dir).expanduser() if downloads_dir is not None else Path.home() / "Downloads"
     )
     destination.mkdir(parents=True, exist_ok=True)
     zip_path = destination / (
@@ -299,7 +299,9 @@ def write_log_bundle(
 ) -> list[Path]:
     """Write troubleshooting files that are easy to share for analysis."""
 
-    from cisco_collab_health.reports.html import REPORT_TEMPLATES, HtmlReportBuilder
+    from cisco_collab_health.reports.html import HtmlReportBuilder, available_report_templates
+
+    installed_templates = available_report_templates()
 
     metadata = getattr(report, "runtime_metadata", {})
     store.write_manifest(
@@ -313,7 +315,7 @@ def write_log_bundle(
             "customer_safe_html_included": bool(customer_safe_html_report_path),
             "review_report_variants": [
                 f"reports/{theme}/{audience}.html"
-                for theme in sorted(REPORT_TEMPLATES)
+                for theme in installed_templates
                 for audience in ("engineering", "customer-facing")
             ],
             "target_technologies": sorted(
@@ -334,7 +336,7 @@ def write_log_bundle(
     # Review bundles intentionally include both report audiences for every
     # installed theme. This lets report development compare presentation only;
     # all variants are rendered from the exact same normalized assessment data.
-    for theme in sorted(REPORT_TEMPLATES):
+    for theme in installed_templates:
         paths.append(
             store.write_text(
                 Path("reports") / theme / "engineering.html",
@@ -403,14 +405,14 @@ def _redact_secret_values(content: str) -> str:
         flags=re.IGNORECASE | re.DOTALL,
     )
     content = re.sub(
-        r'''(?ix)
+        r"""(?ix)
         ((?:["'])(?:password|passwd|secret|token|api[_-]?key)(?:["'])\s*:\s*)
         (
             "(?:\\.|[^"\\])*"
             | '(?:\\.|[^'\\])*'
             | [^\s,}\]]+
         )
-        ''',
+        """,
         r'\1"<redacted>"',
         content,
     )

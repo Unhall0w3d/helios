@@ -23,7 +23,7 @@ from cisco_collab_health.config import (
     select_or_create_runtime_profile,
 )
 from cisco_collab_health.menu import run_menu
-from cisco_collab_health.reports.html import REPORT_TEMPLATES
+from cisco_collab_health.reports.html import available_report_templates
 from cisco_collab_health.status import StatusPrinter
 
 _tls_policy_from_args = tls_policy_from_args
@@ -61,7 +61,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--html-template",
-        choices=tuple(sorted(REPORT_TEMPLATES)),
+        choices=available_report_templates(),
         default="aletheiauc",
         help="HTML report presentation template. Defaults to aletheiauc.",
     )

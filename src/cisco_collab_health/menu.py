@@ -22,7 +22,7 @@ from cisco_collab_health.config import (
     technology_label,
 )
 from cisco_collab_health.status import StatusPrinter
-from cisco_collab_health.reports.html import REPORT_TEMPLATES
+from cisco_collab_health.reports.html import available_report_templates
 
 RunAssessment = Callable[[argparse.Namespace, StatusPrinter, RuntimeProfile | None], int]
 RunMultiAssessment = Callable[
@@ -345,7 +345,7 @@ def _prompt_run_mode(args: argparse.Namespace) -> argparse.Namespace | None:
 def _configure_output(args: argparse.Namespace) -> None:
     args.html_template = _choose_value(
         "HTML report template",
-        {str(index): name for index, name in enumerate(sorted(REPORT_TEMPLATES), start=1)},
+        {str(index): name for index, name in enumerate(available_report_templates(), start=1)},
         args.html_template,
     )
     args.format = _choose_value("Terminal format", {"1": "summary", "2": "json"}, args.format)
@@ -353,7 +353,7 @@ def _configure_output(args: argparse.Namespace) -> None:
     if not args.no_html_report:
         args.html_report = _optional_value("HTML report path", args.html_report)
         args.customer_safe_report = _yes_no(
-            "Mask identifiers in HTML report?", default=args.customer_safe_report
+            "Build customer-deliverable HTML?", default=args.customer_safe_report
         )
 
 

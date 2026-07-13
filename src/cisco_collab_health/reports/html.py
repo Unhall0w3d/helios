@@ -148,12 +148,11 @@ REPORT_THEMES = {
 def _theme_asset_data_uri(theme: str, slot: str) -> str:
     """Resolve one named asset slot as a standalone data URI."""
 
-    package = REPORT_THEMES[theme]
-    filename = package.slots[slot]
-    if filename.startswith("repository:"):
-        path = Path(__file__).parents[3] / filename.removeprefix("repository:")
-    else:
-        path = Path(__file__).with_name("assets") / package.asset_directory / filename
+    path = _theme_asset_path(theme, slot)
+    if not path.is_file():
+        raise FileNotFoundError(
+            f"Report template '{theme}' is missing local asset '{path.name}' in {path.parent}."
+        )
     mime = {
         ".svg": "image/svg+xml",
         ".jpg": "image/jpeg",
@@ -162,6 +161,34 @@ def _theme_asset_data_uri(theme: str, slot: str) -> str:
         ".webp": "image/webp",
     }[path.suffix.lower()]
     return f"data:{mime};base64,{b64encode(path.read_bytes()).decode('ascii')}"
+
+
+def _theme_asset_path(theme: str, slot: str) -> Path:
+    """Return the filesystem path backing one theme asset slot."""
+
+    package = REPORT_THEMES[theme]
+    filename = package.slots[slot]
+    if filename.startswith("repository:"):
+        return Path(__file__).parents[3] / filename.removeprefix("repository:")
+    return Path(__file__).with_name("assets") / package.asset_directory / filename
+
+
+def missing_template_assets(template: str) -> tuple[Path, ...]:
+    """Return missing files for a registered template, without rendering it."""
+
+    package = REPORT_THEMES[template]
+    paths = {_theme_asset_path(template, slot) for slot in package.slots}
+    return tuple(sorted((path for path in paths if not path.is_file()), key=str))
+
+
+def available_report_templates() -> tuple[str, ...]:
+    """Return registered templates whose complete asset packs are installed."""
+
+    return tuple(
+        template
+        for template in sorted(REPORT_TEMPLATES)
+        if template in REPORT_THEMES and not missing_template_assets(template)
+    )
 
 
 class HtmlReportBuilder:
@@ -175,8 +202,16 @@ class HtmlReportBuilder:
         except KeyError as exc:
             available = ", ".join(sorted(REPORT_TEMPLATES))
             raise ValueError(
-                f"Unknown HTML report template '{template}'. Available: {available}."
+                f"Unknown HTML report template '{template}'. Registered: {available}."
             ) from exc
+        missing = missing_template_assets(template)
+        if missing:
+            filenames = ", ".join(path.name for path in missing)
+            raise ValueError(
+                f"HTML report template '{template}' is not installed locally. "
+                f"Missing assets: {filenames}. Place the complete asset pack in "
+                f"{missing[0].parent}."
+            )
 
     def build(self, report: AssessmentReport) -> str:
         severity_counts = Counter(finding.severity for finding in report.findings)

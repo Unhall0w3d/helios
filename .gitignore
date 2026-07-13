@@ -67,6 +67,9 @@ pnpm-debug.log*
 /reports/
 /review/
 /aletheiauc-review-*.zip
+# Optional partner/customer report artwork stays local. Only the default pack is tracked.
+/src/cisco_collab_health/reports/assets/*/
+!/src/cisco_collab_health/reports/assets/aletheiauc/
 /scriptdebugs/
 tmp/
 temp/

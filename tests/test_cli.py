@@ -48,10 +48,19 @@ class CliTests(unittest.TestCase):
 
         self.assertEqual(args.html_template, "aletheiauc")
 
-    def test_comsource_html_template_is_available(self) -> None:
-        args = cli.build_parser().parse_args(["--html-template", "comsource"])
+    def test_html_template_choices_are_discovered_from_installed_assets(self) -> None:
+        with patch(
+            "cisco_collab_health.cli.available_report_templates",
+            return_value=("aletheiauc",),
+        ):
+            parser = cli.build_parser()
+            args = parser.parse_args(["--html-template", "aletheiauc"])
 
-        self.assertEqual(args.html_template, "comsource")
+        self.assertEqual(args.html_template, "aletheiauc")
+        template_action = next(
+            action for action in parser._actions if action.dest == "html_template"
+        )
+        self.assertEqual(template_action.choices, ("aletheiauc",))
 
     def test_start_key_uses_recommended_diagnostic_and_review_options(self) -> None:
         args = cli.build_parser().parse_args([])

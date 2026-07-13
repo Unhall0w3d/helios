@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import json
 import unittest
-from hashlib import sha256
 from pathlib import Path
+from unittest.mock import patch
 
 from cisco_collab_health.collectors.base import CollectionResult, CollectorError
 from cisco_collab_health.collectors.sample import SampleCollector
@@ -40,6 +40,7 @@ from cisco_collab_health.reports.html import (
     REPORT_THEMES,
     HtmlReportBuilder,
     _theme_asset_data_uri,
+    available_report_templates,
 )
 from cisco_collab_health.reports.json import JsonReportBuilder
 from cisco_collab_health.reports.reconciliation import (
@@ -65,7 +66,8 @@ class ReportBuilderTests(unittest.TestCase):
         )
 
     def test_themes_share_design_system_components_and_remain_standalone(self) -> None:
-        for theme in ("aletheiauc", "comsource"):
+        self.assertIn("aletheiauc", available_report_templates())
+        for theme in available_report_templates():
             payload = HtmlReportBuilder(template=theme).build(self.report)
             self.assertIn("rds-report", payload)
             self.assertIn("rds-hero__art", payload)
@@ -81,7 +83,8 @@ class ReportBuilderTests(unittest.TestCase):
             self.assertNotIn("https://", payload)
 
     def test_every_required_theme_asset_slot_resolves_without_remote_dependency(self) -> None:
-        for theme, package in REPORT_THEMES.items():
+        for theme in available_report_templates():
+            package = REPORT_THEMES[theme]
             for slot in package.slots:
                 asset = _theme_asset_data_uri(theme, slot)
                 self.assertTrue(asset.startswith("data:image/"))
@@ -230,21 +233,9 @@ class ReportBuilderTests(unittest.TestCase):
         self.assertIn("@media (max-width: 620px)", payload)
 
     def test_comsource_template_is_standalone_and_brand_isolated(self) -> None:
+        if "comsource" not in available_report_templates():
+            self.skipTest("optional local ComSource asset pack is not installed")
         payload = HtmlReportBuilder(customer_safe=True, template="comsource").build(self.report)
-        logo_path = (
-            Path(__file__).parents[1]
-            / "src"
-            / "cisco_collab_health"
-            / "reports"
-            / "assets"
-            / "comsource"
-            / "ComSource_Logo.svg"
-        )
-
-        self.assertEqual(
-            sha256(logo_path.read_bytes()).hexdigest(),
-            "3424092f321d4950a46efd3b5065520c7bb0fe379da4455621b073d265a8fb7a",
-        )
         self.assertIn("ComSource", payload)
         self.assertIn("Prepared by ComSource, Inc.", payload)
         self.assertIn('<footer class="template-footer rds-footer"', payload)
@@ -382,6 +373,15 @@ class ReportBuilderTests(unittest.TestCase):
     def test_unknown_html_template_is_rejected(self) -> None:
         with self.assertRaisesRegex(ValueError, "Unknown HTML report template"):
             HtmlReportBuilder(template="not-a-template")
+
+    def test_registered_template_with_missing_assets_has_actionable_error(self) -> None:
+        missing = Path("/tmp/local-template/hero-background.svg")
+        with patch(
+            "cisco_collab_health.reports.html.missing_template_assets",
+            return_value=(missing,),
+        ):
+            with self.assertRaisesRegex(ValueError, "not installed locally"):
+                HtmlReportBuilder(template="comsource")
 
     def test_node_rows_put_publishers_first_within_each_technology(self) -> None:
         report = AssessmentReport(

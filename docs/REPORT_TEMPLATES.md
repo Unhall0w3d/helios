@@ -6,7 +6,21 @@ the customer-deliverable data policy are shared by every template.
 ## AletheiaUC
 
 `aletheiauc` is the default engineering and customer-deliverable template. Its
-identity is documented in [Brand Pack](BRANDING.md).
+identity is documented in [Brand Pack](BRANDING.md). Its complete asset pack is
+tracked in the repository, so it is always available on a clean clone.
+
+## Template discovery
+
+The CLI and interactive menu list only registered templates whose complete
+asset packs are present. Review bundles render the same installed set. A missing
+optional pack therefore cannot break the default report or a review export.
+
+Template behavior—metadata, design tokens, asset-slot mappings, and shared
+rendering code—belongs in source control. Partner or customer artwork does not.
+Local packs live under `src/cisco_collab_health/reports/assets/<template>/`;
+all such directories except `aletheiauc` are ignored by Git and excluded from
+package data. Adding a future template requires a registered code definition and
+a complete local pack matching its slot map.
 
 ## ComSource
 
@@ -16,10 +30,23 @@ identity is documented in [Brand Pack](BRANDING.md).
 ./aletheiauc.py --html-template comsource --customer-safe-report
 ```
 
-It uses the user-supplied canonical ComSource logo, which is stored unchanged
-at `src/cisco_collab_health/reports/assets/comsource/ComSource_Logo.svg`. The
-rendered ComSource report embeds that SVG and its supplied companion artwork as
-data URIs, so it does not require external assets.
+Its backing rules and shared layout remain in the repository. Its logo and
+artwork stay local at `src/cisco_collab_health/reports/assets/comsource/` and
+must not be committed. A complete pack contains:
+
+- `ComSource_Logo.svg`
+- `hero-background.svg`
+- `section-band.svg`
+- `divider-horizontal.svg`
+- `watermark.svg`
+- `footer-background.svg`
+- `status-icons.svg`
+
+When all required files exist, `comsource` is automatically available to the
+CLI, menu, report builder, and review-bundle renderer. If an operator explicitly
+requests a registered but incomplete template through code, the builder reports
+the missing files and local pack directory. Rendered reports embed installed
+assets as data URIs and have no external image dependency.
 
 The ComSource template deliberately contains no AletheiaUC name, marks,
 taglines, capability row, or powered-by attribution. Its purple and cyan are
@@ -98,10 +125,10 @@ contract includes:
 - `recommendation-background`, `watermark`, and `footer-background`
 - `logo-primary` for placements enabled by that theme
 
-A theme may map several slots to one reusable image, as ComSource currently does
-with its supplied section artwork, or provide purpose-built imagery for every
-slot, as AletheiaUC does. AletheiaUC intentionally has no footer logo; ComSource
-continues to use the supplied official SVG in its hero and footer. Theme
+A theme may map several slots to one reusable image, as ComSource does with its
+local section artwork, or provide purpose-built imagery for every slot, as
+AletheiaUC does. AletheiaUC intentionally has no footer logo; an installed
+ComSource pack uses its local official SVG in the hero and footer. Theme
 presentation must not change facts, health logic, severity meaning, or the
 customer-deliverable data policy.
 
@@ -111,11 +138,15 @@ signals, and evidence traceability. Every card includes a value, label, state,
 and short interpretation. Three-, two-, and one-column layouts use zero-minimum
 grid tracks and explicit wrapping so long labels remain within their cards.
 
-Every troubleshooting/review ZIP now includes all presentation comparisons,
-rendered from the same assessment facts:
+Every troubleshooting/review ZIP includes presentation comparisons for all
+installed templates, rendered from the same assessment facts. A clean clone
+always includes:
 
 - `reports/aletheiauc/engineering.html`
 - `reports/aletheiauc/customer-facing.html`
+
+With the complete local ComSource pack installed, it additionally includes:
+
 - `reports/comsource/engineering.html`
 - `reports/comsource/customer-facing.html`
 
