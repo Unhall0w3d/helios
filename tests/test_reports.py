@@ -275,6 +275,29 @@ class ReportBuilderTests(unittest.TestCase):
         self.assertLess(html.index("cuc-pub"), html.index("cuc-sub"))
         self.assertLess(html.index("cucm-pub"), html.index("cucm-sub"))
 
+    def test_node_reachability_is_inferred_from_successful_collection(self) -> None:
+        report = AssessmentReport(
+            facts=AssessmentFacts(
+                nodes=[
+                    CollaborationNode("cucm-pub", "192.0.2.11", "publisher"),
+                    CollaborationNode("cucm-sub", "192.0.2.12", "subscriber"),
+                ]
+            ),
+            collector_results=[
+                CollectionResult(
+                    collector_name="axl",
+                    facts=AssessmentFacts(),
+                    evidence=[EvidenceRef(source="AXL", operation="getCCMVersion", node="192.0.2.11")],
+                )
+            ],
+            findings=[],
+        )
+
+        html = HtmlReportBuilder().build(report)
+
+        self.assertIn("Yes (data collected)", html)
+        self.assertIn("Not assessed directly", html)
+
     def test_html_report_puts_summaries_before_detailed_device_tables(self) -> None:
         payload = HtmlReportBuilder().build(self.report)
 

@@ -1311,11 +1311,34 @@ class HtmlReportBuilder:
                 f"<td>{escape(self._identifier(node.name, 'Node'))}</td>"
                 f"<td>{escape(self._identifier(node.address, 'Address'))}</td>"
                 f"<td>{escape(node.role)}</td>"
-                f"<td>{escape(display_bool(node.reachable) if node.reachable is not None else 'Not individually probed')}</td>"
+                f"<td>{escape(self._node_reachability(report, node.name, node.address, node.reachable))}</td>"
                 "</tr>"
             )
             for node in nodes
         )
+
+    @staticmethod
+    def _node_reachability(
+        report: AssessmentReport,
+        name: str,
+        address: str,
+        reachable: bool | None,
+    ) -> str:
+        """Render direct collection success as reachability when no probe fact exists.
+
+        A successful authenticated collection request is stronger and more useful than
+        leaving a discovered node's reachability blank.  We do not infer a failure for
+        nodes that were not contacted directly; that remains an unassessed state.
+        """
+
+        if reachable is not None:
+            return display_bool(reachable)
+        node_keys = {value.strip().casefold() for value in (name, address) if value.strip()}
+        for result in report.collector_results:
+            for evidence in result.evidence:
+                if evidence.node and evidence.node.strip().casefold() in node_keys:
+                    return "Yes (data collected)"
+        return "Not assessed directly"
 
     def _device_rows(self, report: AssessmentReport) -> str:
         if not report.facts.devices:
