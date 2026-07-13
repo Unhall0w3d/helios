@@ -48,10 +48,14 @@ separate sections. CUCM configuration reporting includes dedicated expandable
 tables for hunt/directory-number topology, trunk/directory/device security, and
 media-resource membership. Customer-safe reports expose the same operational
 configuration names, dial-plan values, LDAP paths, destinations, and settings.
-Repeated CUC schedule/schedule-set rows with the same normalized name and fields
+CUC inventory rows display API totals, normalized rows, and complete/partial
+coverage so a 500-row cap cannot be mistaken for full inventory. Message-aging
+rule details include the owning policy name. Repeated CUC schedule/schedule-set
+rows with the same normalized name and fields
 are grouped with an occurrence count in report details; source facts and private
-evidence remain unchanged. CUCM line-group membership and SIP destinations are
-shown only when the expected bounded AXL object was returned.
+evidence remain unchanged. CUCM line-group directory numbers and SIP destination
+addresses are also recovered through fixed, server-bounded SQL when the standard
+AXL object contains only UUIDs or ports.
 
 The standalone AletheiaUC report embeds only the artwork it actively renders;
 the hero image is not duplicated as a section watermark or accompanied by a

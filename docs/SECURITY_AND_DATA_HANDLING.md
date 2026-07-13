@@ -18,6 +18,9 @@ artifact paths and raw evidence content. Review the rendered HTML before sharing
 
 CUC detailed CUPI normalization uses per-resource field allowlists and excludes
 mailbox/user identities, email addresses, credentials, and message content.
+It retains engineering-relevant phone-system, port, routing-target, schedule,
+mailbox-store, message-aging, and SMTP configuration values. Linked message-aging
+rule collection follows only same-server `/vmrest/` paths returned by the policy API.
 CUCM line, LDAP, routing, and integration names can reveal customer dial plans or
 directory structure and are deliberately retained in both HTML editions. JSON
 and raw API evidence remain private diagnostic material.

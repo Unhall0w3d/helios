@@ -38,6 +38,14 @@ class RoutePatternRelationship:
     route_groups: tuple[str, ...]
 
 
+@dataclass(frozen=True)
+class SipTrunkDestination:
+    """Database-backed SIP trunk destination."""
+
+    address: str
+    port: str | None
+
+
 class XmlElement(Protocol):
     text: str | None
     tag: str
@@ -159,10 +167,7 @@ def parse_configuration_objects(
     element_name = object_name[:1].lower() + object_name[1:]
     facts = []
     for element in _iter_local_name(root, element_name):
-        values = {
-            tag: ", ".join(_descendant_path_texts(element, tag))
-            for tag in returned_tags
-        }
+        values = {tag: ", ".join(_descendant_path_texts(element, tag)) for tag in returned_tags}
         name = values.get("name") or values.get("pattern")
         if not name:
             continue
@@ -184,7 +189,9 @@ def parse_configuration_objects(
 
 
 def parse_configuration_object_details(
-    response_text: str, operation: str, returned_tags: tuple[str, ...],
+    response_text: str,
+    operation: str,
+    returned_tags: tuple[str, ...],
 ) -> dict[str, str] | None:
     """Parse relationship fields from one AXL get response."""
 
@@ -219,17 +226,19 @@ def parse_line_forwarding(response_text: str) -> list[ConfigurationObjectFact]:
             continue
         partition = _child_text(row, "partition")
         voicemail = _child_text(row, "forwardallvoicemail")
-        facts.append(ConfigurationObjectFact(
-            object_type="Line",
-            name=pattern,
-            details={
-                **({"partition": partition} if partition else {}),
-                "forward_all_destination": destination,
-                **({"forward_all_voicemail": voicemail} if voicemail else {}),
-            },
-            source="AXL.executeSQLQuery.lineForwarding",
-            uuid=_child_text(row, "lineuuid"),
-        ))
+        facts.append(
+            ConfigurationObjectFact(
+                object_type="Line",
+                name=pattern,
+                details={
+                    **({"partition": partition} if partition else {}),
+                    "forward_all_destination": destination,
+                    **({"forward_all_voicemail": voicemail} if voicemail else {}),
+                },
+                source="AXL.executeSQLQuery.lineForwarding",
+                uuid=_child_text(row, "lineuuid"),
+            )
+        )
     return facts
 
 
@@ -262,11 +271,79 @@ def parse_route_pattern_relationships(
         accumulated[uuid] = (current_destination, groups)
     return {
         uuid: RoutePatternRelationship(
-            uuid=uuid, destination=destination,
+            uuid=uuid,
+            destination=destination,
             route_groups=tuple(name for _, name in sorted(groups)),
         )
         for uuid, (destination, groups) in accumulated.items()
     }
+
+
+def parse_line_group_members(response_text: str) -> dict[str, tuple[str, ...]]:
+    """Normalize ordered line-group directory-number membership by UUID."""
+
+    try:
+        root = ET.fromstring(response_text)
+    except ET.ParseError as exc:
+        raise AxlCollectionError(f"Unable to parse line-group member SQL response: {exc}") from exc
+    accumulated: dict[str, list[tuple[int, str]]] = {}
+    for row in _iter_local_name(root, "row"):
+        uuid = (_child_text(row, "linegroupuuid") or "").strip().strip("{}").lower()
+        number = _child_text(row, "directorynumber")
+        if not uuid or not number:
+            continue
+        partition = _child_text(row, "partition")
+        label = f"{number} ({partition})" if partition else number
+        try:
+            order = int(_child_text(row, "selectionorder") or "0")
+        except ValueError:
+            order = 0
+        if (order, label) not in accumulated.setdefault(uuid, []):
+            accumulated[uuid].append((order, label))
+    return {
+        uuid: tuple(label for _, label in sorted(members)) for uuid, members in accumulated.items()
+    }
+
+
+def parse_sip_trunk_destinations(
+    response_text: str,
+) -> dict[str, tuple[SipTrunkDestination, ...]]:
+    """Normalize SIP trunk destinations omitted by some AXL get responses."""
+
+    try:
+        root = ET.fromstring(response_text)
+    except ET.ParseError as exc:
+        raise AxlCollectionError(
+            f"Unable to parse SIP trunk destination SQL response: {exc}"
+        ) from exc
+    accumulated: dict[str, list[SipTrunkDestination]] = {}
+    for row in _iter_local_name(root, "row"):
+        uuid = (_child_text(row, "trunkuuid") or "").strip().strip("{}").lower()
+        address = _child_text(row, "destination")
+        if not uuid or not address:
+            continue
+        destination = SipTrunkDestination(address, _child_text(row, "destinationport"))
+        if destination not in accumulated.setdefault(uuid, []):
+            accumulated[uuid].append(destination)
+    return {uuid: tuple(destinations) for uuid, destinations in accumulated.items()}
+
+
+def parse_configuration_object_member_count(
+    response_text: str,
+    operation: str,
+) -> int | None:
+    """Count returned relationship members even when CUCM exposes UUIDs without text."""
+
+    try:
+        root = ET.fromstring(response_text)
+    except ET.ParseError as exc:
+        raise AxlCollectionError(f"Unable to parse {operation} response: {exc}") from exc
+    object_name = operation.removeprefix("get")
+    element_name = object_name[:1].lower() + object_name[1:]
+    element = next(_iter_local_name(root, element_name), None)
+    if element is None:
+        return None
+    return sum(1 for _ in _iter_local_name(element, "member"))
 
 
 def _configuration_detail_name(tag: str) -> str:

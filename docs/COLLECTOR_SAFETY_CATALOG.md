@@ -16,8 +16,10 @@ The normal CUC CUPI pass records only bounded inventory counts for mailboxes
 and unified-messaging services. Diagnostic capture uses GET only and caps each
 reviewed configuration resource at 500 records (or the lower configured AXL
 diagnostic record cap). Phone systems, port groups/ports, SIP security profiles,
-routing rules, schedules, mailbox stores, message-aging policy, and SMTP
-configuration normalize only explicit non-secret field allowlists. Per-user
+routing rules, schedules, mailbox stores, message-aging policies and their linked
+rule resources, and SMTP configuration normalize only explicit non-secret field
+allowlists. Linked rule URLs must be same-server `/vmrest/` paths and every child
+GET remains capped at 500 rows. Per-user
 external-service accounts, email addresses, credentials, and message content are
 not normalized.
 
@@ -34,12 +36,15 @@ return the entire line inventory. That operation is no longer used. Configured
 call-forward-all coverage comes from a fixed `select first 500` read-only query.
 Nested returned tags with common parents are merged into one request tree so SIP
 destinations and line-group members are requested together correctly. A get
-response that lacks the expected object is marked unavailable, not empty.
+response that lacks the expected object is marked unavailable, not empty. A
+line-group response containing member UUIDs is recognized as populated even when
+AXL omits the directory-number text.
 
 No general SQL input is accepted. CUC Informix mailbox queries remain deferred
 until version-specific fixtures establish command syntax, result schemas, and
-acceptable execution time. CUCM SQL remains limited to fixed Device Defaults,
-`first 500` route-pattern relationship, and `first 500` configured CFA queries;
+acceptable execution time. CUCM SQL remains limited to fixed Device Defaults and
+`first 500` route-pattern, line-group member, SIP trunk destination, and configured
+CFA queries;
 standard AXL list/get calls are preferred wherever they remain reliably bounded.
 
 | ID | Command | Timeout |

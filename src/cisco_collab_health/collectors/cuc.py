@@ -60,68 +60,112 @@ DIAGNOSTIC_COUNT_PROBES = (
 # slightly by release, so aliases are compared case-insensitively without punctuation.
 DIAGNOSTIC_CONFIGURATION_PROBES = (
     CupiProbe(
-        "CucPhoneSystem", "Phone systems", "/vmrest/phonesystems",
+        "CucPhoneSystem",
+        "Phone systems",
+        "/vmrest/phonesystems",
         ("PhoneSystem",),
         detail_fields=(
             ("integration_type", ("integrationtype", "phonesystemtype")),
-            ("enable_mwi", ("enablemwi", "mwiisenabled")),
+            ("mwi_always_update", ("mwialwaysupdate",)),
+            ("mwi_port_memory", ("mwiportmemory",)),
+            ("port_count", ("portcount",)),
+            ("default_trap_switch", ("defaulttrapswitch",)),
+            ("mwi_force_off", ("mwiforceoff",)),
+            ("phone_applications_enabled", ("enablephoneapplications",)),
             ("enable_trap_connection", ("enabletrapconnection",)),
         ),
     ),
     CupiProbe(
-        "CucPortGroup", "Port groups", "/vmrest/portgroups", ("PortGroup",),
+        "CucPortGroup",
+        "Port groups",
+        "/vmrest/portgroups",
+        ("PortGroup",),
         detail_fields=(
             ("phone_system", ("phonesystemdisplayname", "phonesystemname", "phonesystemobjectid")),
             ("media_switch", ("mediaswitchdisplayname", "mediaswitchobjectid")),
             ("port_count", ("portcount", "numberofports")),
+            ("mwi_enabled", ("enablemwi",)),
+            ("integration_method", ("telephonyintegrationmethodenum",)),
+            ("sip_transport", ("siptransportprotocolenum",)),
+            ("sip_srtp", ("sipdosrtp",)),
+            ("sip_tls_mode", ("siptlsmodeenum",)),
+            ("next_generation_security", ("sipenablenextgensecurity",)),
+            ("sip_authentication", ("sipdoauthenticate",)),
         ),
     ),
     CupiProbe(
-        "CucPort", "Ports", "/vmrest/ports", ("Port",),
+        "CucPort",
+        "Ports",
+        "/vmrest/ports",
+        ("Port",),
         identity_fields=("displayname", "name", "portnumber"),
         detail_fields=(
-            ("enabled", ("enabled", "isenabled")),
-            ("phone_system", ("phonesystemdisplayname", "phonesystemobjectid")),
-            ("port_group", ("portgroupdisplayname", "portgroupobjectid")),
-            ("answer_calls", ("answercalls",)),
-            ("send_mwi_requests", ("sendmwirequests",)),
-            ("message_notification", ("messagenotification",)),
+            ("enabled", ("capenabled", "enabled", "isenabled")),
+            ("media_switch", ("mediaswitchdisplayname",)),
+            ("port_group", ("mediaportgroupdisplayname", "portgroupdisplayname")),
+            ("server", ("vmsservername",)),
+            ("answer_calls", ("capanswer", "answercalls")),
+            ("send_mwi_requests", ("capmwi", "sendmwirequests")),
+            ("message_notification", ("capnotification", "messagenotification")),
+            ("trap_connection", ("captrapconnection",)),
         ),
     ),
     CupiProbe(
-        "CucSipSecurityProfile", "SIP security profiles", "/vmrest/sipsecurityprofiles",
+        "CucSipSecurityProfile",
+        "SIP security profiles",
+        "/vmrest/sipsecurityprofiles",
         ("SipSecurityProfile", "SIPSecurityProfile"),
         detail_fields=(
+            ("port", ("port", "incomingport")),
+            ("tls_enabled", ("dotls",)),
             ("transport", ("transporttype", "transport")),
-            ("incoming_port", ("incomingport",)),
             ("outgoing_port", ("outgoingport",)),
             ("digest_authentication", ("enabledigestauthentication", "digestauthentication")),
         ),
     ),
     CupiProbe(
-        "CucRoutingRule", "Routing rules", "/vmrest/routingrules", ("RoutingRule",),
+        "CucRoutingRule",
+        "Routing rules",
+        "/vmrest/routingrules",
+        ("RoutingRule",),
         identity_fields=("displayname", "rulename", "name"),
         detail_fields=(
-            ("enabled", ("enabled", "isenabled", "state")),
-            ("rule_type", ("ruletype",)),
-            ("order", ("ruleorder", "order", "sequence")),
-            ("action", ("action", "actiontype")),
-            ("destination", ("destinationdisplayname", "destinationobjectid")),
+            ("state", ("state",)),
+            ("rule_type", ("type", "ruletype")),
+            ("order", ("ruleindex", "ruleorder", "order", "sequence")),
+            ("action", ("routeaction", "action", "actiontype")),
+            ("target", ("routetargethandlerdisplayname", "destinationdisplayname")),
+            ("target_conversation", ("routetargetconversation",)),
+            ("target_object_type", ("routetargethandlerobjecttype",)),
+            ("call_type", ("calltype",)),
         ),
     ),
     CupiProbe(
-        "CucScheduleSet", "Schedule sets", "/vmrest/schedulesets", ("ScheduleSet",),
-        detail_fields=(("schedule_count", ("schedulecount", "membercount")),),
+        "CucScheduleSet",
+        "Schedule sets",
+        "/vmrest/schedulesets",
+        ("ScheduleSet",),
+        detail_fields=(
+            ("schedule_count", ("schedulecount", "membercount")),
+            ("undeletable", ("undeletable",)),
+        ),
     ),
     CupiProbe(
-        "CucSchedule", "Schedules", "/vmrest/schedules", ("Schedule",),
+        "CucSchedule",
+        "Schedules",
+        "/vmrest/schedules",
+        ("Schedule",),
         detail_fields=(
             ("schedule_set", ("schedulesetdisplayname", "schedulesetobjectid")),
             ("detail_count", ("scheduledetailcount", "membercount")),
+            ("holiday", ("isholiday",)),
+            ("undeletable", ("undeletable",)),
         ),
     ),
     CupiProbe(
-        "CucMailboxStore", "Voicemail mailbox stores", "/vmrest/mailboxstores",
+        "CucMailboxStore",
+        "Voicemail mailbox stores",
+        "/vmrest/mailboxstores",
         ("MailboxStore", "VoiceMailBoxStore", "VoicemailBoxStore"),
         detail_fields=(
             ("server", ("server", "serverdisplayname", "serverobjectid")),
@@ -133,7 +177,9 @@ DIAGNOSTIC_CONFIGURATION_PROBES = (
         alternate_paths=("/vmrest/voicemailboxstores",),
     ),
     CupiProbe(
-        "CucMessageAgingPolicy", "Message-aging policies", "/vmrest/messageagingpolicies",
+        "CucMessageAgingPolicy",
+        "Message-aging policies",
+        "/vmrest/messageagingpolicies",
         ("MessageAgingPolicy",),
         detail_fields=(
             ("enabled", ("enabled", "isenabled")),
@@ -143,7 +189,9 @@ DIAGNOSTIC_CONFIGURATION_PROBES = (
         ),
     ),
     CupiProbe(
-        "CucSmtpConfiguration", "SMTP server configuration", "/vmrest/smtpserver/serverconfigs",
+        "CucSmtpConfiguration",
+        "SMTP server configuration",
+        "/vmrest/smtpserver/serverconfigs",
         ("SmtpServerConfig", "SMTPServerConfig"),
         detail_fields=(
             ("port", ("port",)),
@@ -153,6 +201,24 @@ DIAGNOSTIC_CONFIGURATION_PROBES = (
             ("require_tls_untrusted", ("requiretlsfromuntrustedipaddresses",)),
         ),
         singleton=True,
+    ),
+)
+
+MESSAGE_AGING_RULE_PROBE = CupiProbe(
+    "CucMessageAgingRule",
+    "Message-aging rules",
+    "",
+    ("MessageAgingRule",),
+    identity_fields=("ruledescription", "agingruletype", "objectid"),
+    detail_fields=(
+        ("days", ("days",)),
+        ("enabled", ("enabled",)),
+        ("secure", ("secure",)),
+        ("send_notification", ("sendnotification",)),
+        ("notification_days", ("notificationdays",)),
+        ("action", ("action",)),
+        ("aging_rule_type", ("agingruletype",)),
+        ("aging_time_type", ("agingtimetype",)),
     ),
 )
 
@@ -195,12 +261,13 @@ class CucCollector:
             selected_path = probe.path
             failure: CapturedHttpError | None = None
             for path_index, path in enumerate((probe.path, *probe.alternate_paths)):
-                endpoint = (
-                    f"https://{node}{path}?rowsPerPage={requested_rows}&pageNumber=1"
-                )
+                endpoint = f"https://{node}{path}?rowsPerPage={requested_rows}&pageNumber=1"
                 try:
                     response = self.http_client.get(
-                        endpoint, context, node=node, interface="cuc_cupi",
+                        endpoint,
+                        context,
+                        node=node,
+                        interface="cuc_cupi",
                         operation=(operation if path_index == 0 else f"{operation}_fallback"),
                     )
                     selected_path = path
@@ -218,27 +285,62 @@ class CucCollector:
                     f"CUC CUPI {probe.label.lower()} used compatibility endpoint "
                     f"{selected_path} after {probe.path} returned HTTP 404."
                 )
-            evidence.append(EvidenceRef(
-                source="CUC.CUPI", operation=operation, node=node,
-                artifact_path=response.response_artifact_path, confidence="high",
-            ))
+            evidence.append(
+                EvidenceRef(
+                    source="CUC.CUPI",
+                    operation=operation,
+                    node=node,
+                    artifact_path=response.response_artifact_path,
+                    confidence="high",
+                )
+            )
             total = _cupi_total(response.body)
-            facts.configuration_objects.append(ConfigurationObjectFact(
-                object_type=(
-                    probe.object_type
-                    if probe.object_type.endswith("Inventory")
-                    else f"{probe.object_type}Inventory"
-                ),
-                name=probe.label,
-                details={
-                    "total": str(total) if total is not None else "unknown",
-                    "requested_rows": str(requested_rows),
-                },
-                source=f"CUC.CUPI{selected_path}",
-            ))
+            records = (
+                _cupi_configuration_records(response.body, probe, source_path=selected_path)
+                if probe.record_names
+                else []
+            )
+            inventory_details = {
+                "total": str(total) if total is not None else "unknown",
+                "requested_rows": str(requested_rows),
+            }
             if probe.record_names:
-                facts.configuration_objects.extend(
-                    _cupi_configuration_records(response.body, probe, source_path=selected_path)
+                inventory_details["normalized_records"] = str(len(records))
+                if total is not None:
+                    inventory_details["collection_status"] = (
+                        "partial" if len(records) < total else "complete"
+                    )
+                    inventory_details["coverage"] = f"{len(records)} of {total}"
+                    if len(records) < total:
+                        notes.append(
+                            f"CUC CUPI {probe.label.lower()} normalized {len(records)} of "
+                            f"{total} record(s); collection was bounded to {requested_rows}."
+                        )
+                else:
+                    inventory_details["collection_status"] = "collected"
+            facts.configuration_objects.append(
+                ConfigurationObjectFact(
+                    object_type=(
+                        probe.object_type
+                        if probe.object_type.endswith("Inventory")
+                        else f"{probe.object_type}Inventory"
+                    ),
+                    name=probe.label,
+                    details=inventory_details,
+                    source=f"CUC.CUPI{selected_path}",
+                )
+            )
+            facts.configuration_objects.extend(records)
+            if probe.object_type == "CucMessageAgingPolicy":
+                self._collect_message_aging_rules(
+                    response.body,
+                    node,
+                    context,
+                    max_rows,
+                    facts,
+                    warnings,
+                    evidence,
+                    notes,
                 )
 
         if self.diagnostic_capture:
@@ -247,6 +349,66 @@ class CucCollector:
                 f"each resource was bounded to {max_rows} record(s)."
             )
         return CollectionResult(self.name, facts, warnings=warnings, evidence=evidence, notes=notes)
+
+    def _collect_message_aging_rules(
+        self,
+        payload: str,
+        node: str,
+        context: CollectionContext,
+        max_rows: int,
+        facts: AssessmentFacts,
+        warnings: list[str],
+        evidence: list[EvidenceRef],
+        notes: list[str],
+    ) -> None:
+        """Collect the bounded child rules linked from each message-aging policy."""
+
+        collected = 0
+        links = _message_aging_rule_links(payload)[:max_rows]
+        for index, (policy, path) in enumerate(links, start=1):
+            endpoint = f"https://{node}{path}?rowsPerPage={max_rows}&pageNumber=1"
+            operation = f"CucMessageAgingRule_bounded_get_{index:06d}"
+            try:
+                response = self.http_client.get(
+                    endpoint,
+                    context,
+                    node=node,
+                    interface="cuc_cupi",
+                    operation=operation,
+                )
+            except CapturedHttpError as exc:
+                warnings.append(f"CUC CUPI message-aging rules GET failed for {policy}: {exc}")
+                continue
+            evidence.append(
+                EvidenceRef(
+                    source="CUC.CUPI",
+                    operation=operation,
+                    node=node,
+                    artifact_path=response.response_artifact_path,
+                    confidence="high",
+                )
+            )
+            records = _cupi_configuration_records(
+                response.body,
+                MESSAGE_AGING_RULE_PROBE,
+                source_path=path,
+            )
+            facts.configuration_objects.extend(
+                ConfigurationObjectFact(
+                    object_type=item.object_type,
+                    name=item.name,
+                    details={"policy": policy, **item.details},
+                    source=item.source,
+                    uuid=item.uuid,
+                )
+                for item in records
+            )
+            collected += len(records)
+        if links:
+            notes.append(
+                f"CUC CUPI collected {collected} message-aging rule(s) from "
+                f"{len(links)} bounded policy child resource(s)."
+            )
 
 
 def _cupi_total(payload: str) -> int | None:
@@ -273,8 +435,49 @@ def _cupi_total(payload: str) -> int | None:
         return None
 
 
+def _message_aging_rule_links(payload: str) -> list[tuple[str, str]]:
+    """Return policy display names and same-server child rule paths."""
+
+    candidates: list[dict[str, str]] = []
+    try:
+        document = json.loads(payload)
+        candidates = [_flatten_json_scalars(item) for item in _walk_json_dicts(document)]
+    except (json.JSONDecodeError, TypeError):
+        try:
+            root = ET.fromstring(payload)
+            for element in _iter_xml_records(root, "messageagingpolicy"):
+                candidates.append(
+                    {
+                        _key(child.tag.rsplit("}", 1)[-1]): (child.text or "").strip()
+                        for child in element.iter()
+                        if child is not element and (child.text or "").strip()
+                    }
+                )
+        except ET.ParseError:
+            return []
+    links: list[tuple[str, str]] = []
+    for record in candidates:
+        path = _first(record, ("messageagingruleuri",))
+        policy = _first(record, ("displayname", "name", "objectid"))
+        if not path or not policy or not path.startswith("/vmrest/"):
+            continue
+        link = (policy, path)
+        if link not in links:
+            links.append(link)
+    return links
+
+
+def _iter_xml_records(root: Any, normalized_name: str) -> Iterator[Any]:
+    for element in root.iter():
+        if _key(element.tag.rsplit("}", 1)[-1]) == normalized_name:
+            yield element
+
+
 def _cupi_configuration_records(
-    payload: str, probe: CupiProbe, *, source_path: str | None = None,
+    payload: str,
+    probe: CupiProbe,
+    *,
+    source_path: str | None = None,
 ) -> list[ConfigurationObjectFact]:
     """Normalize allowlisted CUPI fields without retaining arbitrary response content."""
 
@@ -282,7 +485,8 @@ def _cupi_configuration_records(
     try:
         document = json.loads(payload)
         records = [
-            flattened for candidate in _walk_json_dicts(document)
+            flattened
+            for candidate in _walk_json_dicts(document)
             if _json_record_matches(candidate, probe)
             and (flattened := _flatten_json_scalars(candidate))
         ]
@@ -293,11 +497,13 @@ def _cupi_configuration_records(
             for element in root.iter():
                 if _key(element.tag.rsplit("}", 1)[-1]) not in record_names:
                     continue
-                records.append({
-                    _key(child.tag.rsplit("}", 1)[-1]): (child.text or "").strip()
-                    for child in element.iter()
-                    if child is not element and (child.text or "").strip()
-                })
+                records.append(
+                    {
+                        _key(child.tag.rsplit("}", 1)[-1]): (child.text or "").strip()
+                        for child in element.iter()
+                        if child is not element and (child.text or "").strip()
+                    }
+                )
         except ET.ParseError:
             return []
 
@@ -313,13 +519,15 @@ def _cupi_configuration_records(
             for label, aliases in probe.detail_fields
             if (value := _first(record, aliases)) is not None
         }
-        normalized.append(ConfigurationObjectFact(
-            object_type=probe.object_type,
-            name=identity,
-            details=details,
-            source=f"CUC.CUPI{source_path or probe.path}",
-            uuid=_first(record, ("objectid",)) or None,
-        ))
+        normalized.append(
+            ConfigurationObjectFact(
+                object_type=probe.object_type,
+                name=identity,
+                details=details,
+                source=f"CUC.CUPI{source_path or probe.path}",
+                uuid=_first(record, ("objectid",)) or None,
+            )
+        )
     return normalized
 
 
@@ -336,9 +544,7 @@ def _walk_json_dicts(value: Any) -> Iterator[dict[Any, Any]]:
 def _json_record_matches(record: dict[Any, Any], probe: CupiProbe) -> bool:
     keys = {_key(str(key)) for key in record}
     identity_keys = {_key(field) for field in (*probe.identity_fields, "objectid")}
-    detail_keys = {
-        _key(alias) for _, aliases in probe.detail_fields for alias in aliases
-    }
+    detail_keys = {_key(alias) for _, aliases in probe.detail_fields for alias in aliases}
     return bool(keys & identity_keys) or bool(probe.singleton and keys & detail_keys)
 
 

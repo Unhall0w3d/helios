@@ -77,11 +77,12 @@ Current capabilities:
 - AXL collector for `getCCMVersion`, `listProcessNode`, opt-in summary `listPhone`, and `listDevicePool` inventory enrichment
 - Bounded `executeSQLQuery` collection of configured-model Device Defaults and firmware facts
 - Inventory-only summaries by model and device pool
-- Diagnostic dial-plan relationships for route-pattern destinations, route-list/route-group membership, and CSS partitions
+- Diagnostic dial-plan relationships for route-pattern destinations, line-group
+  directory numbers, route-list/route-group membership, and CSS partitions
 - Diagnostic CUCM hunt, server-bounded configured call-forward-all, SIP trunk
   destinations/profile security, LDAP, phone-security, and media-resource
   configuration with bounded relationship reads
-- Diagnostic CUC telephony integration, routing, schedule, mailbox-policy,
+- Diagnostic CUC telephony integration, routing, schedule, mailbox-policy/rules,
   Unified Messaging, and SMTP-security configuration through bounded CUPI GETs
 - Per-node UC Certificate Management REST snapshots using OS read credentials
 - PEM/X.509 identity and trust parsing with SHA-256 deduplication, validity, key,
@@ -372,6 +373,9 @@ adds raw request/response evidence for:
   to be present in the successful response.
 - One `first 500` read-only SQL relationship query for route-pattern destinations
   and ordered route-group membership, keyed back to the AXL list UUID
+- `first 500` read-only SQL relationship queries for line-group directory-number
+  membership and SIP trunk destination addresses when CUCM returns only UUIDs or
+  ports through standard AXL relationship reads
 - One `first 500` read-only SQL query for lines with a configured call-forward-all
   destination; this replaces the CUCM-unbounded wildcard `listLine` request
 - UUID-preserving configuration normalization, including route-filter and dial-plan
@@ -472,10 +476,14 @@ not normalize mailbox identities. Diagnostic capture adds one-row count probes
 for contacts, distribution lists, call handlers, classes of service, and system
 configuration values. It also performs bounded, read-only CUPI GETs for phone
 systems, port groups/ports, SIP security profiles, routing rules, schedules,
-mailbox stores, message-aging policy, and SMTP configuration. Only an explicit
+mailbox stores, message-aging policies and their linked rule resources, and SMTP
+configuration. Child rule GETs are same-server, policy-discovered, and bounded.
+Only an explicit
 allowlist of non-secret configuration fields is normalized; credentials, mailbox
 identities, addresses, and message content are excluded. Unsupported
-version-specific resources are reported as collection warnings. Mailbox-store
+version-specific resources are reported as collection warnings. Inventory tables
+show normalized-record coverage and explicitly label resources whose totals exceed
+the bounded capture. Mailbox-store
 collection uses Cisco's documented `/vmrest/mailboxstores` path and retries the
 legacy `/vmrest/voicemailboxstores` alias only after a 404. Repeated schedule
 names are aggregated in the report detail table while raw records remain intact.

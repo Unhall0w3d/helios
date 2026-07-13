@@ -7,7 +7,9 @@ from defusedxml import ElementTree as ET
 
 from cisco_collab_health.collectors.axl.bodies import (
     DEVICE_DEFAULTS_SQL,
+    LINE_GROUP_MEMBERS_SQL,
     ROUTE_PATTERN_RELATIONSHIPS_SQL,
+    SIP_TRUNK_DESTINATIONS_SQL,
     diagnostic_get_body,
     diagnostic_list_body,
     execute_sql_query_body,
@@ -23,12 +25,15 @@ from cisco_collab_health.collectors.axl.parsers import (
     find_first_text,
     parse_configuration_objects,
     parse_configuration_object_details,
+    parse_configuration_object_member_count,
     parse_device_load_defaults,
     parse_device_pools,
     parse_phone_inventory,
     parse_process_nodes,
     parse_line_forwarding,
+    parse_line_group_members,
     parse_route_pattern_relationships,
+    parse_sip_trunk_destinations,
 )
 from cisco_collab_health.collectors.axl.version import (
     AxlVersionPolicy,
@@ -64,19 +69,28 @@ DIAGNOSTIC_AXL_OPERATIONS = (
         "listSipTrunk",
         "name",
         (
-            "name", "description", "devicePoolName", "locationName", "sipProfileName",
+            "name",
+            "description",
+            "devicePoolName",
+            "locationName",
+            "sipProfileName",
             "securityProfileName",
         ),
     ),
     ("listSipProfile", "name", ("name", "description")),
     (
-        "listSipTrunkSecurityProfile", "name",
+        "listSipTrunkSecurityProfile",
+        "name",
         ("name", "description", "deviceSecurityMode", "incomingTransport", "outgoingTransport"),
     ),
     (
-        "listRoutePattern", "pattern",
+        "listRoutePattern",
+        "pattern",
         (
-            "pattern", "routePartitionName", "routeFilterName", "dialPlanName",
+            "pattern",
+            "routePartitionName",
+            "routeFilterName",
+            "dialPlanName",
             "gatewayOrRouteListName",
         ),
     ),
@@ -86,23 +100,28 @@ DIAGNOSTIC_AXL_OPERATIONS = (
     ("listRouteList", "name", ("name", "description", "members/member/routeGroupName")),
     ("listTransPattern", "pattern", ("pattern", "routePartitionName")),
     (
-        "listHuntPilot", "pattern",
+        "listHuntPilot",
+        "pattern",
         ("pattern", "routePartitionName", "huntListName", "alertingName"),
     ),
     (
-        "listHuntList", "name",
+        "listHuntList",
+        "name",
         ("name", "description", "callManagerGroupName"),
     ),
     (
-        "listLineGroup", "name",
+        "listLineGroup",
+        "name",
         ("name", "distributionAlgorithm"),
     ),
     (
-        "listLdapDirectory", "name",
+        "listLdapDirectory",
+        "name",
         ("name", "ldapDn", "userSearchBase", "active", "repeatInterval", "nextSyncTime"),
     ),
     (
-        "listPhoneSecurityProfile", "name",
+        "listPhoneSecurityProfile",
+        "name",
         ("name", "description", "deviceSecurityMode", "authenticationMode", "keySize"),
     ),
     ("listMediaResourceGroup", "name", ("name", "multicast")),
@@ -118,7 +137,11 @@ DIAGNOSTIC_AXL_GET_RELATIONSHIPS = {
     "RouteList": ("getRouteList", ("members/member/routeGroupName",)),
     "SipTrunk": (
         "getSipTrunk",
-        ("securityProfileName", "destinations/destination/address", "destinations/destination/port"),
+        (
+            "securityProfileName",
+            "destinations/destination/address",
+            "destinations/destination/port",
+        ),
     ),
     "HuntList": ("getHuntList", ("members/member/lineGroupName",)),
     "LineGroup": (
@@ -127,7 +150,8 @@ DIAGNOSTIC_AXL_GET_RELATIONSHIPS = {
     ),
     "MediaResourceGroup": ("getMediaResourceGroup", ("members/member/deviceName",)),
     "MediaResourceList": (
-        "getMediaResourceList", ("members/member/mediaResourceGroupName",),
+        "getMediaResourceList",
+        ("members/member/mediaResourceGroupName",),
     ),
 }
 
@@ -224,7 +248,19 @@ class AxlCollector:
             self._collect_line_forwarding_sql(context, facts, warnings, evidence, notes)
             self._enrich_diagnostic_relationships(context, facts, warnings, evidence, notes)
             self._enrich_route_pattern_relationships_sql(
-                context, facts, warnings, evidence, notes,
+                context,
+                facts,
+                warnings,
+                evidence,
+                notes,
+            )
+            self._enrich_line_group_members_sql(context, facts, warnings, evidence, notes)
+            self._enrich_sip_trunk_destinations_sql(
+                context,
+                facts,
+                warnings,
+                evidence,
+                notes,
             )
 
         if facts.cluster is not None and facts.nodes:
@@ -381,9 +417,7 @@ class AxlCollector:
             return
         evidence.append(_evidence_from_soap_response(defaults_response, context.publisher_ip))
         try:
-            facts.device_load_defaults.extend(
-                parse_device_load_defaults(defaults_response.body)
-            )
+            facts.device_load_defaults.extend(parse_device_load_defaults(defaults_response.body))
         except AxlCollectionError as exc:
             warnings.append(f"AXL device-default SQL query failed: {exc}")
 
@@ -448,8 +482,12 @@ class AxlCollector:
         return self._call_axl_response(context, operation, body).body
 
     def _enrich_diagnostic_relationships(
-        self, context: CollectionContext, facts: AssessmentFacts, warnings: list[str],
-        evidence: list[EvidenceRef], notes: list[str],
+        self,
+        context: CollectionContext,
+        facts: AssessmentFacts,
+        warnings: list[str],
+        evidence: list[EvidenceRef],
+        notes: list[str],
     ) -> None:
         """Fill nested relationship fields CUCM may omit from list responses."""
 
@@ -467,27 +505,44 @@ class AxlCollector:
             attempted += 1
             try:
                 response = self._call_axl_response(
-                    context, operation,
+                    context,
+                    operation,
                     diagnostic_get_body(operation, key_fields=key_fields, returned_tags=tags),
                     artifact_operation=f"diagnostic_{operation}_{attempted:06d}",
                 )
                 evidence.append(_evidence_from_soap_response(response, context.publisher_ip))
                 details = parse_configuration_object_details(response.body, operation, tags)
                 if details is None:
-                    enriched.append(replace(
-                        fact,
-                        details={**fact.details, "relationship_collection": "unavailable"},
-                    ))
+                    enriched.append(
+                        replace(
+                            fact,
+                            details={**fact.details, "relationship_collection": "unavailable"},
+                        )
+                    )
                     failures.append(f"{operation} returned no {fact.object_type} object")
                     continue
-                enriched.append(replace(
-                    fact,
-                    details={
-                        **fact.details,
-                        **details,
-                        "relationship_collection": "collected",
-                    },
-                ))
+                member_count = parse_configuration_object_member_count(
+                    response.body,
+                    operation,
+                )
+                relationship_status = "collected"
+                if fact.object_type == "LineGroup" and member_count and not details:
+                    relationship_status = "collected_members_unresolved"
+                enriched.append(
+                    replace(
+                        fact,
+                        details={
+                            **fact.details,
+                            **details,
+                            **(
+                                {"relationship_member_count": str(member_count)}
+                                if member_count is not None
+                                else {}
+                            ),
+                            "relationship_collection": relationship_status,
+                        },
+                    )
+                )
                 succeeded += 1
             except AxlCollectionError as exc:
                 enriched.append(fact)
@@ -504,14 +559,20 @@ class AxlCollector:
         )
 
     def _collect_line_forwarding_sql(
-        self, context: CollectionContext, facts: AssessmentFacts, warnings: list[str],
-        evidence: list[EvidenceRef], notes: list[str],
+        self,
+        context: CollectionContext,
+        facts: AssessmentFacts,
+        warnings: list[str],
+        evidence: list[EvidenceRef],
+        notes: list[str],
     ) -> None:
         """Collect configured CFA destinations without an unbounded listLine request."""
 
         try:
             response = self._call_axl_response(
-                context, "executeSQLQuery", execute_sql_query_body(LINE_FORWARDING_SQL),
+                context,
+                "executeSQLQuery",
+                execute_sql_query_body(LINE_FORWARDING_SQL),
                 artifact_operation="diagnostic_lineForwarding_executeSQLQuery",
             )
             evidence.append(_evidence_from_soap_response(response, context.publisher_ip))
@@ -526,20 +587,26 @@ class AxlCollector:
         )
 
     def _enrich_route_pattern_relationships_sql(
-        self, context: CollectionContext, facts: AssessmentFacts, warnings: list[str],
-        evidence: list[EvidenceRef], notes: list[str],
+        self,
+        context: CollectionContext,
+        facts: AssessmentFacts,
+        warnings: list[str],
+        evidence: list[EvidenceRef],
+        notes: list[str],
     ) -> None:
         """Recover route-pattern destinations omitted by standard AXL responses."""
 
         route_patterns = [
-            item for item in facts.configuration_objects
+            item
+            for item in facts.configuration_objects
             if item.object_type == "RoutePattern" and item.uuid
         ]
         if not route_patterns or all(item.details.get("destination") for item in route_patterns):
             return
         try:
             response = self._call_axl_response(
-                context, "executeSQLQuery",
+                context,
+                "executeSQLQuery",
                 execute_sql_query_body(ROUTE_PATTERN_RELATIONSHIPS_SQL),
                 artifact_operation="diagnostic_routePatternRelationships_executeSQLQuery",
             )
@@ -565,6 +632,113 @@ class AxlCollector:
         notes.append(
             f"Diagnostic route-pattern SQL enrichment matched {matched} of "
             f"{len(route_patterns)} route pattern(s), bounded to 500 relationship rows."
+        )
+
+    def _enrich_line_group_members_sql(
+        self,
+        context: CollectionContext,
+        facts: AssessmentFacts,
+        warnings: list[str],
+        evidence: list[EvidenceRef],
+        notes: list[str],
+    ) -> None:
+        """Recover line-group directory numbers when getLineGroup returns UUIDs only."""
+
+        line_groups = [
+            item
+            for item in facts.configuration_objects
+            if item.object_type == "LineGroup" and item.uuid
+        ]
+        if not line_groups:
+            return
+        try:
+            response = self._call_axl_response(
+                context,
+                "executeSQLQuery",
+                execute_sql_query_body(LINE_GROUP_MEMBERS_SQL),
+                artifact_operation="diagnostic_lineGroupMembers_executeSQLQuery",
+            )
+            evidence.append(_evidence_from_soap_response(response, context.publisher_ip))
+            relationships = parse_line_group_members(response.body)
+        except AxlCollectionError as exc:
+            warnings.append(f"Diagnostic line-group member SQL failed: {exc}")
+            return
+        matched = 0
+        enriched = []
+        for fact in facts.configuration_objects:
+            uuid = (fact.uuid or "").strip().strip("{}").lower()
+            members = relationships.get(uuid)
+            if fact.object_type != "LineGroup" or members is None:
+                enriched.append(fact)
+                continue
+            enriched.append(
+                replace(
+                    fact,
+                    details={
+                        **fact.details,
+                        "directory_numbers": ", ".join(members),
+                        "relationship_member_count": str(len(members)),
+                        "relationship_collection": "collected",
+                    },
+                )
+            )
+            matched += 1
+        facts.configuration_objects = enriched
+        notes.append(
+            f"Diagnostic line-group SQL enrichment matched {matched} of {len(line_groups)} "
+            "line group(s), bounded to 500 membership rows."
+        )
+
+    def _enrich_sip_trunk_destinations_sql(
+        self,
+        context: CollectionContext,
+        facts: AssessmentFacts,
+        warnings: list[str],
+        evidence: list[EvidenceRef],
+        notes: list[str],
+    ) -> None:
+        """Recover SIP destinations omitted by standard AXL get responses."""
+
+        trunks = [
+            item
+            for item in facts.configuration_objects
+            if item.object_type == "SipTrunk" and item.uuid and not item.details.get("destinations")
+        ]
+        if not trunks:
+            return
+        try:
+            response = self._call_axl_response(
+                context,
+                "executeSQLQuery",
+                execute_sql_query_body(SIP_TRUNK_DESTINATIONS_SQL),
+                artifact_operation="diagnostic_sipTrunkDestinations_executeSQLQuery",
+            )
+            evidence.append(_evidence_from_soap_response(response, context.publisher_ip))
+            relationships = parse_sip_trunk_destinations(response.body)
+        except AxlCollectionError as exc:
+            warnings.append(f"Diagnostic SIP trunk destination SQL failed: {exc}")
+            return
+        matched = 0
+        enriched = []
+        for fact in facts.configuration_objects:
+            uuid = (fact.uuid or "").strip().strip("{}").lower()
+            destinations = relationships.get(uuid)
+            if fact.object_type != "SipTrunk" or destinations is None:
+                enriched.append(fact)
+                continue
+            details = {
+                **fact.details,
+                "destinations": ", ".join(item.address for item in destinations),
+            }
+            ports = tuple(item.port for item in destinations if item.port)
+            if ports:
+                details["destination_ports"] = ", ".join(ports)
+            enriched.append(replace(fact, details=details))
+            matched += 1
+        facts.configuration_objects = enriched
+        notes.append(
+            f"Diagnostic SIP trunk SQL enrichment matched {matched} of {len(trunks)} "
+            "trunk(s), bounded to 500 destination rows."
         )
 
     def _call_axl_response(

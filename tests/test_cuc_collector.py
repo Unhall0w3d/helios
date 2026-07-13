@@ -51,12 +51,41 @@ class MailboxStoreFallbackHttpClient:
             raise CapturedHttpError("HTTP 404: Not Found", status=404)
         if "/vmrest/voicemailboxstores" in endpoint:
             return CapturedHttpResponse(
-                200, "OK",
+                200,
+                "OK",
                 '{"@total":"1","MailboxStore":{"DisplayName":"Unity Messaging Database",'
                 '"Server":"cuc-pub","Mounted":true,"MaxSizeMB":15000}}',
                 Path("response.txt"),
             )
         return CapturedHttpResponse(200, "OK", '<Items total="0" />', Path("response.txt"))
+
+
+class LiveShapeHttpClient:
+    def get(self, endpoint, context, **kwargs):
+        del context, kwargs
+        if "/messageagingpolicies/" in endpoint and "/messageagingrules" in endpoint:
+            body = """<MessageAgingRules total="1"><MessageAgingRule>
+            <RuleDescription>Delete expired messages</RuleDescription><Days>30</Days>
+            <Enabled>true</Enabled><Action>Delete</Action><AgingRuleType>Deleted</AgingRuleType>
+            </MessageAgingRule></MessageAgingRules>"""
+        elif "/messageagingpolicies?" in endpoint:
+            body = """<MessageAgingPolicies total="1"><MessageAgingPolicy>
+            <DisplayName>Default Policy</DisplayName><ObjectId>POLICY-1</ObjectId>
+            <Enabled>true</Enabled><MessageAgingRuleURI>/vmrest/messageagingpolicies/POLICY-1/messageagingrules</MessageAgingRuleURI>
+            </MessageAgingPolicy></MessageAgingPolicies>"""
+        elif "/ports?" in endpoint:
+            body = """<Ports total="1"><Port><DisplayName>Port 1</DisplayName>
+            <CapEnabled>true</CapEnabled><CapAnswer>true</CapAnswer><CapMWI>true</CapMWI>
+            <MediaPortGroupDisplayName>PG-1</MediaPortGroupDisplayName>
+            <VmsServerName>cuc-pub</VmsServerName></Port></Ports>"""
+        elif "/routingrules?" in endpoint:
+            body = """<RoutingRules total="1"><RoutingRule><DisplayName>Forwarded Calls</DisplayName>
+            <State>0</State><RuleIndex>1</RuleIndex><Type>Forwarded</Type>
+            <RouteAction>Route</RouteAction><RouteTargetHandlerDisplayName>Operator</RouteTargetHandlerDisplayName>
+            </RoutingRule></RoutingRules>"""
+        else:
+            body = '<Items total="0" />'
+        return CapturedHttpResponse(200, "OK", body, Path("response.txt"))
 
 
 class CucCollectorTests(unittest.TestCase):
@@ -95,7 +124,8 @@ class CucCollectorTests(unittest.TestCase):
 
     def test_configuration_parser_retains_only_allowlisted_smtp_fields(self) -> None:
         probe = next(
-            item for item in DIAGNOSTIC_CONFIGURATION_PROBES
+            item
+            for item in DIAGNOSTIC_CONFIGURATION_PROBES
             if item.object_type == "CucSmtpConfiguration"
         )
         payload = """{"SmtpServerConfig":{"domainName":"example.invalid","port":25,
@@ -120,7 +150,8 @@ class CucCollectorTests(unittest.TestCase):
         self.assertTrue(any("/vmrest/mailboxstores?" in value for value in client.endpoints))
         self.assertTrue(any("/vmrest/voicemailboxstores?" in value for value in client.endpoints))
         mailbox = next(
-            item for item in result.facts.configuration_objects
+            item
+            for item in result.facts.configuration_objects
             if item.object_type == "CucMailboxStore"
         )
         self.assertEqual(mailbox.name, "Unity Messaging Database")
@@ -164,17 +195,56 @@ class CucCollectorTests(unittest.TestCase):
 
     def test_repeated_cuc_schedules_are_aggregated_in_report_details(self) -> None:
         schedule = ConfigurationObjectFact(
-            object_type="CucSchedule", name="All Hours", details={},
+            object_type="CucSchedule",
+            name="All Hours",
+            details={},
             source="CUC.CUPI/vmrest/schedules",
         )
         report = AssessmentReport(
-            AssessmentFacts(configuration_objects=[schedule, schedule, schedule]), [], [],
+            AssessmentFacts(configuration_objects=[schedule, schedule, schedule]),
+            [],
+            [],
         )
 
         html = HtmlReportBuilder().build(report)
         section = html.split("Unity Connection Configuration", 1)[1].split(
-            "Collection Coverage", 1,
+            "Collection Coverage",
+            1,
         )[0]
 
         self.assertEqual(section.count(">All Hours<"), 1)
         self.assertIn("<td>3</td>", section)
+
+    def test_live_cupi_aliases_and_message_aging_rules_are_reported(self) -> None:
+        result = CucCollector(http_client=LiveShapeHttpClient(), diagnostic_capture=True).collect(
+            CollectionContext(product="cuc", publisher_ip="192.0.2.20")
+        )
+
+        port = next(
+            item for item in result.facts.configuration_objects if item.object_type == "CucPort"
+        )
+        routing = next(
+            item
+            for item in result.facts.configuration_objects
+            if item.object_type == "CucRoutingRule"
+        )
+        aging = next(
+            item
+            for item in result.facts.configuration_objects
+            if item.object_type == "CucMessageAgingRule"
+        )
+        self.assertEqual(port.details["port_group"], "PG-1")
+        self.assertEqual(port.details["answer_calls"], "true")
+        self.assertEqual(routing.details["state"], "0")
+        self.assertNotIn("enabled", routing.details)
+        self.assertEqual(aging.details["policy"], "Default Policy")
+        self.assertEqual(aging.details["days"], "30")
+
+    def test_inventory_report_marks_bounded_partial_configuration(self) -> None:
+        result = CucCollector(http_client=LiveShapeHttpClient(), diagnostic_capture=True).collect(
+            CollectionContext(product="cuc", publisher_ip="192.0.2.20")
+        )
+        html = HtmlReportBuilder().build(AssessmentReport(result.facts, [result], []))
+
+        self.assertIn("Coverage", html)
+        self.assertIn("1 of 1 (complete)", html)

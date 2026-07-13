@@ -7,6 +7,7 @@ from xml.sax.saxutils import escape
 
 TagTree: TypeAlias = dict[str, "TagTree"]
 
+
 def get_ccm_version_body() -> str:
     return "<axl:getCCMVersion />"
 
@@ -66,6 +67,27 @@ where n.tkpatternusage=5
 order by n.pkid, rl.selectionorder"""
 
 
+LINE_GROUP_MEMBERS_SQL = """select first 500
+lg.pkid as linegroupuuid, lg.name as linegroup,
+n.dnorpattern as directorynumber, rp.name as partition,
+lgmap.selectionorder as selectionorder
+from linegroup as lg
+inner join linegroupnumplanmap as lgmap on lgmap.fklinegroup=lg.pkid
+inner join numplan as n on lgmap.fknumplan=n.pkid
+left join routepartition as rp on rp.pkid=n.fkroutepartition
+order by lg.pkid, lgmap.selectionorder"""
+
+
+SIP_TRUNK_DESTINATIONS_SQL = """select first 500
+d.pkid as trunkuuid, d.name as trunkname,
+std.address as destination, std.port as destinationport
+from device as d
+inner join sipdevice as sd on sd.fkdevice=d.pkid
+inner join siptrunkdestination as std on std.fksipdevice=sd.pkid
+where d.tkmodel=131 and d.tkdeviceprotocol=11
+order by d.pkid"""
+
+
 def execute_sql_query_body(sql: str) -> str:
     """Build an AXL executeSQLQuery request with XML-safe SQL text."""
 
@@ -108,13 +130,14 @@ def diagnostic_list_body(
 
 
 def diagnostic_get_body(
-    operation: str, *, key_fields: dict[str, str], returned_tags: tuple[str, ...],
+    operation: str,
+    *,
+    key_fields: dict[str, str],
+    returned_tags: tuple[str, ...],
 ) -> str:
     """Build a read-only AXL get request for a previously listed object."""
 
-    keys = "\n".join(
-        f"      <{tag}>{escape(value)}</{tag}>" for tag, value in key_fields.items()
-    )
+    keys = "\n".join(f"      <{tag}>{escape(value)}</{tag}>" for tag, value in key_fields.items())
     tags = _returned_tags_xml(returned_tags)
     return f"""<axl:{operation}>
 {keys}

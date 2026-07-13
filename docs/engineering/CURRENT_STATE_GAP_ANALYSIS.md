@@ -27,7 +27,7 @@ its replacement files were applied.
 | Documentation and governance | Resolved for current scope | Security/data handling, transport trust, collector safety, report templates, branding, and modularization guidance are linked from README. | 4 |
 | Module decomposition | Outstanding, intentionally deferred | `reports/html.py`, `config.py`, `application.py`, and `rules/basic.py` remain responsibility-dense. No safe broad move is required for hardening. | 5 plan only |
 | UCOS command catalog | Resolved for CUC | `collectors.cuc_platform.CUC_COMMAND_CATALOG` provides stable IDs, command text, per-command timeouts, diagnostic-only scope, and sensitivity metadata. | 5 |
-| CUC/CUCM configuration depth | Implemented; continued live validation required | Bounded CUPI configuration GETs and extended AXL hunt, configured CFA, SIP-destination, integration-security, LDAP, and media-resource discovery feed dedicated report tables. The live CUCM 15/CUC 15 review corrected nested returned tags, removed unbounded `listLine`, and corrected the mailbox-store endpoint. CUC Informix SQL remains deferred pending version fixtures and load validation. | validation |
+| CUC/CUCM configuration depth | Implemented; continued cross-version validation required | Bounded CUPI configuration GETs and extended AXL hunt, configured CFA, SIP-destination, line-group membership, integration-security, LDAP, and media-resource discovery feed dedicated report tables. The 2026-07-13 CUCM 15/CUC 15 review validated live field aliases, added bounded message-aging child rules, exposed partial CUPI coverage, recognized UUID-only line-group members, and added fixed SQL recovery for line-group DNs and SIP targets. CUC Informix SQL remains deferred pending version fixtures and load validation. | validation |
 | Product/package naming | No longer an immediate hardening defect | Public product and default command are AletheiaUC; distribution/import aliases remain compatibility debt. Do not rename package in this initiative. | 4 documentation |
 
 ## Dependency ordering and risks
@@ -44,6 +44,7 @@ its replacement files were applied.
   expired certificate, and explicit insecure override.
 - CUC UCOS known-host success, unknown-host rejection, verified first-use enrollment, and changed-key rejection.
 - Extended UCOS command completion and partial-output behavior on real CUC versions.
-- CUPI field-name and endpoint variants across supported CUC versions, including SMTP availability before 14SU2.
+- CUPI field-name and endpoint variants across supported CUC versions, including
+  message-aging child rules and SMTP availability before 14SU2.
 - Extended AXL object/returned-tag compatibility and relationship shapes across CUCM 11.5 through 15.
 - File permission behavior on Windows and operational review-ZIP sharing workflow.

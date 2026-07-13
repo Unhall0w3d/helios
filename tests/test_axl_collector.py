@@ -16,11 +16,19 @@ from cisco_collab_health.collectors.axl.collector import (
     DIAGNOSTIC_AXL_OPERATIONS,
     LINE_FORWARDING_SQL,
 )
-from cisco_collab_health.collectors.axl.bodies import diagnostic_get_body, diagnostic_list_body
+from cisco_collab_health.collectors.axl.bodies import (
+    LINE_GROUP_MEMBERS_SQL,
+    SIP_TRUNK_DESTINATIONS_SQL,
+    diagnostic_get_body,
+    diagnostic_list_body,
+)
 from cisco_collab_health.collectors.axl.parsers import (
+    parse_configuration_object_member_count,
     parse_configuration_object_details,
+    parse_line_group_members,
     parse_line_forwarding,
     parse_route_pattern_relationships,
+    parse_sip_trunk_destinations,
 )
 from cisco_collab_health.collectors.axl_errors import AxlCollectionError, AxlVersionError
 from cisco_collab_health.collectors.axl_bodies import (
@@ -242,21 +250,38 @@ def soap_response(body: str, operation: str = "operation") -> SoapResponse:
 
 
 class AxlCollectorTests(unittest.TestCase):
-    def test_diagnostic_catalog_covers_hunt_security_directory_and_media_relationships(self) -> None:
+    def test_diagnostic_catalog_covers_hunt_security_directory_and_media_relationships(
+        self,
+    ) -> None:
         operations = {operation for operation, _, _ in DIAGNOSTIC_AXL_OPERATIONS}
 
-        self.assertTrue({
-            "listHuntPilot", "listHuntList", "listLineGroup",
-            "listSipTrunkSecurityProfile", "listLdapDirectory",
-            "listPhoneSecurityProfile", "listMediaResourceList",
-        }.issubset(operations))
-        self.assertTrue({
-            "HuntList", "LineGroup", "SipTrunk", "MediaResourceGroup",
-            "MediaResourceList",
-        }.issubset(DIAGNOSTIC_AXL_GET_RELATIONSHIPS))
+        self.assertTrue(
+            {
+                "listHuntPilot",
+                "listHuntList",
+                "listLineGroup",
+                "listSipTrunkSecurityProfile",
+                "listLdapDirectory",
+                "listPhoneSecurityProfile",
+                "listMediaResourceList",
+            }.issubset(operations)
+        )
+        self.assertTrue(
+            {
+                "HuntList",
+                "LineGroup",
+                "SipTrunk",
+                "MediaResourceGroup",
+                "MediaResourceList",
+            }.issubset(DIAGNOSTIC_AXL_GET_RELATIONSHIPS)
+        )
         self.assertNotIn("listLine", operations)
         self.assertIn("select first 500", LINE_FORWARDING_SQL.lower())
         self.assertIn("inner join callforwarddynamic", LINE_FORWARDING_SQL.lower())
+        self.assertIn("select first 500", LINE_GROUP_MEMBERS_SQL.lower())
+        self.assertIn("linegroupnumplanmap", LINE_GROUP_MEMBERS_SQL.lower())
+        self.assertIn("select first 500", SIP_TRUNK_DESTINATIONS_SQL.lower())
+        self.assertIn("siptrunkdestination", SIP_TRUNK_DESTINATIONS_SQL.lower())
 
     def test_device_defaults_sql_is_bounded_to_configured_models_and_xml_safe(self) -> None:
         body = execute_sql_query_body(DEVICE_DEFAULTS_SQL)
@@ -300,16 +325,19 @@ class AxlCollectorTests(unittest.TestCase):
 
     def test_diagnostic_axl_body_builds_nested_returned_tags(self) -> None:
         body = diagnostic_list_body(
-            "listCss", criteria_tag="name",
+            "listCss",
+            criteria_tag="name",
             returned_tags=("name", "members/member/routePartitionName"),
-            first=100, skip=0,
+            first=100,
+            skip=0,
         )
 
         self.assertIn("<members><member><routePartitionName /></member></members>", body)
 
     def test_returned_tags_merge_shared_nested_containers(self) -> None:
         body = diagnostic_get_body(
-            "getSipTrunk", key_fields={"name": "PSTN"},
+            "getSipTrunk",
+            key_fields={"name": "PSTN"},
             returned_tags=(
                 "destinations/destination/address",
                 "destinations/destination/port",
@@ -322,7 +350,8 @@ class AxlCollectorTests(unittest.TestCase):
 
     def test_diagnostic_get_body_and_parser_preserve_relationships(self) -> None:
         body = diagnostic_get_body(
-            "getRouteList", key_fields={"name": "PSTN & Backup"},
+            "getRouteList",
+            key_fields={"name": "PSTN & Backup"},
             returned_tags=("members/member/routeGroupName",),
         )
         response = """<Envelope><return><routeList><members>
@@ -331,7 +360,9 @@ class AxlCollectorTests(unittest.TestCase):
         </members></routeList></return></Envelope>"""
 
         details = parse_configuration_object_details(
-            response, "getRouteList", ("members/member/routeGroupName",),
+            response,
+            "getRouteList",
+            ("members/member/routeGroupName",),
         )
 
         self.assertIn("<name>PSTN &amp; Backup</name>", body)
@@ -342,15 +373,43 @@ class AxlCollectorTests(unittest.TestCase):
     def test_relationship_parser_distinguishes_missing_object_from_empty_membership(self) -> None:
         missing = parse_configuration_object_details(
             "<Envelope><return>{ABC}</return></Envelope>",
-            "getLineGroup", ("members/member/directoryNumber",),
+            "getLineGroup",
+            ("members/member/directoryNumber",),
         )
         empty = parse_configuration_object_details(
             "<Envelope><return><lineGroup><members /></lineGroup></return></Envelope>",
-            "getLineGroup", ("members/member/directoryNumber",),
+            "getLineGroup",
+            ("members/member/directoryNumber",),
         )
 
         self.assertIsNone(missing)
         self.assertEqual(empty, {})
+
+    def test_uuid_only_line_group_members_are_not_treated_as_empty(self) -> None:
+        response = """<Envelope><return><lineGroup><members>
+        <member><directoryNumber uuid="{ABC}" /></member>
+        <member><directoryNumber uuid="{DEF}" /></member>
+        </members></lineGroup></return></Envelope>"""
+
+        self.assertEqual(
+            parse_configuration_object_member_count(response, "getLineGroup"),
+            2,
+        )
+
+    def test_sql_relationship_parsers_recover_line_group_and_sip_targets(self) -> None:
+        line_groups = parse_line_group_members("""<Envelope><return>
+        <row><linegroupuuid>{ABC}</linegroupuuid><directorynumber>1002</directorynumber>
+        <partition>Internal</partition><selectionorder>2</selectionorder></row>
+        <row><linegroupuuid>{ABC}</linegroupuuid><directorynumber>1001</directorynumber>
+        <partition>Internal</partition><selectionorder>1</selectionorder></row>
+        </return></Envelope>""")
+        trunks = parse_sip_trunk_destinations("""<Envelope><return><row>
+        <trunkuuid>{DEF}</trunkuuid><destination>cube.example.invalid</destination>
+        <destinationport>5061</destinationport></row></return></Envelope>""")
+
+        self.assertEqual(line_groups["abc"], ("1001 (Internal)", "1002 (Internal)"))
+        self.assertEqual(trunks["def"][0].address, "cube.example.invalid")
+        self.assertEqual(trunks["def"][0].port, "5061")
 
     def test_line_forwarding_sql_parser_normalizes_configured_cfa(self) -> None:
         response = """<Envelope><return><row><lineuuid>ABC</lineuuid>
@@ -374,9 +433,7 @@ class AxlCollectorTests(unittest.TestCase):
         relationships = parse_route_pattern_relationships(response)
 
         self.assertEqual(relationships["abc"].destination, "PSTN-RL")
-        self.assertEqual(
-            relationships["abc"].route_groups, ("PRIMARY-RG", "BACKUP-RG")
-        )
+        self.assertEqual(relationships["abc"].route_groups, ("PRIMARY-RG", "BACKUP-RG"))
 
     def test_axl_version_policy_prefers_discovered_supported_version(self) -> None:
         policy = AxlVersionPolicy()
@@ -470,7 +527,9 @@ class AxlCollectorTests(unittest.TestCase):
         )
         self.assertEqual(result.facts.devices[1].location, "Remote-Loc")
         self.assertEqual(len(result.facts.device_load_defaults), 3)
-        self.assertEqual(result.facts.device_load_defaults[0].source, "AXL.executeSQLQuery.deviceDefaults")
+        self.assertEqual(
+            result.facts.device_load_defaults[0].source, "AXL.executeSQLQuery.deviceDefaults"
+        )
         self.assertEqual(result.facts.device_load_defaults[0].configured_model_count, 12)
         self.assertEqual(result.facts.device_load_defaults[0].model_code, "616")
         self.assertEqual(result.facts.device_load_defaults[2].protocol, "Media Resource")
@@ -544,9 +603,7 @@ class AxlCollectorTests(unittest.TestCase):
             ["SEP001122334455", "CSFALICE"],
         )
         phone_calls = [
-            call_args
-            for call_args in call.call_args_list
-            if call_args.args[1] == "listPhone"
+            call_args for call_args in call.call_args_list if call_args.args[1] == "listPhone"
         ]
         self.assertEqual(len(phone_calls), 2)
         self.assertTrue(any("first unique result set as complete" in note for note in result.notes))
@@ -580,9 +637,7 @@ class AxlCollectorTests(unittest.TestCase):
             ["SEP001122334455", "CSFALICE"],
         )
         phone_calls = [
-            call_args
-            for call_args in call.call_args_list
-            if call_args.args[1] == "listPhone"
+            call_args for call_args in call.call_args_list if call_args.args[1] == "listPhone"
         ]
         self.assertEqual(len(phone_calls), 1)
         self.assertTrue(any("broad query returned more devices" in note for note in result.notes))
@@ -766,19 +821,13 @@ class AxlCollectorTests(unittest.TestCase):
             self.assertTrue(first_page.exists())
             self.assertTrue(second_page.exists())
             self.assertTrue(
-                str(result.evidence[2].artifact_path).endswith(
-                    "listPhone_page_000000/response.txt"
-                )
+                str(result.evidence[2].artifact_path).endswith("listPhone_page_000000/response.txt")
             )
             self.assertTrue(
-                str(result.evidence[3].artifact_path).endswith(
-                    "listPhone_page_000002/response.txt"
-                )
+                str(result.evidence[3].artifact_path).endswith("listPhone_page_000002/response.txt")
             )
             self.assertTrue(
-                str(result.evidence[4].artifact_path).endswith(
-                    "listDevicePool/response.txt"
-                )
+                str(result.evidence[4].artifact_path).endswith("listDevicePool/response.txt")
             )
             self.assertTrue(
                 str(result.evidence[5].artifact_path).endswith(
@@ -954,13 +1003,9 @@ class AxlCollectorTests(unittest.TestCase):
                 )
             http_error.close()
 
-            first = (
-                store.root
-                / "nodes/192.0.2.10/api/axl/listPhone_page_000000/response.txt"
-            )
+            first = store.root / "nodes/192.0.2.10/api/axl/listPhone_page_000000/response.txt"
             retry = (
-                store.root
-                / "nodes/192.0.2.10/api/axl/"
+                store.root / "nodes/192.0.2.10/api/axl/"
                 "listPhone_page_000000_retry_axl_15.0/response.txt"
             )
             self.assertTrue(first.exists())
@@ -972,9 +1017,7 @@ class AxlCollectorTests(unittest.TestCase):
             gui_username="apiuser",
             gui_password="secret",
         )
-        collector = AxlCollector(
-            version_policy=AxlVersionPolicy(supported=("15.0", "14.0"))
-        )
+        collector = AxlCollector(version_policy=AxlVersionPolicy(supported=("15.0", "14.0")))
 
         with patch.object(
             collector,

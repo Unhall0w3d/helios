@@ -40,16 +40,20 @@ from cisco_collab_health.rules.basic import (
 
 class ConfigurationSecurityRuleTests(unittest.TestCase):
     def test_cuc_smtp_rule_flags_untrusted_connection_without_auth_or_tls(self) -> None:
-        facts = AssessmentFacts(configuration_objects=[ConfigurationObjectFact(
-            object_type="CucSmtpConfiguration",
-            name="SMTP server configuration",
-            details={
-                "allow_untrusted": "true",
-                "require_auth_untrusted": "false",
-                "require_tls_untrusted": "false",
-            },
-            source="CUC.CUPI/vmrest/smtpserver/serverconfigs",
-        )])
+        facts = AssessmentFacts(
+            configuration_objects=[
+                ConfigurationObjectFact(
+                    object_type="CucSmtpConfiguration",
+                    name="SMTP server configuration",
+                    details={
+                        "allow_untrusted": "true",
+                        "require_auth_untrusted": "false",
+                        "require_tls_untrusted": "false",
+                    },
+                    source="CUC.CUPI/vmrest/smtpserver/serverconfigs",
+                )
+            ]
+        )
 
         findings = CucSmtpSecurityRule().evaluate(facts)
 
@@ -58,15 +62,22 @@ class ConfigurationSecurityRuleTests(unittest.TestCase):
         self.assertIn("authentication, TLS", findings[0].facts[0])
 
     def test_topology_rule_only_flags_successfully_collected_empty_membership(self) -> None:
-        facts = AssessmentFacts(configuration_objects=[
-            ConfigurationObjectFact(
-                object_type="HuntList", name="Empty-HL",
-                details={"relationship_collection": "collected"}, source="AXL.getHuntList",
-            ),
-            ConfigurationObjectFact(
-                object_type="LineGroup", name="Unknown-LG", details={}, source="AXL.listLineGroup",
-            ),
-        ])
+        facts = AssessmentFacts(
+            configuration_objects=[
+                ConfigurationObjectFact(
+                    object_type="HuntList",
+                    name="Empty-HL",
+                    details={"relationship_collection": "collected"},
+                    source="AXL.getHuntList",
+                ),
+                ConfigurationObjectFact(
+                    object_type="LineGroup",
+                    name="Unknown-LG",
+                    details={},
+                    source="AXL.listLineGroup",
+                ),
+            ]
+        )
 
         findings = CucmTopologyCompletenessRule().evaluate(facts)
 
@@ -122,19 +133,41 @@ class CucPlatformRulesTests(unittest.TestCase):
             )
         )
 
-        self.assertEqual([finding.severity for finding in findings], [FindingSeverity.CRITICAL, FindingSeverity.INFO])
+        self.assertEqual(
+            [finding.severity for finding in findings],
+            [FindingSeverity.CRITICAL, FindingSeverity.INFO],
+        )
         self.assertIn("Highest partition usage: 95%", findings[0].facts)
 
-    def test_cuc_service_policy_flags_missing_required_service_but_not_inactive_optional_service(self) -> None:
+    def test_cuc_service_policy_flags_missing_required_service_but_not_inactive_optional_service(
+        self,
+    ) -> None:
         findings = CucServicePolicyRule().evaluate(
             AssessmentFacts(
                 services=[
-                    ServiceStatusFact("cuc-pub", "A Cisco DB", True, "Started", None, "CUC.UCOS.CLI"),
-                    ServiceStatusFact("cuc-pub", "A Cisco DB Replicator", True, "Started", None, "CUC.UCOS.CLI"),
-                    ServiceStatusFact("cuc-pub", "Cisco Tomcat", True, "Started", None, "CUC.UCOS.CLI"),
-                    ServiceStatusFact("cuc-pub", "Connection Conversation Manager", True, "Stopped", None, "CUC.UCOS.CLI"),
-                    ServiceStatusFact("cuc-pub", "Connection Mixer", True, "Started", None, "CUC.UCOS.CLI"),
-                    ServiceStatusFact("cuc-pub", "Connection Mailbox Sync", False, "Stopped", None, "CUC.UCOS.CLI"),
+                    ServiceStatusFact(
+                        "cuc-pub", "A Cisco DB", True, "Started", None, "CUC.UCOS.CLI"
+                    ),
+                    ServiceStatusFact(
+                        "cuc-pub", "A Cisco DB Replicator", True, "Started", None, "CUC.UCOS.CLI"
+                    ),
+                    ServiceStatusFact(
+                        "cuc-pub", "Cisco Tomcat", True, "Started", None, "CUC.UCOS.CLI"
+                    ),
+                    ServiceStatusFact(
+                        "cuc-pub",
+                        "Connection Conversation Manager",
+                        True,
+                        "Stopped",
+                        None,
+                        "CUC.UCOS.CLI",
+                    ),
+                    ServiceStatusFact(
+                        "cuc-pub", "Connection Mixer", True, "Started", None, "CUC.UCOS.CLI"
+                    ),
+                    ServiceStatusFact(
+                        "cuc-pub", "Connection Mailbox Sync", False, "Stopped", None, "CUC.UCOS.CLI"
+                    ),
                 ]
             )
         )
@@ -149,27 +182,53 @@ class CucPlatformRulesTests(unittest.TestCase):
             AssessmentFacts(
                 platform_checks=[
                     PlatformCheckFact(
-                        "cucm-sub", "utils ntp status", "collected", {"synchronized": "false"}, "CUCM.UCOS.CLI"
+                        "cucm-sub",
+                        "utils ntp status",
+                        "collected",
+                        {"synchronized": "false"},
+                        "CUCM.UCOS.CLI",
                     ),
                     PlatformCheckFact(
-                        "cucm-pub", "utils dbreplication runtimestate", "collected", {"replication_bad_rows": "1"}, "CUCM.UCOS.CLI"
+                        "cucm-pub",
+                        "utils dbreplication runtimestate",
+                        "collected",
+                        {"replication_bad_rows": "1"},
+                        "CUCM.UCOS.CLI",
                     ),
                 ]
             )
         )
 
-        self.assertEqual([finding.severity for finding in findings], [FindingSeverity.CRITICAL, FindingSeverity.CRITICAL])
+        self.assertEqual(
+            [finding.severity for finding in findings],
+            [FindingSeverity.CRITICAL, FindingSeverity.CRITICAL],
+        )
 
 
 class CertificateValidityRuleTests(unittest.TestCase):
     def test_expired_certificate_is_reported_without_missing_store_warning(self) -> None:
         fact = CertificateFact(
-            node="pub", name="CallManager.pem", service="CallManager", store=None,
-            certificate_kind="identity", subject="CN=pub", issuer="CN=pub", serial_number="1",
-            valid_from=None, valid_until="2026-01-01T00:00:00Z", days_remaining=-1,
-            self_signed=True, key_type="RSA", key_size="2048", signature_algorithm="SHA256",
-            subject_key_identifier=None, authority_key_identifier=None, intermediate=None,
-            root="CN=pub", chain_status="self-signed", source="fixture",
+            node="pub",
+            name="CallManager.pem",
+            service="CallManager",
+            store=None,
+            certificate_kind="identity",
+            subject="CN=pub",
+            issuer="CN=pub",
+            serial_number="1",
+            valid_from=None,
+            valid_until="2026-01-01T00:00:00Z",
+            days_remaining=-1,
+            self_signed=True,
+            key_type="RSA",
+            key_size="2048",
+            signature_algorithm="SHA256",
+            subject_key_identifier=None,
+            authority_key_identifier=None,
+            intermediate=None,
+            root="CN=pub",
+            chain_status="self-signed",
+            source="fixture",
         )
 
         findings = CertificateValidityRule().evaluate(AssessmentFacts(certificates=[fact]))
@@ -180,12 +239,27 @@ class CertificateValidityRuleTests(unittest.TestCase):
 
     def test_expired_trust_certificate_is_not_reported_as_service_outage(self) -> None:
         fact = CertificateFact(
-            node="pub", name="old-peer.pem", service="tomcat-trust", store="tomcat-trust",
-            certificate_kind="trust", subject="CN=old-peer", issuer="CN=old-peer", serial_number="2",
-            valid_from=None, valid_until="2020-01-01T00:00:00Z", days_remaining=-1,
-            self_signed=True, key_type="RSA", key_size="2048", signature_algorithm="SHA256",
-            subject_key_identifier=None, authority_key_identifier=None, intermediate=None,
-            root="CN=old-peer", chain_status="self-signed", source="fixture",
+            node="pub",
+            name="old-peer.pem",
+            service="tomcat-trust",
+            store="tomcat-trust",
+            certificate_kind="trust",
+            subject="CN=old-peer",
+            issuer="CN=old-peer",
+            serial_number="2",
+            valid_from=None,
+            valid_until="2020-01-01T00:00:00Z",
+            days_remaining=-1,
+            self_signed=True,
+            key_type="RSA",
+            key_size="2048",
+            signature_algorithm="SHA256",
+            subject_key_identifier=None,
+            authority_key_identifier=None,
+            intermediate=None,
+            root="CN=old-peer",
+            chain_status="self-signed",
+            source="fixture",
         )
 
         finding = CertificateValidityRule().evaluate(AssessmentFacts(certificates=[fact]))[0]
@@ -194,21 +268,75 @@ class CertificateValidityRuleTests(unittest.TestCase):
         self.assertIn("trust", finding.rule_id)
         self.assertIn("does not by itself prove", finding.reasoning)
 
+    def test_expired_itl_recovery_has_specific_non_outage_guidance(self) -> None:
+        fact = CertificateFact(
+            node="pub",
+            name="ITLRecovery.pem",
+            service="ITLRecovery",
+            store=None,
+            certificate_kind="identity",
+            subject="CN=ITLRecovery",
+            issuer="CN=ITLRecovery",
+            serial_number="3",
+            valid_from=None,
+            valid_until="2020-01-01T00:00:00Z",
+            days_remaining=-100,
+            self_signed=True,
+            key_type="RSA",
+            key_size="2048",
+            signature_algorithm="SHA256",
+            subject_key_identifier=None,
+            authority_key_identifier=None,
+            intermediate=None,
+            root="CN=ITLRecovery",
+            chain_status="self-signed",
+            source="fixture",
+        )
+
+        finding = CertificateValidityRule().evaluate(AssessmentFacts(certificates=[fact]))[0]
+
+        self.assertEqual(finding.severity, FindingSeverity.WARNING)
+        self.assertIn("ITLRecovery", finding.title)
+        self.assertIn("does not by itself prove", finding.reasoning)
+
     def test_download_failure_with_intended_active_load_is_informational(self) -> None:
         facts = AssessmentFacts(
-            devices=[DeviceInventoryFact(
-                name="SEP001", description=None, model="Cisco 8841", protocol="SIP",
-                device_pool=None, call_manager_group=None, location=None, region=None,
-                configured_load=None, source="fixture",
-            )],
-            device_load_defaults=[DeviceLoadDefaultFact(
-                model="Cisco 8841", protocol="SIP", default_load="sip88.current", source="fixture",
-            )],
-            registrations=[DeviceRegistrationFact(
-                name="SEP001", status="Registered", registered_node="sub-1", ip_address=None,
-                model="Cisco 8841", protocol="SIP", source="fixture", active_load="sip88.current",
-                download_status="Failed", download_failure_reason="File Not Found",
-            )],
+            devices=[
+                DeviceInventoryFact(
+                    name="SEP001",
+                    description=None,
+                    model="Cisco 8841",
+                    protocol="SIP",
+                    device_pool=None,
+                    call_manager_group=None,
+                    location=None,
+                    region=None,
+                    configured_load=None,
+                    source="fixture",
+                )
+            ],
+            device_load_defaults=[
+                DeviceLoadDefaultFact(
+                    model="Cisco 8841",
+                    protocol="SIP",
+                    default_load="sip88.current",
+                    source="fixture",
+                )
+            ],
+            registrations=[
+                DeviceRegistrationFact(
+                    name="SEP001",
+                    status="Registered",
+                    registered_node="sub-1",
+                    ip_address=None,
+                    model="Cisco 8841",
+                    protocol="SIP",
+                    source="fixture",
+                    active_load="sip88.current",
+                    download_status="Failed",
+                    download_failure_reason="File Not Found",
+                )
+            ],
         )
 
         findings = FirmwareDownloadRule().evaluate(facts)
@@ -220,26 +348,45 @@ class CertificateValidityRuleTests(unittest.TestCase):
 
 class ServiceRuntimeRuleTests(unittest.TestCase):
     def test_intentional_stopped_service_reasons_do_not_create_findings(self) -> None:
-        facts = AssessmentFacts(services=[
-            ServiceStatusFact(
-                node="sub-1", service_name="Cisco DRF Master", activated=None,
-                status="Stopped", uptime_seconds=None, source="fixture",
-                reason="Commanded Out of Service",
-            ),
-            ServiceStatusFact(
-                node="sub-1", service_name="Cisco WebDialer", activated=None,
-                status="Stopped", uptime_seconds=None, source="fixture",
-                reason="Service Not Activated",
-            ),
-        ])
+        facts = AssessmentFacts(
+            services=[
+                ServiceStatusFact(
+                    node="sub-1",
+                    service_name="Cisco DRF Master",
+                    activated=None,
+                    status="Stopped",
+                    uptime_seconds=None,
+                    source="fixture",
+                    reason="Commanded Out of Service",
+                ),
+                ServiceStatusFact(
+                    node="sub-1",
+                    service_name="Cisco WebDialer",
+                    activated=None,
+                    status="Stopped",
+                    uptime_seconds=None,
+                    source="fixture",
+                    reason="Service Not Activated",
+                ),
+            ]
+        )
 
         self.assertEqual(ServiceRuntimeRule().evaluate(facts), [])
 
     def test_unexpected_stopped_service_is_warning(self) -> None:
-        facts = AssessmentFacts(services=[ServiceStatusFact(
-            node="sub-1", service_name="Cisco CallManager", activated=None,
-            status="Stopped", uptime_seconds=None, source="fixture", reason="Service failed",
-        )])
+        facts = AssessmentFacts(
+            services=[
+                ServiceStatusFact(
+                    node="sub-1",
+                    service_name="Cisco CallManager",
+                    activated=None,
+                    status="Stopped",
+                    uptime_seconds=None,
+                    source="fixture",
+                    reason="Service failed",
+                )
+            ]
+        )
 
         findings = ServiceRuntimeRule().evaluate(facts)
 
@@ -302,9 +449,17 @@ class CollectorHealthRuleTests(unittest.TestCase):
         self.assertEqual(findings[0].severity, FindingSeverity.CRITICAL)
 
     def test_platform_ssh_coverage_has_a_specific_actionable_finding(self) -> None:
-        finding = CollectorHealthRule().evaluate(AssessmentFacts(collector_issues=[
-            CollectorIssueFact("cucm", "warning", "cucm_platform_cli: CUCM SSH session failed on cucm-sub: Server not found in known_hosts"),
-        ]))[0]
+        finding = CollectorHealthRule().evaluate(
+            AssessmentFacts(
+                collector_issues=[
+                    CollectorIssueFact(
+                        "cucm",
+                        "warning",
+                        "cucm_platform_cli: CUCM SSH session failed on cucm-sub: Server not found in known_hosts",
+                    ),
+                ]
+            )
+        )[0]
 
         self.assertEqual(finding.title, "Platform checks were not collected from one or more nodes")
         self.assertIn("Affected nodes: cucm-sub", finding.facts)

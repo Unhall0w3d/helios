@@ -12,6 +12,7 @@ from pathlib import Path
 from cisco_collab_health.models.assessment import AssessmentReport
 from cisco_collab_health.models.facts import (
     CertificateFact,
+    ConfigurationObjectFact,
     DeviceInventoryFact,
     DeviceRegistrationFact,
 )
@@ -71,7 +72,8 @@ REPORT_TEMPLATES = {
 
 REPORT_THEMES = {
     "aletheiauc": ReportTheme(
-        key="aletheiauc", asset_directory="aletheiauc",
+        key="aletheiauc",
+        asset_directory="aletheiauc",
         slots={
             "logo-primary": "repository:assets/brand/svg/aletheiauc-logo-lockup.svg",
             "hero-background": "hero-background-3840x960.jpg",
@@ -81,21 +83,43 @@ REPORT_THEMES = {
             "footer-background": "footer-background-2400x220.jpg",
             "status-icons": "status-icons.svg",
         },
-        colors={"page": "#050812", "surface": "#10182B", "text": "#E6E8F1", "muted": "#98A2B8", "accent": "#6A4CFF", "cyan": "#22D3EE", "gold": "#FFC75E"},
+        colors={
+            "page": "#050812",
+            "surface": "#10182B",
+            "text": "#E6E8F1",
+            "muted": "#98A2B8",
+            "accent": "#6A4CFF",
+            "cyan": "#22D3EE",
+            "gold": "#FFC75E",
+        },
         hero_overlay="linear-gradient(90deg,rgba(5,8,18,.96) 0%,rgba(10,15,30,.86) 46%,rgba(10,15,30,.18) 100%)",
-        hero_focal_point="72% 50%", watermark_opacity=".06",
+        hero_focal_point="72% 50%",
+        watermark_opacity=".06",
     ),
     "comsource": ReportTheme(
-        key="comsource", asset_directory="comsource",
+        key="comsource",
+        asset_directory="comsource",
         slots={
-            "logo-primary": "ComSource_Logo.svg", "hero-background": "hero-background.svg",
-            "section-band": "section-band.svg", "divider-horizontal": "divider-horizontal.svg",
-            "watermark": "watermark.svg", "footer-background": "footer-background.svg",
+            "logo-primary": "ComSource_Logo.svg",
+            "hero-background": "hero-background.svg",
+            "section-band": "section-band.svg",
+            "divider-horizontal": "divider-horizontal.svg",
+            "watermark": "watermark.svg",
+            "footer-background": "footer-background.svg",
             "status-icons": "status-icons.svg",
         },
-        colors={"page": "#EAF7FC", "surface": "#FFFFFF", "text": "#20283A", "muted": "#667085", "accent": "#2E1D67", "cyan": "#0096D6", "gold": "#0096D6"},
+        colors={
+            "page": "#EAF7FC",
+            "surface": "#FFFFFF",
+            "text": "#20283A",
+            "muted": "#667085",
+            "accent": "#2E1D67",
+            "cyan": "#0096D6",
+            "gold": "#0096D6",
+        },
         hero_overlay="linear-gradient(90deg,rgba(8,13,34,.98) 0%,rgba(16,22,51,.9) 48%,rgba(46,29,103,.25) 100%)",
-        hero_focal_point="72% 50%", watermark_opacity=".05",
+        hero_focal_point="72% 50%",
+        watermark_opacity=".05",
     ),
 }
 
@@ -110,7 +134,13 @@ def _theme_asset_data_uri(theme: str, slot: str) -> str:
         path = Path(__file__).parents[3] / filename.removeprefix("repository:")
     else:
         path = Path(__file__).with_name("assets") / package.asset_directory / filename
-    mime = {".svg": "image/svg+xml", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".webp": "image/webp"}[path.suffix.lower()]
+    mime = {
+        ".svg": "image/svg+xml",
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".png": "image/png",
+        ".webp": "image/webp",
+    }[path.suffix.lower()]
     return f"data:{mime};base64,{b64encode(path.read_bytes()).decode('ascii')}"
 
 
@@ -143,9 +173,7 @@ class HtmlReportBuilder:
         footer_image = _theme_asset_data_uri(self.template.key, "footer-background")
         logo_image = _theme_asset_data_uri(self.template.key, "logo-primary")
         template_css = (
-            self._comsource_css()
-            if self.template.key == "comsource"
-            else self._aletheiauc_css()
+            self._comsource_css() if self.template.key == "comsource" else self._aletheiauc_css()
         )
         template_header = self._template_header(
             header_metadata,
@@ -197,10 +225,17 @@ class HtmlReportBuilder:
         )
         integration_security_rows = self._configuration_family_rows(
             report,
-            {"SipTrunk", "SipProfile", "SipTrunkSecurityProfile", "LdapDirectory", "PhoneSecurityProfile"},
+            {
+                "SipTrunk",
+                "SipProfile",
+                "SipTrunkSecurityProfile",
+                "LdapDirectory",
+                "PhoneSecurityProfile",
+            },
         )
         media_topology_rows = self._configuration_family_rows(
-            report, {"MediaResourceGroup", "MediaResourceList", "ConferenceBridge", "Transcoder", "Mtp"}
+            report,
+            {"MediaResourceGroup", "MediaResourceList", "ConferenceBridge", "Transcoder", "Mtp"},
         )
         service_deployment_rows = self._service_deployment_rows(report)
         configuration_rows = self._configuration_rows(report)
@@ -217,22 +252,26 @@ class HtmlReportBuilder:
         observations = [
             finding for finding in report.findings if finding.severity == FindingSeverity.INFO
         ]
-        priority_sections = "\n".join(self._finding_section(finding) for finding in priority_findings)
+        priority_sections = "\n".join(
+            self._finding_section(finding) for finding in priority_findings
+        )
         if not priority_sections:
             priority_sections = (
                 "<p>No critical or warning findings were identified in the collected data.</p>"
             )
         observations_section = ""
         if observations:
-            observation_cards = "\n".join(self._finding_section(finding) for finding in observations)
+            observation_cards = "\n".join(
+                self._finding_section(finding) for finding in observations
+            )
             observations_section = f"""
       <details class=\"finding-observations\">
         <summary>Assessment observations ({len(observations)})</summary>
         {observation_cards}
       </details>"""
         findings_section = (
-            f"<section class=\"findings-section rds-section\"><h2>Priority Findings</h2>"
-            f"<p class=\"meta finding-intro\">Issues below need attention. Each includes what was found, why it matters, and the recommended next step.</p>"
+            f'<section class="findings-section rds-section"><h2>Priority Findings</h2>'
+            f'<p class="meta finding-intro">Issues below need attention. Each includes what was found, why it matters, and the recommended next step.</p>'
             f"{priority_sections}{observations_section}</section>"
         )
         certificate_summary = self._certificate_summary(report)
@@ -913,8 +952,7 @@ class HtmlReportBuilder:
 
         logo_alt = "ComSource" if is_comsource else "AletheiaUC"
         logo_markup = (
-            f'<img class="rds-logo" src="{logo_image}" alt="{logo_alt}">'
-            if is_comsource else ""
+            f'<img class="rds-logo" src="{logo_image}" alt="{logo_alt}">' if is_comsource else ""
         )
         return f"""
     <img class="hero-art rds-hero__art" src="{hero_image}" alt="" aria-hidden="true">
@@ -966,11 +1004,12 @@ class HtmlReportBuilder:
         color = self.theme.colors
         logo_panel = (
             ".comsource-report .rds-hero__content > .rds-logo, .comsource-report .rds-footer > .rds-logo { padding: 10px 14px; border-radius: 8px; background: #fff; }"
-            if self.theme.key == "comsource" else ""
+            if self.theme.key == "comsource"
+            else ""
         )
         return f"""
     .rds-report {{ width: min(1440px, calc(100% - 48px)); margin: 24px auto 64px; }}
-    .rds-hero {{ min-height: 360px; overflow: hidden; border-radius: 12px; background: {color['page']}; }}
+    .rds-hero {{ min-height: 360px; overflow: hidden; border-radius: 12px; background: {color["page"]}; }}
     .rds-hero__art {{ position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: {self.theme.hero_focal_point}; }}
     .rds-hero__overlay {{ position: absolute; inset: 0; background: {self.theme.hero_overlay}; }}
     .rds-hero__content {{ position: relative; z-index: 2; max-width: 760px; padding: 36px 42px 48px; }}
@@ -986,7 +1025,7 @@ class HtmlReportBuilder:
     .rds-metric {{ min-height: 102px; border-radius: 8px; }}
     .rds-finding {{ display: grid; grid-template-columns: auto 1fr; gap: 12px; }}
     .rds-badge {{ align-self: start; padding: 5px 8px; border-radius: 5px; color: #fff; font-size: 11px; font-weight: 700; }}
-    .rds-footer {{ min-height: 96px; background: {color['page']} var(--footer-image) center / cover no-repeat; }}
+    .rds-footer {{ min-height: 96px; background: {color["page"]} var(--footer-image) center / cover no-repeat; }}
     .rds-footer .rds-logo {{ max-width: 220px; max-height: 60px; }}
     {logo_panel}
     @media (max-width: 700px) {{ .rds-report {{ width: calc(100% - 18px); margin-top: 9px; }} .rds-hero {{ min-height: 420px; }} .rds-hero__content {{ padding: 24px 20px 38px; }} .rds-section__body {{ padding: 13px; }} }}
@@ -1892,6 +1931,8 @@ class HtmlReportBuilder:
             f"<td>{escape(item.name)}</td>"
             f"<td>{escape(display_text(item.details.get('total')))}</td>"
             f"<td>{escape(display_text(item.details.get('requested_rows')))}</td>"
+            f"<td>{escape(display_text(item.details.get('normalized_records')))}</td>"
+            f"<td>{escape(self._cuc_inventory_coverage(item))}</td>"
             "</tr>"
             for item in sorted(inventory, key=lambda item: item.name)
         )
@@ -1901,15 +1942,29 @@ class HtmlReportBuilder:
       <p class="meta">Source: bounded, read-only CUPI inventory probes. Counts are normalized
       from collection metadata; individual mailbox and contact identities are not included here.</p>
       <table>
-        <thead><tr><th>Inventory</th><th>Total</th><th>Probe rows</th></tr></thead>
+        <thead><tr><th>Inventory</th><th>Total</th><th>Probe rows</th><th>Normalized</th>
+        <th>Coverage</th></tr></thead>
         <tbody>{rows}</tbody>
       </table>
-    </section>
+</section>
 """
+
+    @staticmethod
+    def _cuc_inventory_coverage(item: ConfigurationObjectFact) -> str:
+        coverage = item.details.get("coverage")
+        status = item.details.get("collection_status")
+        if coverage and status:
+            return f"{coverage} ({status})"
+        if coverage:
+            return coverage
+        return (
+            "Count only" if not item.details.get("normalized_records") else (status or "collected")
+        )
 
     def _cuc_configuration_section(self, report: AssessmentReport) -> str:
         configuration = [
-            item for item in report.facts.configuration_objects
+            item
+            for item in report.facts.configuration_objects
             if item.source.startswith("CUC.CUPI") and not item.object_type.endswith("Inventory")
         ]
         if not configuration:
@@ -1996,11 +2051,21 @@ class HtmlReportBuilder:
                     f"uptime {details.get('uptime_days', 'unknown')} days"
                 )
             else:
-                summary = "No core files found" if details.get("core_files") == "0" else "Core files present"
-            rows.append(f"<tr><td>{escape(labels[check.check_name])}</td><td>{escape(check.status)}</td><td>{escape(summary)}</td></tr>")
+                summary = (
+                    "No core files found"
+                    if details.get("core_files") == "0"
+                    else "Core files present"
+                )
+            rows.append(
+                f"<tr><td>{escape(labels[check.check_name])}</td><td>{escape(check.status)}</td><td>{escape(summary)}</td></tr>"
+            )
         if not rows:
             return ""
-        return "<section class=\"technology-section cuc-section\"><h2>Unity Connection Platform Health</h2><p class=\"meta\">Source: bounded UCOS diagnostic commands. Full output remains in the private engineering artifact bundle.</p><table><thead><tr><th>Check</th><th>Status</th><th>Summary</th></tr></thead><tbody>" + "".join(rows) + "</tbody></table></section>"
+        return (
+            '<section class="technology-section cuc-section"><h2>Unity Connection Platform Health</h2><p class="meta">Source: bounded UCOS diagnostic commands. Full output remains in the private engineering artifact bundle.</p><table><thead><tr><th>Check</th><th>Status</th><th>Summary</th></tr></thead><tbody>'
+            + "".join(rows)
+            + "</tbody></table></section>"
+        )
 
     def _configuration_summary_rows(self, report: AssessmentReport) -> str:
         if not report.facts.configuration_objects:
@@ -2063,11 +2128,12 @@ class HtmlReportBuilder:
         return "\n".join(rows)
 
     def _configuration_family_rows(
-        self, report: AssessmentReport, object_types: set[str],
+        self,
+        report: AssessmentReport,
+        object_types: set[str],
     ) -> str:
         selected = [
-            item for item in report.facts.configuration_objects
-            if item.object_type in object_types
+            item for item in report.facts.configuration_objects if item.object_type in object_types
         ]
         if not selected:
             return '<tr><td colspan="3">No matching configuration records collected.</td></tr>'
@@ -2164,16 +2230,21 @@ class HtmlReportBuilder:
     @staticmethod
     def _certificate_summary(report: AssessmentReport) -> str:
         selected = [
-            item for item in report.facts.certificates
+            item
+            for item in report.facts.certificates
             if item.days_remaining is not None and item.days_remaining <= 60
         ]
         if not selected:
             return ""
         identity = [item for item in selected if item.certificate_kind == "identity"]
         trust = [item for item in selected if item.certificate_kind != "identity"]
-        identity_expired = sum(item.days_remaining < 0 for item in identity if item.days_remaining is not None)
+        identity_expired = sum(
+            item.days_remaining < 0 for item in identity if item.days_remaining is not None
+        )
         identity_expiring = len(identity) - identity_expired
-        trust_expired = sum(item.days_remaining < 0 for item in trust if item.days_remaining is not None)
+        trust_expired = sum(
+            item.days_remaining < 0 for item in trust if item.days_remaining is not None
+        )
         trust_expiring = len(trust) - trust_expired
         earliest = min(item.days_remaining for item in selected if item.days_remaining is not None)
         return (
@@ -2421,7 +2492,9 @@ class HtmlReportBuilder:
         recommendation = ""
         if finding.recommendation:
             escaped_recommendation = escape(finding.recommendation)
-            recommendation = f"<p><strong>Recommended next step:</strong> {escaped_recommendation}</p>"
+            recommendation = (
+                f"<p><strong>Recommended next step:</strong> {escaped_recommendation}</p>"
+            )
         evidence = self._evidence_list(finding)
         finding_metadata = f"Priority: {self._finding_priority_label(finding.severity)}"
         finding_metadata += f" | Severity: {severity}"
@@ -2723,7 +2796,10 @@ def _source_caption(section_name: str, report: AssessmentReport) -> str:
         "Detailed Device Inventory": detailed_inventory_caption,
     }
     registration_caption = "Source: RISPort70 SelectCmDeviceExt normalized runtime records."
-    if any(registration.source == "RISPort70.selectCmDevice" for registration in report.facts.registrations):
+    if any(
+        registration.source == "RISPort70.selectCmDevice"
+        for registration in report.facts.registrations
+    ):
         registration_caption = (
             "Source: RISPort70 SelectCmDeviceExt phone detail and SelectCmDevice "
             "all-device-class runtime records."

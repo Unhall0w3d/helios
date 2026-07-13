@@ -6,7 +6,11 @@ from collections import Counter
 from collections.abc import Iterable
 
 from cisco_collab_health.models.evidence import EvidenceRef
-from cisco_collab_health.models.facts import AssessmentFacts, CertificateFact, DeviceRegistrationFact
+from cisco_collab_health.models.facts import (
+    AssessmentFacts,
+    CertificateFact,
+    DeviceRegistrationFact,
+)
 from cisco_collab_health.models.findings import (
     FindingSeverity,
     HealthFinding,
@@ -137,23 +141,37 @@ class CollectorHealthRule:
             return []
 
         ssh_issues = [
-            issue for issue in facts.collector_issues
-            if "SSH session failed on" in issue.message
+            issue for issue in facts.collector_issues if "SSH session failed on" in issue.message
         ]
         remaining = [issue for issue in facts.collector_issues if issue not in ssh_issues]
         findings: list[HealthFinding] = []
         if ssh_issues:
-            nodes = sorted({issue.message.split("SSH session failed on ", 1)[1].split(":", 1)[0] for issue in ssh_issues})
-            findings.append(HealthFinding(
-                rule_id=f"{self.rule_id}.platform_coverage",
-                title="Platform checks were not collected from one or more nodes",
-                severity=FindingSeverity.WARNING,
-                recommendation_kind=RecommendationKind.ENGINEERING_RECOMMENDATION,
-                facts=[f"Nodes without platform CLI evidence: {len(nodes)}", f"Affected nodes: {', '.join(nodes)}"],
-                reasoning="The assessment completed its available API collection, but platform CLI evidence is incomplete for the listed nodes.",
-                recommendation="Verify each node's SSH host key out of band, enroll it with the explicit first-use option, then rerun diagnostic capture to complete platform coverage.",
-                evidence=[EvidenceRef(source=issue.source, operation="collector_health", confidence="high") for issue in ssh_issues],
-            ))
+            nodes = sorted(
+                {
+                    issue.message.split("SSH session failed on ", 1)[1].split(":", 1)[0]
+                    for issue in ssh_issues
+                }
+            )
+            findings.append(
+                HealthFinding(
+                    rule_id=f"{self.rule_id}.platform_coverage",
+                    title="Platform checks were not collected from one or more nodes",
+                    severity=FindingSeverity.WARNING,
+                    recommendation_kind=RecommendationKind.ENGINEERING_RECOMMENDATION,
+                    facts=[
+                        f"Nodes without platform CLI evidence: {len(nodes)}",
+                        f"Affected nodes: {', '.join(nodes)}",
+                    ],
+                    reasoning="The assessment completed its available API collection, but platform CLI evidence is incomplete for the listed nodes.",
+                    recommendation="Verify each node's SSH host key out of band, enroll it with the explicit first-use option, then rerun diagnostic capture to complete platform coverage.",
+                    evidence=[
+                        EvidenceRef(
+                            source=issue.source, operation="collector_health", confidence="high"
+                        )
+                        for issue in ssh_issues
+                    ],
+                )
+            )
         if not remaining:
             return findings
 
@@ -215,9 +233,7 @@ class DeviceLoadRule:
                 classification = "matches current default but remains statically pinned"
             else:
                 classification = "differs from current default"
-            static_loads.append(
-                (device.name, device.configured_load, default_load, classification)
-            )
+            static_loads.append((device.name, device.configured_load, default_load, classification))
 
         if not static_loads:
             return []
@@ -313,17 +329,24 @@ class FirmwareDownloadRule:
 
 
 def _firmware_download_finding(
-    *, registrations: list[DeviceRegistrationFact], rule_id: str, title: str,
-    severity: FindingSeverity, reasoning: str,
+    *,
+    registrations: list[DeviceRegistrationFact],
+    rule_id: str,
+    title: str,
+    severity: FindingSeverity,
+    reasoning: str,
 ) -> HealthFinding:
-    reasons = Counter(item.download_failure_reason or "Reason unavailable" for item in registrations)
+    reasons = Counter(
+        item.download_failure_reason or "Reason unavailable" for item in registrations
+    )
     return HealthFinding(
         rule_id=rule_id,
         title=title,
         severity=severity,
         recommendation_kind=(
             RecommendationKind.ENGINEERING_RECOMMENDATION
-            if severity == FindingSeverity.WARNING else RecommendationKind.INFORMATIONAL
+            if severity == FindingSeverity.WARNING
+            else RecommendationKind.INFORMATIONAL
         ),
         facts=[
             f"Devices: {len(registrations)}",
@@ -336,7 +359,9 @@ def _firmware_download_finding(
             "reachability, the firmware files, and the affected device configuration before "
             "retrying the update."
         ),
-        evidence=[EvidenceRef(source="RISPort70", operation="selectCmDeviceExt", confidence="high")],
+        evidence=[
+            EvidenceRef(source="RISPort70", operation="selectCmDeviceExt", confidence="high")
+        ],
     )
 
 
@@ -358,12 +383,8 @@ class DeviceInventorySummaryRule:
             return []
 
         models = {device.model for device in facts.devices if device.model}
-        sip_count = sum(
-            1 for device in facts.devices if _protocol_key(device.protocol) == "sip"
-        )
-        sccp_count = sum(
-            1 for device in facts.devices if _protocol_key(device.protocol) == "sccp"
-        )
+        sip_count = sum(1 for device in facts.devices if _protocol_key(device.protocol) == "sip")
+        sccp_count = sum(1 for device in facts.devices if _protocol_key(device.protocol) == "sccp")
         return [
             _info_finding(
                 rule_id=self.rule_id,
@@ -420,7 +441,9 @@ class SipTrunkRuntimeRule:
     rule_id = "cucm.sip_trunk_runtime"
 
     def evaluate(self, facts: AssessmentFacts) -> list[HealthFinding]:
-        trunks = [registration for registration in facts.registrations if _is_sip_trunk(registration)]
+        trunks = [
+            registration for registration in facts.registrations if _is_sip_trunk(registration)
+        ]
         affected = [
             registration
             for registration in trunks
@@ -457,9 +480,7 @@ class SipTrunkRuntimeRule:
                     "have the UC administrator check the far-end or CUBE, SIP reachability and "
                     "security, and the CUCM trunk and route configuration."
                 ),
-                evidence=[
-                    EvidenceRef(source="RISPort70", operation=operation, confidence="high")
-                ],
+                evidence=[EvidenceRef(source="RISPort70", operation=operation, confidence="high")],
             )
         ]
 
@@ -468,9 +489,14 @@ def _is_sip_trunk(registration: DeviceRegistrationFact) -> bool:
     device_class = (registration.device_class or "").strip().lower()
     if device_class in {"siptrunk", "sip trunk"}:
         return True
-    return "trunk" in " ".join(
-        value for value in (registration.name, registration.model, registration.protocol) if value
-    ).lower()
+    return (
+        "trunk"
+        in " ".join(
+            value
+            for value in (registration.name, registration.model, registration.protocol)
+            if value
+        ).lower()
+    )
 
 
 class ServiceSummaryRule:
@@ -508,7 +534,8 @@ class ServiceRuntimeRule:
 
     def evaluate(self, facts: AssessmentFacts) -> list[HealthFinding]:
         unexpected = [
-            service for service in facts.services
+            service
+            for service in facts.services
             if service.status.strip().lower() != "started"
             and (service.reason or "").strip().lower() not in self.intentional_reasons
         ]
@@ -535,7 +562,11 @@ class ServiceRuntimeRule:
                     "Review the affected services in Control Center and confirm whether each state "
                     "is expected for the node role and deployment design."
                 ),
-                evidence=[EvidenceRef(source="ControlCenter", operation="soapGetServiceStatus", confidence="high")],
+                evidence=[
+                    EvidenceRef(
+                        source="ControlCenter", operation="soapGetServiceStatus", confidence="high"
+                    )
+                ],
             )
         ]
 
@@ -548,48 +579,123 @@ class CertificateValidityRule:
     def evaluate(self, facts: AssessmentFacts) -> list[HealthFinding]:
         if not facts.certificates:
             return []
+        itl_recovery = [
+            item
+            for item in facts.certificates
+            if "itlrecovery" in item.name.lower()
+            and item.certificate_kind == "identity"
+            and item.days_remaining is not None
+            and item.days_remaining <= 60
+        ]
         expired_identity = [
-            item for item in facts.certificates
-            if item.certificate_kind == "identity" and item.days_remaining is not None and item.days_remaining < 0
+            item
+            for item in facts.certificates
+            if item.certificate_kind == "identity"
+            and item not in itl_recovery
+            and item.days_remaining is not None
+            and item.days_remaining < 0
         ]
         soon_identity = [
-            item for item in facts.certificates
-            if item.certificate_kind == "identity" and item.days_remaining is not None and 0 <= item.days_remaining <= 60
+            item
+            for item in facts.certificates
+            if item.certificate_kind == "identity"
+            and item not in itl_recovery
+            and item.days_remaining is not None
+            and 0 <= item.days_remaining <= 60
         ]
         expired_trust = [
-            item for item in facts.certificates
-            if item.certificate_kind != "identity" and item.days_remaining is not None and item.days_remaining < 0
+            item
+            for item in facts.certificates
+            if item.certificate_kind != "identity"
+            and item.days_remaining is not None
+            and item.days_remaining < 0
         ]
         soon_trust = [
-            item for item in facts.certificates
-            if item.certificate_kind != "identity" and item.days_remaining is not None and 0 <= item.days_remaining <= 60
+            item
+            for item in facts.certificates
+            if item.certificate_kind != "identity"
+            and item.days_remaining is not None
+            and 0 <= item.days_remaining <= 60
         ]
         findings: list[HealthFinding] = []
+        if itl_recovery:
+            findings.append(
+                HealthFinding(
+                rule_id=f"{self.rule_id}.itl_recovery",
+                title=(
+                    "ITLRecovery certificate is expired"
+                    if any(item.days_remaining is not None and item.days_remaining < 0 for item in itl_recovery)
+                    else "ITLRecovery certificate expires within 60 days"
+                ),
+                    severity=FindingSeverity.WARNING,
+                    recommendation_kind=RecommendationKind.ENGINEERING_RECOMMENDATION,
+                    facts=_certificate_occurrence_summaries(itl_recovery),
+                    reasoning=(
+                        "ITLRecovery supports trust-list recovery and signing workflows. Its expiry "
+                        "does not by itself prove a current calling or service outage."
+                    ),
+                    recommendation=(
+                        "Verify current phone ITL/CTL trust and cluster security state, then follow "
+                        "the Cisco-controlled ITLRecovery regeneration procedure in a change window."
+                    ),
+                    evidence=[
+                        EvidenceRef(
+                            source="CertificateManagementREST",
+                            operation="snapshot_server",
+                            confidence="high",
+                        )
+                    ],
+                )
+            )
         if expired_identity:
-            findings.append(_certificate_finding(
-                f"{self.rule_id}.identity_expired", "One or more active service certificates are expired",
-                FindingSeverity.CRITICAL, expired_identity, "identity",
-            ))
+            findings.append(
+                _certificate_finding(
+                    f"{self.rule_id}.identity_expired",
+                    "One or more active service certificates are expired",
+                    FindingSeverity.CRITICAL,
+                    expired_identity,
+                    "identity",
+                )
+            )
         if soon_identity:
-            findings.append(_certificate_finding(
-                f"{self.rule_id}.identity_expiring", "One or more active service certificates expire within 60 days",
-                FindingSeverity.WARNING, soon_identity, "identity",
-            ))
+            findings.append(
+                _certificate_finding(
+                    f"{self.rule_id}.identity_expiring",
+                    "One or more active service certificates expire within 60 days",
+                    FindingSeverity.WARNING,
+                    soon_identity,
+                    "identity",
+                )
+            )
         if expired_trust:
-            findings.append(_certificate_finding(
-                f"{self.rule_id}.trust_expired", "Expired trust certificates should be reviewed",
-                FindingSeverity.WARNING, expired_trust, "trust",
-            ))
+            findings.append(
+                _certificate_finding(
+                    f"{self.rule_id}.trust_expired",
+                    "Expired trust certificates should be reviewed",
+                    FindingSeverity.WARNING,
+                    expired_trust,
+                    "trust",
+                )
+            )
         if soon_trust:
-            findings.append(_certificate_finding(
-                f"{self.rule_id}.trust_expiring", "Trust certificates expire within 60 days",
-                FindingSeverity.INFO, soon_trust, "trust",
-            ))
+            findings.append(
+                _certificate_finding(
+                    f"{self.rule_id}.trust_expiring",
+                    "Trust certificates expire within 60 days",
+                    FindingSeverity.INFO,
+                    soon_trust,
+                    "trust",
+                )
+            )
         return findings
 
 
 def _certificate_finding(
-    rule_id: str, title: str, severity: FindingSeverity, certificates: list[CertificateFact], certificate_scope: str,
+    rule_id: str,
+    title: str,
+    severity: FindingSeverity,
+    certificates: list[CertificateFact],
+    certificate_scope: str,
 ) -> HealthFinding:
     if certificate_scope == "identity":
         reasoning = "An active service certificate is expired or approaching expiry and can interrupt secure UC services or integrations."
@@ -598,12 +704,18 @@ def _certificate_finding(
         reasoning = "Trust-store entries can remain after a peer certificate is replaced. Their presence does not by itself prove an active service outage."
         recommendation = "Review the affected trust entries against the current UC topology and integrations. Remove or replace only entries confirmed obsolete or required by an expiring peer certificate."
     return HealthFinding(
-        rule_id=rule_id, title=title, severity=severity,
+        rule_id=rule_id,
+        title=title,
+        severity=severity,
         recommendation_kind=RecommendationKind.ENGINEERING_RECOMMENDATION,
         facts=_certificate_occurrence_summaries(certificates),
         reasoning=reasoning,
         recommendation=recommendation,
-        evidence=[EvidenceRef(source="CertificateManagementREST", operation="snapshot_server", confidence="high")],
+        evidence=[
+            EvidenceRef(
+                source="CertificateManagementREST", operation="snapshot_server", confidence="high"
+            )
+        ],
     )
 
 
@@ -618,13 +730,13 @@ def _certificate_occurrence_summaries(certificates: Iterable[CertificateFact]) -
     for occurrences in grouped.values():
         item = occurrences[0]
         nodes = ", ".join(sorted({entry.node for entry in occurrences}))
-        locations = ", ".join(sorted({
-            entry.store or entry.service or entry.certificate_kind for entry in occurrences
-        }))
-        names = ", ".join(sorted({entry.name for entry in occurrences}))
-        summaries.append(
-            f"{names} [{locations}] on {nodes}: {item.days_remaining} days remaining"
+        locations = ", ".join(
+            sorted(
+                {entry.store or entry.service or entry.certificate_kind for entry in occurrences}
+            )
         )
+        names = ", ".join(sorted({entry.name for entry in occurrences}))
+        summaries.append(f"{names} [{locations}] on {nodes}: {item.days_remaining} days remaining")
     return summaries
 
 
@@ -658,23 +770,71 @@ class CucPlatformHealthRule:
     rule_id = "cuc.platform_health"
 
     def evaluate(self, facts: AssessmentFacts) -> list[HealthFinding]:
-        checks = {item.check_name: item for item in facts.platform_checks if item.source == "CUC.UCOS.CLI"}
+        checks = {
+            item.check_name: item for item in facts.platform_checks if item.source == "CUC.UCOS.CLI"
+        }
         findings: list[HealthFinding] = []
         diagnostic = checks.get("utils diagnose test")
         if diagnostic and int(diagnostic.details.get("failed", "0")):
-            findings.append(_cuc_finding("diagnostic_failures", FindingSeverity.WARNING, "Unity Connection diagnostic tests failed", [f"Failed tests: {diagnostic.details['failed']}"]))
+            findings.append(
+                _cuc_finding(
+                    "diagnostic_failures",
+                    FindingSeverity.WARNING,
+                    "Unity Connection diagnostic tests failed",
+                    [f"Failed tests: {diagnostic.details['failed']}"],
+                )
+            )
         services = checks.get("utils service list")
-        if services and int(services.details.get("stopped", "0")) > int(services.details.get("not_activated", "0")):
-            findings.append(_cuc_finding("unexpected_stopped_services", FindingSeverity.WARNING, "Unity Connection services are unexpectedly stopped", [f"Stopped: {services.details.get('stopped')}", f"Not activated: {services.details.get('not_activated')}"]))
+        if services and int(services.details.get("stopped", "0")) > int(
+            services.details.get("not_activated", "0")
+        ):
+            findings.append(
+                _cuc_finding(
+                    "unexpected_stopped_services",
+                    FindingSeverity.WARNING,
+                    "Unity Connection services are unexpectedly stopped",
+                    [
+                        f"Stopped: {services.details.get('stopped')}",
+                        f"Not activated: {services.details.get('not_activated')}",
+                    ],
+                )
+            )
         core = checks.get("utils core active list")
         if core and core.details.get("core_files") == "present":
-            findings.append(_cuc_finding("core_files", FindingSeverity.WARNING, "Unity Connection active core files found", ["Review core files before removal or escalation."]))
+            findings.append(
+                _cuc_finding(
+                    "core_files",
+                    FindingSeverity.WARNING,
+                    "Unity Connection active core files found",
+                    ["Review core files before removal or escalation."],
+                )
+            )
         cluster = checks.get("show cuc cluster status")
         if cluster and int(cluster.details.get("unhealthy_states", "0")):
-            findings.append(_cuc_finding("replication", FindingSeverity.CRITICAL, "Unity Connection cluster replication reports unhealthy state", [f"Unhealthy states: {cluster.details['unhealthy_states']}"]))
+            findings.append(
+                _cuc_finding(
+                    "replication",
+                    FindingSeverity.CRITICAL,
+                    "Unity Connection cluster replication reports unhealthy state",
+                    [f"Unhealthy states: {cluster.details['unhealthy_states']}"],
+                )
+            )
         network = checks.get("show network eth0 detail")
-        if network and (network.details.get("link_status") != "up" or network.details.get("duplicate_ip") == "yes"):
-            findings.append(_cuc_finding("network", FindingSeverity.CRITICAL, "Unity Connection Ethernet 0 health issue", [f"Link: {network.details.get('link_status')}", f"Duplicate IP: {network.details.get('duplicate_ip')}"]))
+        if network and (
+            network.details.get("link_status") != "up"
+            or network.details.get("duplicate_ip") == "yes"
+        ):
+            findings.append(
+                _cuc_finding(
+                    "network",
+                    FindingSeverity.CRITICAL,
+                    "Unity Connection Ethernet 0 health issue",
+                    [
+                        f"Link: {network.details.get('link_status')}",
+                        f"Duplicate IP: {network.details.get('duplicate_ip')}",
+                    ],
+                )
+            )
         return findings
 
 
@@ -686,26 +846,117 @@ class CucmPlatformHealthRule:
     def evaluate(self, facts: AssessmentFacts) -> list[HealthFinding]:
         checks = [check for check in facts.platform_checks if check.source == "CUCM.UCOS.CLI"]
         findings: list[HealthFinding] = []
-        ntp_unsynced = [check.node for check in checks if check.check_name == "utils ntp status" and check.details.get("synchronized") == "false"]
+        ntp_unsynced = [
+            check.node
+            for check in checks
+            if check.check_name == "utils ntp status"
+            and check.details.get("synchronized") == "false"
+        ]
         if ntp_unsynced:
-            findings.append(_cucm_cli_finding("ntp", FindingSeverity.CRITICAL, "One or more CUCM nodes are not synchronized to NTP", ["Affected nodes: " + ", ".join(sorted(ntp_unsynced))], "Time synchronization is required for reliable certificates, logging, and clustered service behavior.", "Have the UC administrator restore NTP reachability and confirm each affected node synchronizes before making other cluster changes."))
-        drs_unavailable = [check.node for check in checks if check.check_name.startswith("utils disaster_recovery") and check.details.get("drs_unavailable") == "true"]
+            findings.append(
+                _cucm_cli_finding(
+                    "ntp",
+                    FindingSeverity.CRITICAL,
+                    "One or more CUCM nodes are not synchronized to NTP",
+                    ["Affected nodes: " + ", ".join(sorted(ntp_unsynced))],
+                    "Time synchronization is required for reliable certificates, logging, and clustered service behavior.",
+                    "Have the UC administrator restore NTP reachability and confirm each affected node synchronizes before making other cluster changes.",
+                )
+            )
+        drs_unavailable = [
+            check.node
+            for check in checks
+            if check.check_name.startswith("utils disaster_recovery")
+            and check.details.get("drs_unavailable") == "true"
+        ]
         if drs_unavailable:
-            findings.append(_cucm_cli_finding("drs_unavailable", FindingSeverity.WARNING, "CUCM Disaster Recovery status could not be verified", ["Affected nodes: " + ", ".join(sorted(set(drs_unavailable)))], "The DRS Master Agent may be unavailable or busy, leaving backup status uncertain.", "Review DRS status and the Master Agent, then confirm a recent successful backup before relying on recovery readiness."))
-        no_backup = [check.node for check in checks if check.check_name == "utils disaster_recovery history backup" and check.details.get("successful_backup_entries") == "0" and check.details.get("drs_unavailable") != "true"]
+            findings.append(
+                _cucm_cli_finding(
+                    "drs_unavailable",
+                    FindingSeverity.WARNING,
+                    "CUCM Disaster Recovery status could not be verified",
+                    ["Affected nodes: " + ", ".join(sorted(set(drs_unavailable)))],
+                    "The DRS Master Agent may be unavailable or busy, leaving backup status uncertain.",
+                    "Review DRS status and the Master Agent, then confirm a recent successful backup before relying on recovery readiness.",
+                )
+            )
+        no_backup = [
+            check.node
+            for check in checks
+            if check.check_name == "utils disaster_recovery history backup"
+            and check.details.get("successful_backup_entries") == "0"
+            and check.details.get("drs_unavailable") != "true"
+        ]
         if no_backup:
-            findings.append(_cucm_cli_finding("backup_history", FindingSeverity.WARNING, "No successful CUCM backup was found in collected history", ["Affected nodes: " + ", ".join(sorted(no_backup))], "Without a confirmed successful backup, recovery readiness cannot be demonstrated from this assessment.", "Review the DRS schedule, destination, and most recent job result; run or repair a backup if needed."))
-        replication = [check for check in checks if check.check_name == "utils dbreplication runtimestate" and int(check.details.get("replication_bad_rows", "0")) > 0]
+            findings.append(
+                _cucm_cli_finding(
+                    "backup_history",
+                    FindingSeverity.WARNING,
+                    "No successful CUCM backup was found in collected history",
+                    ["Affected nodes: " + ", ".join(sorted(no_backup))],
+                    "Without a confirmed successful backup, recovery readiness cannot be demonstrated from this assessment.",
+                    "Review the DRS schedule, destination, and most recent job result; run or repair a backup if needed.",
+                )
+            )
+        replication = [
+            check
+            for check in checks
+            if check.check_name == "utils dbreplication runtimestate"
+            and int(check.details.get("replication_bad_rows", "0")) > 0
+        ]
         if replication:
-            findings.append(_cucm_cli_finding("replication", FindingSeverity.CRITICAL, "CUCM database replication needs review", [f"Nodes reporting incomplete replication rows: {', '.join(sorted(check.node for check in replication))}"], "One or more collected replication rows were not reported as '(2) Setup Completed'.", "Review the replication runtime output and Cisco-supported remediation procedure before changing cluster services or database state."))
-        cores = [check.node for check in checks if check.check_name == "utils core active list" and check.details.get("core_files") == "present"]
+            findings.append(
+                _cucm_cli_finding(
+                    "replication",
+                    FindingSeverity.CRITICAL,
+                    "CUCM database replication needs review",
+                    [
+                        f"Nodes reporting incomplete replication rows: {', '.join(sorted(check.node for check in replication))}"
+                    ],
+                    "One or more collected replication rows were not reported as '(2) Setup Completed'.",
+                    "Review the replication runtime output and Cisco-supported remediation procedure before changing cluster services or database state.",
+                )
+            )
+        cores = [
+            check.node
+            for check in checks
+            if check.check_name == "utils core active list"
+            and check.details.get("core_files") == "present"
+        ]
         if cores:
-            findings.append(_cucm_cli_finding("core_files", FindingSeverity.WARNING, "Active CUCM core files were found", ["Affected nodes: " + ", ".join(sorted(cores))], "Core files can indicate an application or platform process failure requiring engineering review.", "Preserve the artifacts and review the core files with Cisco TAC or the responsible engineering team before removal."))
+            findings.append(
+                _cucm_cli_finding(
+                    "core_files",
+                    FindingSeverity.WARNING,
+                    "Active CUCM core files were found",
+                    ["Affected nodes: " + ", ".join(sorted(cores))],
+                    "Core files can indicate an application or platform process failure requiring engineering review.",
+                    "Preserve the artifacts and review the core files with Cisco TAC or the responsible engineering team before removal.",
+                )
+            )
         return findings
 
 
-def _cucm_cli_finding(suffix: str, severity: FindingSeverity, title: str, facts: list[str], reasoning: str, recommendation: str) -> HealthFinding:
-    return HealthFinding(rule_id=f"cucm.platform_health.{suffix}", title=title, severity=severity, recommendation_kind=RecommendationKind.ENGINEERING_RECOMMENDATION, facts=facts, reasoning=reasoning, recommendation=recommendation, evidence=[EvidenceRef(source="CUCM.UCOS.CLI", operation="platform_summary", confidence="high")])
+def _cucm_cli_finding(
+    suffix: str,
+    severity: FindingSeverity,
+    title: str,
+    facts: list[str],
+    reasoning: str,
+    recommendation: str,
+) -> HealthFinding:
+    return HealthFinding(
+        rule_id=f"cucm.platform_health.{suffix}",
+        title=title,
+        severity=severity,
+        recommendation_kind=RecommendationKind.ENGINEERING_RECOMMENDATION,
+        facts=facts,
+        reasoning=reasoning,
+        recommendation=recommendation,
+        evidence=[
+            EvidenceRef(source="CUCM.UCOS.CLI", operation="platform_summary", confidence="high")
+        ],
+    )
 
 
 class CucPlatformStatusRule:
@@ -759,7 +1010,11 @@ class CucPlatformStatusRule:
                             "Review maintenance history and include this server in the next approved "
                             "maintenance window if a restart is appropriate."
                         ),
-                        evidence=[EvidenceRef(source="CUC.UCOS.CLI", operation="show_status", node=check.node)],
+                        evidence=[
+                            EvidenceRef(
+                                source="CUC.UCOS.CLI", operation="show_status", node=check.node
+                            )
+                        ],
                     )
                 )
         return findings
@@ -788,21 +1043,28 @@ class CucServicePolicyRule:
             return []
         by_name = {service.service_name: service for service in services}
         failed_required = [
-            name for name in self.required_services
+            name
+            for name in self.required_services
             if name not in by_name or by_name[name].status.strip().lower() != "started"
         ]
         failed_singletons = [
-            name for name in self.singleton_services
-            if name in by_name and by_name[name].activated is not False
+            name
+            for name in self.singleton_services
+            if name in by_name
+            and by_name[name].activated is not False
             and by_name[name].status.strip().lower() != "started"
         ]
         if not failed_required and not failed_singletons:
             return []
         facts_list = []
         if failed_required:
-            facts_list.append("Required services not started: " + ", ".join(sorted(failed_required)))
+            facts_list.append(
+                "Required services not started: " + ", ".join(sorted(failed_required))
+            )
         if failed_singletons:
-            facts_list.append("Expected singleton services not started: " + ", ".join(sorted(failed_singletons)))
+            facts_list.append(
+                "Expected singleton services not started: " + ", ".join(sorted(failed_singletons))
+            )
         return [
             HealthFinding(
                 rule_id=self.rule_id,
@@ -818,18 +1080,29 @@ class CucServicePolicyRule:
                     "Confirm whether the stopped service is intentional. If not, review service "
                     "dependencies and alarms in Unity Connection before starting or restarting it."
                 ),
-                evidence=[EvidenceRef(source="CUC.UCOS.CLI", operation="utils_service_list", confidence="high")],
+                evidence=[
+                    EvidenceRef(
+                        source="CUC.UCOS.CLI", operation="utils_service_list", confidence="high"
+                    )
+                ],
             )
         ]
 
 
-def _cuc_finding(suffix: str, severity: FindingSeverity, title: str, facts: list[str]) -> HealthFinding:
+def _cuc_finding(
+    suffix: str, severity: FindingSeverity, title: str, facts: list[str]
+) -> HealthFinding:
     return HealthFinding(
-        rule_id=f"cuc.platform_health.{suffix}", title=title, severity=severity,
-        recommendation_kind=RecommendationKind.ENGINEERING_RECOMMENDATION, facts=facts,
+        rule_id=f"cuc.platform_health.{suffix}",
+        title=title,
+        severity=severity,
+        recommendation_kind=RecommendationKind.ENGINEERING_RECOMMENDATION,
+        facts=facts,
         reasoning="UCOS platform summaries reported a condition requiring engineering review.",
         recommendation="Review the retained UCOS evidence and correct the affected platform condition.",
-        evidence=[EvidenceRef(source="CUC.UCOS.CLI", operation="platform_summary", confidence="high")],
+        evidence=[
+            EvidenceRef(source="CUC.UCOS.CLI", operation="platform_summary", confidence="high")
+        ],
     )
 
 
@@ -870,7 +1143,8 @@ class CucSmtpSecurityRule:
             if not _is_true(details.get("allow_untrusted")):
                 continue
             missing = [
-                control for control, field in (
+                control
+                for control, field in (
                     ("authentication", "require_auth_untrusted"),
                     ("TLS", "require_tls_untrusted"),
                 )
@@ -880,25 +1154,30 @@ class CucSmtpSecurityRule:
                 exposed.append(", ".join(missing))
         if not exposed:
             return []
-        return [HealthFinding(
-            rule_id=self.rule_id,
-            title="Unity Connection accepts untrusted SMTP without all protective controls",
-            severity=FindingSeverity.WARNING,
-            recommendation_kind=RecommendationKind.ENGINEERING_RECOMMENDATION,
-            facts=[f"Missing controls for untrusted SMTP: {value}" for value in exposed],
-            reasoning=(
-                "CUPI explicitly reports that connections from untrusted IP addresses are "
-                "allowed while authentication or TLS is disabled."
-            ),
-            recommendation=(
-                "Confirm the integration requirement, then require authentication and TLS or "
-                "restrict the permitted SMTP source addresses."
-            ),
-            evidence=[EvidenceRef(
-                source="CUC.CUPI", operation="CucSmtpConfiguration_bounded_get",
-                confidence="high",
-            )],
-        )]
+        return [
+            HealthFinding(
+                rule_id=self.rule_id,
+                title="Unity Connection accepts untrusted SMTP without all protective controls",
+                severity=FindingSeverity.WARNING,
+                recommendation_kind=RecommendationKind.ENGINEERING_RECOMMENDATION,
+                facts=[f"Missing controls for untrusted SMTP: {value}" for value in exposed],
+                reasoning=(
+                    "CUPI explicitly reports that connections from untrusted IP addresses are "
+                    "allowed while authentication or TLS is disabled."
+                ),
+                recommendation=(
+                    "Confirm the integration requirement, then require authentication and TLS or "
+                    "restrict the permitted SMTP source addresses."
+                ),
+                evidence=[
+                    EvidenceRef(
+                        source="CUC.CUPI",
+                        operation="CucSmtpConfiguration_bounded_get",
+                        confidence="high",
+                    )
+                ],
+            )
+        ]
 
 
 class CucmTopologyCompletenessRule:
@@ -914,31 +1193,38 @@ class CucmTopologyCompletenessRule:
 
     def evaluate(self, facts: AssessmentFacts) -> list[HealthFinding]:
         empty = [
-            item for item in facts.configuration_objects
+            item
+            for item in facts.configuration_objects
             if (field := self.membership_fields.get(item.object_type))
             and item.details.get("relationship_collection") == "collected"
             and not item.details.get(field)
         ]
         if not empty:
             return []
-        return [HealthFinding(
-            rule_id=self.rule_id,
-            title="One or more call-routing or media-resource containers have no members",
-            severity=FindingSeverity.WARNING,
-            recommendation_kind=RecommendationKind.ENGINEERING_RECOMMENDATION,
-            facts=[f"{item.object_type}: {item.name}" for item in empty],
-            reasoning=(
-                "The bounded AXL get response completed successfully but returned no members "
-                "for the listed container. Calls depending on it may have no usable destination."
-            ),
-            recommendation=(
-                "Verify whether each empty object is unused; populate active dependencies or "
-                "remove obsolete references through the normal change process."
-            ),
-            evidence=[EvidenceRef(
-                source="AXL", operation="diagnostic_relationship_enrichment", confidence="high",
-            )],
-        )]
+        return [
+            HealthFinding(
+                rule_id=self.rule_id,
+                title="One or more call-routing or media-resource containers have no members",
+                severity=FindingSeverity.WARNING,
+                recommendation_kind=RecommendationKind.ENGINEERING_RECOMMENDATION,
+                facts=[f"{item.object_type}: {item.name}" for item in empty],
+                reasoning=(
+                    "The bounded AXL get response completed successfully but returned no members "
+                    "for the listed container. Calls depending on it may have no usable destination."
+                ),
+                recommendation=(
+                    "Verify whether each empty object is unused; populate active dependencies or "
+                    "remove obsolete references through the normal change process."
+                ),
+                evidence=[
+                    EvidenceRef(
+                        source="AXL",
+                        operation="diagnostic_relationship_enrichment",
+                        confidence="high",
+                    )
+                ],
+            )
+        ]
 
 
 class ConfigurationInventorySummaryRule:
@@ -956,10 +1242,7 @@ class ConfigurationInventorySummaryRule:
                 title="Configuration inventory data collected",
                 facts=[
                     f"Configuration objects: {len(facts.configuration_objects)}",
-                    *[
-                        f"{object_type}: {count}"
-                        for object_type, count in sorted(counts.items())
-                    ],
+                    *[f"{object_type}: {count}" for object_type, count in sorted(counts.items())],
                 ],
                 operation="configuration_inventory_summary",
             )
