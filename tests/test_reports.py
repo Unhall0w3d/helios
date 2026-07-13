@@ -198,6 +198,9 @@ class ReportBuilderTests(unittest.TestCase):
 
     def test_aletheiauc_template_uses_shared_design_system_composition(self) -> None:
         payload = HtmlReportBuilder().build(self.report)
+        hero_copy = payload.split('<div class="hero-copy rds-hero__content">', 1)[1].split(
+            '<div class="capability-row', 1,
+        )[0]
 
         self.assertIn("rds-hero__overlay", payload)
         self.assertIn("rds-section rds-watermark", payload)
@@ -206,6 +209,10 @@ class ReportBuilderTests(unittest.TestCase):
         self.assertIn("metric-card", payload)
         self.assertIn("body.aletheiauc-report::before", payload)
         self.assertIn("AletheiaUC Assessment", payload)
+        self.assertNotIn('class="rds-logo"', hero_copy)
+        self.assertIn(".aletheiauc-report .rds-divider", payload)
+        self.assertIn("height: 16px", payload)
+        self.assertIn("background-size: 100% 16px", payload)
 
     def test_comsource_template_is_standalone_and_brand_isolated(self) -> None:
         payload = HtmlReportBuilder(customer_safe=True, template="comsource").build(self.report)

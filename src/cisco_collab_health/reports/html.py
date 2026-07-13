@@ -912,11 +912,15 @@ class HtmlReportBuilder:
         """Render the stable hero structure; themes only supply identity and art."""
 
         logo_alt = "ComSource" if is_comsource else "AletheiaUC"
+        logo_markup = (
+            f'<img class="rds-logo" src="{logo_image}" alt="{logo_alt}">'
+            if is_comsource else ""
+        )
         return f"""
     <img class="hero-art rds-hero__art" src="{hero_image}" alt="" aria-hidden="true">
     <div class="rds-hero__overlay"></div>
     <div class="hero-copy rds-hero__content">
-      <img class="rds-logo" src="{logo_image}" alt="{logo_alt}">
+      {logo_markup}
       <p class="eyebrow rds-eyebrow">{escape(self.template.eyebrow)}</p>
       <h1 class="rds-title">{escape(self.template.title)}</h1>
       <p class="rds-subtitle">{escape(self.template.tagline)}</p>
@@ -1022,6 +1026,10 @@ class HtmlReportBuilder:
       width: auto;
       height: 5px;
       background: linear-gradient(90deg, #6a4cff, #22d3ee, #ffc75e);
+    }
+    .aletheiauc-report .rds-divider {
+      height: 16px;
+      background-size: 100% 16px;
     }
     .aletheiauc-report .report-hero .header-meta {
       position: absolute;

@@ -54,8 +54,11 @@ evidence remain unchanged. CUCM line-group membership and SIP destinations are
 shown only when the expected bounded AXL object was returned.
 
 The standalone AletheiaUC report embeds only the artwork it actively renders;
-the hero image is not duplicated as a section watermark. This keeps the report
-self-contained while avoiding unnecessary bundle growth. Active service
+the hero image is not duplicated as a section watermark or accompanied by a
+second logo above the engineering-brief label. The full-width divider between
+the hero and executive overview uses a compact 16-pixel display height to avoid
+vertical stretching. This keeps the report self-contained while avoiding
+unnecessary bundle growth. Active service
 certificates and trust-store entries are summarized separately so stale trust
 entries are not presented as proof of an outage.
 
