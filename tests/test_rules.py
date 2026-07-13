@@ -20,6 +20,7 @@ from cisco_collab_health.rules.basic import (
     CollectorHealthRule,
     CertificateValidityRule,
     CucPlatformStatusRule,
+    CucmPlatformHealthRule,
     CucServicePolicyRule,
     DeviceInventorySummaryRule,
     DeviceLoadRule,
@@ -101,6 +102,22 @@ class CucPlatformRulesTests(unittest.TestCase):
         self.assertEqual(findings[0].severity, FindingSeverity.WARNING)
         self.assertIn("Connection Conversation Manager", findings[0].facts[0])
         self.assertNotIn("Connection Mailbox Sync", " ".join(findings[0].facts))
+
+    def test_cucm_platform_rule_flags_unsynced_ntp_and_replication(self) -> None:
+        findings = CucmPlatformHealthRule().evaluate(
+            AssessmentFacts(
+                platform_checks=[
+                    PlatformCheckFact(
+                        "cucm-sub", "utils ntp status", "collected", {"synchronized": "false"}, "CUCM.UCOS.CLI"
+                    ),
+                    PlatformCheckFact(
+                        "cucm-pub", "utils dbreplication runtimestate", "collected", {"replication_bad_rows": "1"}, "CUCM.UCOS.CLI"
+                    ),
+                ]
+            )
+        )
+
+        self.assertEqual([finding.severity for finding in findings], [FindingSeverity.CRITICAL, FindingSeverity.CRITICAL])
 
 
 class CertificateValidityRuleTests(unittest.TestCase):

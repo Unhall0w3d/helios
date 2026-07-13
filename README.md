@@ -471,6 +471,11 @@ CUCM SOAP/API code out of CUC-only runs and CUC CLI code out of CUCM-only runs.
 The staged migration and future report-section ownership are documented in
 [Technology Modularization Plan](docs/TECHNOLOGY_MODULARIZATION_PLAN.md).
 
+During CUCM diagnostic capture, the technology plugin also performs bounded
+per-node UCOS CLI collection after AXL node discovery. It captures NTP, DRS,
+database replication, status, version, core-file, and service evidence for
+offline review and conservative priority findings.
+
 Multi-technology migration has started with an assessment-profile model. An
 assessment profile groups named targets such as `call-control` and `voicemail`;
 each target references its own connection profile and therefore its own GUI/API

@@ -36,3 +36,13 @@ subscriber node facts for the shared cluster-member report table. A prior
 `show perf query class Processor|Memory` probe was removed after live CUC output
 showed the appliance parses it as an invalid `ProcessorMemory` class; it did not
 produce usable assessment data.
+
+## CUCM diagnostic CLI pilot
+
+When a CUCM diagnostic assessment has already discovered cluster nodes through
+AXL, the CUCM plugin runs bounded, read-only commands on each discovered node:
+`show status`, active/inactive version, NTP status, DRS history/status,
+database-replication runtime state, active core files, and service list. The
+collector retains raw output and only promotes conservative NTP, DRS,
+replication, and core-file conditions into findings. Fresh CUCM artifacts remain
+required to validate output variants and thresholds before expanding this pilot.

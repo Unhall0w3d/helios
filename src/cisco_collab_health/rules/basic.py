@@ -634,6 +634,36 @@ class CucPlatformHealthRule:
         return findings
 
 
+class CucmPlatformHealthRule:
+    """Conservative health findings from bounded CUCM UCOS CLI summaries."""
+
+    rule_id = "cucm.platform_health"
+
+    def evaluate(self, facts: AssessmentFacts) -> list[HealthFinding]:
+        checks = [check for check in facts.platform_checks if check.source == "CUCM.UCOS.CLI"]
+        findings: list[HealthFinding] = []
+        ntp_unsynced = [check.node for check in checks if check.check_name == "utils ntp status" and check.details.get("synchronized") == "false"]
+        if ntp_unsynced:
+            findings.append(_cucm_cli_finding("ntp", FindingSeverity.CRITICAL, "One or more CUCM nodes are not synchronized to NTP", ["Affected nodes: " + ", ".join(sorted(ntp_unsynced))], "Time synchronization is required for reliable certificates, logging, and clustered service behavior.", "Have the UC administrator restore NTP reachability and confirm each affected node synchronizes before making other cluster changes."))
+        drs_unavailable = [check.node for check in checks if check.check_name.startswith("utils disaster_recovery") and check.details.get("drs_unavailable") == "true"]
+        if drs_unavailable:
+            findings.append(_cucm_cli_finding("drs_unavailable", FindingSeverity.WARNING, "CUCM Disaster Recovery status could not be verified", ["Affected nodes: " + ", ".join(sorted(set(drs_unavailable)))], "The DRS Master Agent may be unavailable or busy, leaving backup status uncertain.", "Review DRS status and the Master Agent, then confirm a recent successful backup before relying on recovery readiness."))
+        no_backup = [check.node for check in checks if check.check_name == "utils disaster_recovery history backup" and check.details.get("successful_backup_entries") == "0" and check.details.get("drs_unavailable") != "true"]
+        if no_backup:
+            findings.append(_cucm_cli_finding("backup_history", FindingSeverity.WARNING, "No successful CUCM backup was found in collected history", ["Affected nodes: " + ", ".join(sorted(no_backup))], "Without a confirmed successful backup, recovery readiness cannot be demonstrated from this assessment.", "Review the DRS schedule, destination, and most recent job result; run or repair a backup if needed."))
+        replication = [check for check in checks if check.check_name == "utils dbreplication runtimestate" and int(check.details.get("replication_bad_rows", "0")) > 0]
+        if replication:
+            findings.append(_cucm_cli_finding("replication", FindingSeverity.CRITICAL, "CUCM database replication needs review", [f"Nodes reporting incomplete replication rows: {', '.join(sorted(check.node for check in replication))}"], "One or more collected replication rows were not reported as '(2) Setup Completed'.", "Review the replication runtime output and Cisco-supported remediation procedure before changing cluster services or database state."))
+        cores = [check.node for check in checks if check.check_name == "utils core active list" and check.details.get("core_files") == "present"]
+        if cores:
+            findings.append(_cucm_cli_finding("core_files", FindingSeverity.WARNING, "Active CUCM core files were found", ["Affected nodes: " + ", ".join(sorted(cores))], "Core files can indicate an application or platform process failure requiring engineering review.", "Preserve the artifacts and review the core files with Cisco TAC or the responsible engineering team before removal."))
+        return findings
+
+
+def _cucm_cli_finding(suffix: str, severity: FindingSeverity, title: str, facts: list[str], reasoning: str, recommendation: str) -> HealthFinding:
+    return HealthFinding(rule_id=f"cucm.platform_health.{suffix}", title=title, severity=severity, recommendation_kind=RecommendationKind.ENGINEERING_RECOMMENDATION, facts=facts, reasoning=reasoning, recommendation=recommendation, evidence=[EvidenceRef(source="CUCM.UCOS.CLI", operation="platform_summary", confidence="high")])
+
+
 class CucPlatformStatusRule:
     """Evaluate normalized Unity Connection status data already captured over UCOS CLI."""
 

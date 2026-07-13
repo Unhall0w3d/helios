@@ -30,13 +30,16 @@ class CucmPlugin:
             collectors.append(AxlCollector())
         if diagnostic_capture:
             from cisco_collab_health.collectors.diagnostic import DiagnosticCaptureCollector
+            from cisco_collab_health.collectors.cucm_platform import CucmPlatformCollector
 
             collectors.append(DiagnosticCaptureCollector(preflight.transport_available_interfaces))
+            collectors.append(CucmPlatformCollector())
         return collectors
 
     def rules(self) -> list[HealthRule]:
         from cisco_collab_health.rules.basic import (
             CertificateValidityRule,
+            CucmPlatformHealthRule,
             ConfigurationInventorySummaryRule,
             DeviceInventorySummaryRule,
             DeviceLoadRule,
@@ -49,6 +52,7 @@ class CucmPlugin:
         )
 
         return [
+            CucmPlatformHealthRule(),
             CertificateValidityRule(),
             DeviceLoadRule(),
             DeviceInventorySummaryRule(),
