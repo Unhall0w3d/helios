@@ -14,10 +14,12 @@ from cisco_collab_health.collectors.axl import AxlCollector, AxlVersionPolicy
 from cisco_collab_health.collectors.axl.collector import (
     DIAGNOSTIC_AXL_GET_RELATIONSHIPS,
     DIAGNOSTIC_AXL_OPERATIONS,
+    LINE_FORWARDING_SQL,
 )
 from cisco_collab_health.collectors.axl.bodies import diagnostic_get_body, diagnostic_list_body
 from cisco_collab_health.collectors.axl.parsers import (
     parse_configuration_object_details,
+    parse_line_forwarding,
     parse_route_pattern_relationships,
 )
 from cisco_collab_health.collectors.axl_errors import AxlCollectionError, AxlVersionError
@@ -244,7 +246,7 @@ class AxlCollectorTests(unittest.TestCase):
         operations = {operation for operation, _, _ in DIAGNOSTIC_AXL_OPERATIONS}
 
         self.assertTrue({
-            "listHuntPilot", "listHuntList", "listLineGroup", "listLine",
+            "listHuntPilot", "listHuntList", "listLineGroup",
             "listSipTrunkSecurityProfile", "listLdapDirectory",
             "listPhoneSecurityProfile", "listMediaResourceList",
         }.issubset(operations))
@@ -252,6 +254,9 @@ class AxlCollectorTests(unittest.TestCase):
             "HuntList", "LineGroup", "SipTrunk", "MediaResourceGroup",
             "MediaResourceList",
         }.issubset(DIAGNOSTIC_AXL_GET_RELATIONSHIPS))
+        self.assertNotIn("listLine", operations)
+        self.assertIn("select first 500", LINE_FORWARDING_SQL.lower())
+        self.assertIn("inner join callforwarddynamic", LINE_FORWARDING_SQL.lower())
 
     def test_device_defaults_sql_is_bounded_to_configured_models_and_xml_safe(self) -> None:
         body = execute_sql_query_body(DEVICE_DEFAULTS_SQL)
@@ -302,6 +307,19 @@ class AxlCollectorTests(unittest.TestCase):
 
         self.assertIn("<members><member><routePartitionName /></member></members>", body)
 
+    def test_returned_tags_merge_shared_nested_containers(self) -> None:
+        body = diagnostic_get_body(
+            "getSipTrunk", key_fields={"name": "PSTN"},
+            returned_tags=(
+                "destinations/destination/address",
+                "destinations/destination/port",
+            ),
+        )
+
+        self.assertEqual(body.count("<destinations>"), 1)
+        self.assertEqual(body.count("<destination>"), 1)
+        self.assertIn("<address /><port />", body)
+
     def test_diagnostic_get_body_and_parser_preserve_relationships(self) -> None:
         body = diagnostic_get_body(
             "getRouteList", key_fields={"name": "PSTN & Backup"},
@@ -317,7 +335,33 @@ class AxlCollectorTests(unittest.TestCase):
         )
 
         self.assertIn("<name>PSTN &amp; Backup</name>", body)
+        self.assertIsNotNone(details)
+        assert details is not None
         self.assertEqual(details["route_groups"], "PRIMARY-RG, BACKUP-RG")
+
+    def test_relationship_parser_distinguishes_missing_object_from_empty_membership(self) -> None:
+        missing = parse_configuration_object_details(
+            "<Envelope><return>{ABC}</return></Envelope>",
+            "getLineGroup", ("members/member/directoryNumber",),
+        )
+        empty = parse_configuration_object_details(
+            "<Envelope><return><lineGroup><members /></lineGroup></return></Envelope>",
+            "getLineGroup", ("members/member/directoryNumber",),
+        )
+
+        self.assertIsNone(missing)
+        self.assertEqual(empty, {})
+
+    def test_line_forwarding_sql_parser_normalizes_configured_cfa(self) -> None:
+        response = """<Envelope><return><row><lineuuid>ABC</lineuuid>
+        <pattern>1000</pattern><partition>Internal</partition>
+        <forwardall>2000</forwardall></row></return></Envelope>"""
+
+        facts = parse_line_forwarding(response)
+
+        self.assertEqual(len(facts), 1)
+        self.assertEqual(facts[0].name, "1000")
+        self.assertEqual(facts[0].details["forward_all_destination"], "2000")
 
     def test_route_pattern_sql_relationships_are_grouped_by_uuid_and_order(self) -> None:
         response = """<Envelope><return>

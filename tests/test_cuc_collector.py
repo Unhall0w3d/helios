@@ -12,10 +12,11 @@ from cisco_collab_health.collectors.cuc import (
     _cupi_total,
 )
 from cisco_collab_health.models.assessment import AssessmentReport
+from cisco_collab_health.models.facts import AssessmentFacts, ConfigurationObjectFact
 from cisco_collab_health.models.runtime import CollectionContext
 from cisco_collab_health.reports.coverage import build_report_coverage
 from cisco_collab_health.reports.html import HtmlReportBuilder
-from cisco_collab_health.transport.http import CapturedHttpResponse
+from cisco_collab_health.transport.http import CapturedHttpError, CapturedHttpResponse
 
 
 class FakeHttpClient:
@@ -37,6 +38,25 @@ class ConfigurationHttpClient:
         else:
             body = '<Items total="0" />'
         return CapturedHttpResponse(200, "OK", body, Path("response.txt"))
+
+
+class MailboxStoreFallbackHttpClient:
+    def __init__(self):
+        self.endpoints = []
+
+    def get(self, endpoint, context, **kwargs):
+        del context, kwargs
+        self.endpoints.append(endpoint)
+        if "/vmrest/mailboxstores" in endpoint:
+            raise CapturedHttpError("HTTP 404: Not Found", status=404)
+        if "/vmrest/voicemailboxstores" in endpoint:
+            return CapturedHttpResponse(
+                200, "OK",
+                '{"@total":"1","MailboxStore":{"DisplayName":"Unity Messaging Database",'
+                '"Server":"cuc-pub","Mounted":true,"MaxSizeMB":15000}}',
+                Path("response.txt"),
+            )
+        return CapturedHttpResponse(200, "OK", '<Items total="0" />', Path("response.txt"))
 
 
 class CucCollectorTests(unittest.TestCase):
@@ -90,6 +110,23 @@ class CucCollectorTests(unittest.TestCase):
         self.assertEqual(records[0].details["require_tls_untrusted"], "False")
         self.assertNotIn("password", records[0].details)
 
+    def test_mailbox_store_uses_canonical_endpoint_with_legacy_404_fallback(self) -> None:
+        client = MailboxStoreFallbackHttpClient()
+
+        result = CucCollector(http_client=client, diagnostic_capture=True).collect(
+            CollectionContext(product="cuc", publisher_ip="192.0.2.20")
+        )
+
+        self.assertTrue(any("/vmrest/mailboxstores?" in value for value in client.endpoints))
+        self.assertTrue(any("/vmrest/voicemailboxstores?" in value for value in client.endpoints))
+        mailbox = next(
+            item for item in result.facts.configuration_objects
+            if item.object_type == "CucMailboxStore"
+        )
+        self.assertEqual(mailbox.name, "Unity Messaging Database")
+        self.assertEqual(mailbox.details["server"], "cuc-pub")
+        self.assertFalse(any("mailbox stores GET failed" in item for item in result.warnings))
+
     def test_cupi_inventory_is_visible_as_cuc_report_content(self) -> None:
         result = CucCollector(http_client=FakeHttpClient(), diagnostic_capture=True).collect(
             CollectionContext(product="cuc", publisher_ip="192.0.2.20")
@@ -124,3 +161,20 @@ class CucCollectorTests(unittest.TestCase):
         self.assertIn("SmtpConfiguration", engineering)
         self.assertIn("example.invalid", customer_safe)
         self.assertIn("SmtpConfiguration", customer_safe)
+
+    def test_repeated_cuc_schedules_are_aggregated_in_report_details(self) -> None:
+        schedule = ConfigurationObjectFact(
+            object_type="CucSchedule", name="All Hours", details={},
+            source="CUC.CUPI/vmrest/schedules",
+        )
+        report = AssessmentReport(
+            AssessmentFacts(configuration_objects=[schedule, schedule, schedule]), [], [],
+        )
+
+        html = HtmlReportBuilder().build(report)
+        section = html.split("Unity Connection Configuration", 1)[1].split(
+            "Collection Coverage", 1,
+        )[0]
+
+        self.assertEqual(section.count(">All Hours<"), 1)
+        self.assertIn("<td>3</td>", section)

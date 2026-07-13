@@ -78,8 +78,9 @@ Current capabilities:
 - Bounded `executeSQLQuery` collection of configured-model Device Defaults and firmware facts
 - Inventory-only summaries by model and device pool
 - Diagnostic dial-plan relationships for route-pattern destinations, route-list/route-group membership, and CSS partitions
-- Diagnostic CUCM hunt, line-forwarding, SIP trunk/profile security, LDAP,
-  phone-security, and media-resource configuration with bounded relationship reads
+- Diagnostic CUCM hunt, server-bounded configured call-forward-all, SIP trunk
+  destinations/profile security, LDAP, phone-security, and media-resource
+  configuration with bounded relationship reads
 - Diagnostic CUC telephony integration, routing, schedule, mailbox-policy,
   Unified Messaging, and SMTP-security configuration through bounded CUPI GETs
 - Per-node UC Certificate Management REST snapshots using OS read credentials
@@ -359,15 +360,20 @@ adds raw request/response evidence for:
 - PerfMon object/counter discovery plus two samples of `Processor`, `Memory`, and `Cisco CallManager` counters on every discovered node
 - Bounded AXL configuration discovery for call-manager groups, regions, locations,
   SIP trunks, route patterns, partitions, CSSes, route groups/lists, translation
-  patterns, hunt pilots/lists, line groups, directory numbers and forwarding,
+  patterns, hunt pilots/lists, line groups,
   LDAP directories, SIP/device security profiles, and media resources. Every list
   operation uses the configured per-operation cap; a CUCM response that ignores
-  the page size is retained and explicitly marked server-unbounded.
+  the page size is retained and explicitly marked server-unbounded. Broad
+  `listLine` is deliberately excluded because live CUCM ignored its page bound.
 - Up to 500 bounded AXL `get` reads to recover route-list, route-group, CSS, SIP
   trunk destination/security, hunt-list/line-group, and MRG/MRGL relationships
-  that CUCM may omit from list responses
+  that CUCM may omit from list responses. Shared nested returned tags are emitted
+  as one AXL tree, and an empty-membership finding requires the expected object
+  to be present in the successful response.
 - One `first 500` read-only SQL relationship query for route-pattern destinations
   and ordered route-group membership, keyed back to the AXL list UUID
+- One `first 500` read-only SQL query for lines with a configured call-forward-all
+  destination; this replaces the CUCM-unbounded wildcard `listLine` request
 - UUID-preserving configuration normalization, including route-filter and dial-plan
   distinctions for otherwise identical route-pattern/partition combinations
 
@@ -469,7 +475,10 @@ systems, port groups/ports, SIP security profiles, routing rules, schedules,
 mailbox stores, message-aging policy, and SMTP configuration. Only an explicit
 allowlist of non-secret configuration fields is normalized; credentials, mailbox
 identities, addresses, and message content are excluded. Unsupported
-version-specific resources are reported as collection warnings.
+version-specific resources are reported as collection warnings. Mailbox-store
+collection uses Cisco's documented `/vmrest/mailboxstores` path and retries the
+legacy `/vmrest/voicemailboxstores` alias only after a 404. Repeated schedule
+names are aggregated in the report detail table while raw records remain intact.
 
 The same diagnostic mode runs the following read-only Unity Connection UCOS SSH
 commands when the platform account and `paramiko` dependency are available:

@@ -30,6 +30,10 @@ class CapturedHttpResponse:
 class CapturedHttpError(RuntimeError):
     """Raised after an unsuccessful HTTP response has been captured."""
 
+    def __init__(self, message: str, *, status: int | None = None) -> None:
+        super().__init__(message)
+        self.status = status
+
 
 class CapturedHttpClient:
     """Perform GET requests while retaining sanitized request/response artifacts."""
@@ -88,7 +92,9 @@ class CapturedHttpClient:
                 status=exc.code,
                 reason=str(exc.reason),
             )
-            raise CapturedHttpError(f"HTTP {exc.code}: {exc.reason}") from exc
+            raise CapturedHttpError(
+                f"HTTP {exc.code}: {exc.reason}", status=exc.code,
+            ) from exc
         except (urllib.error.URLError, OSError) as exc:
             reason_value = getattr(exc, "reason", exc)
             artifact_response = f"TRANSPORT ERROR\n{reason_value}\n"

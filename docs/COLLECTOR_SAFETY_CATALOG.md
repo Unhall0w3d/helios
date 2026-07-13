@@ -23,17 +23,24 @@ not normalized.
 
 CUCM diagnostic AXL permits only `list*`, `get*`, and the fixed
 `executeSQLQuery` statements defined in the source catalog. Added discovery
-covers hunt pilots/lists, line groups, bounded directory numbers and forwarding,
+offers hunt pilots/lists, line groups, server-bounded configured CFA,
 SIP trunk/profile security, LDAP directories, phone-security profiles, and
 MRG/MRGL membership. A successful relationship GET is marked before empty
 membership can generate a finding, preventing a failed or unsupported API call
 from being interpreted as an empty configuration.
 
+Live CUCM validation showed that wildcard `listLine` can ignore AXL `first` and
+return the entire line inventory. That operation is no longer used. Configured
+call-forward-all coverage comes from a fixed `select first 500` read-only query.
+Nested returned tags with common parents are merged into one request tree so SIP
+destinations and line-group members are requested together correctly. A get
+response that lacks the expected object is marked unavailable, not empty.
+
 No general SQL input is accepted. CUC Informix mailbox queries remain deferred
 until version-specific fixtures establish command syntax, result schemas, and
-acceptable execution time. CUCM SQL remains limited to the fixed Device Defaults
-and `first 500` route-pattern relationship queries; standard AXL list/get calls
-are preferred wherever available.
+acceptable execution time. CUCM SQL remains limited to fixed Device Defaults,
+`first 500` route-pattern relationship, and `first 500` configured CFA queries;
+standard AXL list/get calls are preferred wherever they remain reliably bounded.
 
 | ID | Command | Timeout |
 | --- | --- | --- |

@@ -1911,10 +1911,32 @@ class HtmlReportBuilder:
             f"<tr><td>{escape(object_type)}</td><td>{count}</td></tr>"
             for object_type, count in sorted(counts.items())
         )
+        repeated_schedule_counts = Counter(
+            (item.object_type, item.name, tuple(sorted(item.details.items())))
+            for item in configuration
+            if item.object_type in {"CucSchedule", "CucScheduleSet"}
+        )
+        detail_items = [
+            (item, 1)
+            for item in configuration
+            if item.object_type not in {"CucSchedule", "CucScheduleSet"}
+        ]
+        seen_schedule_keys: set[tuple[str, str, tuple[tuple[str, str], ...]]] = set()
+        for item in configuration:
+            if item.object_type not in {"CucSchedule", "CucScheduleSet"}:
+                continue
+            key = (item.object_type, item.name, tuple(sorted(item.details.items())))
+            if key in seen_schedule_keys:
+                continue
+            seen_schedule_keys.add(key)
+            detail_items.append((item, repeated_schedule_counts[key]))
         detail_rows = "".join(
             f"<tr><td>{escape(item.object_type.removeprefix('Cuc'))}</td>"
-            f"<td>{escape(item.name)}</td><td>{escape(display_details(item.details))}</td></tr>"
-            for item in sorted(configuration, key=lambda value: (value.object_type, value.name))
+            f"<td>{escape(item.name)}</td><td>{occurrences}</td>"
+            f"<td>{escape(display_details(item.details))}</td></tr>"
+            for item, occurrences in sorted(
+                detail_items, key=lambda value: (value[0].object_type, value[0].name)
+            )
         )
         return f"""
     <section class="technology-section cuc-section">
@@ -1925,7 +1947,7 @@ class HtmlReportBuilder:
       <table><thead><tr><th>Configuration area</th><th>Records</th></tr></thead>
       <tbody>{summary_rows}</tbody></table>
       <details><summary>Show Unity Connection configuration details</summary>
-      <div class="table-scroll"><table><thead><tr><th>Type</th><th>Name</th><th>Configuration</th></tr></thead>
+      <div class="table-scroll"><table><thead><tr><th>Type</th><th>Name</th><th>Occurrences</th><th>Configuration</th></tr></thead>
       <tbody>{detail_rows}</tbody></table></div></details>
     </section>
 """

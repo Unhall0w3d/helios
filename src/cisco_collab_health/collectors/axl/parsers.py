@@ -185,7 +185,7 @@ def parse_configuration_objects(
 
 def parse_configuration_object_details(
     response_text: str, operation: str, returned_tags: tuple[str, ...],
-) -> dict[str, str]:
+) -> dict[str, str] | None:
     """Parse relationship fields from one AXL get response."""
 
     try:
@@ -196,12 +196,41 @@ def parse_configuration_object_details(
     element_name = object_name[:1].lower() + object_name[1:]
     element = next(_iter_local_name(root, element_name), None)
     if element is None:
-        return {}
+        return None
     return {
         _configuration_detail_name(tag): value
         for tag in returned_tags
         if (value := ", ".join(_descendant_path_texts(element, tag)))
     }
+
+
+def parse_line_forwarding(response_text: str) -> list[ConfigurationObjectFact]:
+    """Normalize a server-bounded SQL result containing configured CFA destinations."""
+
+    try:
+        root = ET.fromstring(response_text)
+    except ET.ParseError as exc:
+        raise AxlCollectionError(f"Unable to parse line-forwarding SQL response: {exc}") from exc
+    facts = []
+    for row in _iter_local_name(root, "row"):
+        pattern = _child_text(row, "pattern")
+        destination = _child_text(row, "forwardall")
+        if not pattern or not destination:
+            continue
+        partition = _child_text(row, "partition")
+        voicemail = _child_text(row, "forwardallvoicemail")
+        facts.append(ConfigurationObjectFact(
+            object_type="Line",
+            name=pattern,
+            details={
+                **({"partition": partition} if partition else {}),
+                "forward_all_destination": destination,
+                **({"forward_all_voicemail": voicemail} if voicemail else {}),
+            },
+            source="AXL.executeSQLQuery.lineForwarding",
+            uuid=_child_text(row, "lineuuid"),
+        ))
+    return facts
 
 
 def parse_route_pattern_relationships(

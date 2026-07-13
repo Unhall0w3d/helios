@@ -27,7 +27,7 @@ its replacement files were applied.
 | Documentation and governance | Resolved for current scope | Security/data handling, transport trust, collector safety, report templates, branding, and modularization guidance are linked from README. | 4 |
 | Module decomposition | Outstanding, intentionally deferred | `reports/html.py`, `config.py`, `application.py`, and `rules/basic.py` remain responsibility-dense. No safe broad move is required for hardening. | 5 plan only |
 | UCOS command catalog | Resolved for CUC | `collectors.cuc_platform.CUC_COMMAND_CATALOG` provides stable IDs, command text, per-command timeouts, diagnostic-only scope, and sensitivity metadata. | 5 |
-| CUC/CUCM configuration depth | Implemented; live validation required | Bounded CUPI configuration GETs and extended AXL hunt, forwarding, integration-security, LDAP, and media-resource discovery feed dedicated report tables. CUC Informix SQL remains deferred pending version fixtures and load validation. | validation |
+| CUC/CUCM configuration depth | Implemented; continued live validation required | Bounded CUPI configuration GETs and extended AXL hunt, configured CFA, SIP-destination, integration-security, LDAP, and media-resource discovery feed dedicated report tables. The live CUCM 15/CUC 15 review corrected nested returned tags, removed unbounded `listLine`, and corrected the mailbox-store endpoint. CUC Informix SQL remains deferred pending version fixtures and load validation. | validation |
 | Product/package naming | No longer an immediate hardening defect | Public product and default command are AletheiaUC; distribution/import aliases remain compatibility debt. Do not rename package in this initiative. | 4 documentation |
 
 ## Dependency ordering and risks

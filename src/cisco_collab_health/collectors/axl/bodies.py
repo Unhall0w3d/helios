@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+from typing import TypeAlias
 from xml.sax.saxutils import escape
+
+TagTree: TypeAlias = dict[str, "TagTree"]
 
 def get_ccm_version_body() -> str:
     return "<axl:getCCMVersion />"
@@ -93,7 +96,7 @@ def diagnostic_list_body(
 ) -> str:
     """Build one bounded AXL list request from a trusted operation specification."""
 
-    tags = "\n".join(f"        {_nested_return_tag(tag)}" for tag in returned_tags)
+    tags = _returned_tags_xml(returned_tags)
     return f"""<axl:{operation} first="{first}" skip="{skip}">
       <searchCriteria>
         <{criteria_tag}>%</{criteria_tag}>
@@ -112,7 +115,7 @@ def diagnostic_get_body(
     keys = "\n".join(
         f"      <{tag}>{escape(value)}</{tag}>" for tag, value in key_fields.items()
     )
-    tags = "\n".join(f"        {_nested_return_tag(tag)}" for tag in returned_tags)
+    tags = _returned_tags_xml(returned_tags)
     return f"""<axl:{operation}>
 {keys}
       <returnedTags>
@@ -121,12 +124,25 @@ def diagnostic_get_body(
     </axl:{operation}>"""
 
 
-def _nested_return_tag(path: str) -> str:
-    parts = path.split("/")
-    rendered = f"<{parts[-1]} />"
-    for part in reversed(parts[:-1]):
-        rendered = f"<{part}>{rendered}</{part}>"
-    return rendered
+def _returned_tags_xml(paths: tuple[str, ...]) -> str:
+    """Render one merged returnedTags tree instead of duplicate AXL containers."""
+
+    tree: TagTree = {}
+    for path in paths:
+        branch = tree
+        for part in path.split("/"):
+            branch = branch.setdefault(part, {})
+
+    def render(branch: TagTree) -> str:
+        elements = []
+        for tag, children in branch.items():
+            if children:
+                elements.append(f"<{tag}>{render(children)}</{tag}>")
+            else:
+                elements.append(f"<{tag} />")
+        return "".join(elements)
+
+    return "\n".join(f"        {render({tag: children})}" for tag, children in tree.items())
 
 
 def _paging_attributes(*, first: int | None, skip: int | None) -> str:

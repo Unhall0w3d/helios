@@ -32,6 +32,7 @@ class CupiProbe:
     identity_fields: tuple[str, ...] = ("displayname", "name")
     detail_fields: tuple[tuple[str, tuple[str, ...]], ...] = ()
     singleton: bool = False
+    alternate_paths: tuple[str, ...] = ()
 
 
 BASE_PROBES = (
@@ -120,12 +121,16 @@ DIAGNOSTIC_CONFIGURATION_PROBES = (
         ),
     ),
     CupiProbe(
-        "CucMailboxStore", "Voicemail mailbox stores", "/vmrest/voicemailboxstores",
-        ("VoiceMailBoxStore", "VoicemailBoxStore"),
+        "CucMailboxStore", "Voicemail mailbox stores", "/vmrest/mailboxstores",
+        ("MailboxStore", "VoiceMailBoxStore", "VoicemailBoxStore"),
         detail_fields=(
-            ("server", ("serverdisplayname", "serverobjectid")),
-            ("maximum_size", ("maximumsize", "maxsize")),
+            ("server", ("server", "serverdisplayname", "serverobjectid")),
+            ("mounted", ("mounted",)),
+            ("status", ("status",)),
+            ("maximum_size_mb", ("maxsizemb", "maximumsize", "maxsize")),
+            ("total_size", ("totalsizeofmailbox",)),
         ),
+        alternate_paths=("/vmrest/voicemailboxstores",),
     ),
     CupiProbe(
         "CucMessageAgingPolicy", "Message-aging policies", "/vmrest/messageagingpolicies",
@@ -185,15 +190,34 @@ class CucCollector:
         max_rows = min(max(1, context.diagnostic_axl_max_records), 500)
         for probe in probes:
             requested_rows = max_rows if probe.object_type in configuration_types else 1
-            endpoint = f"https://{node}{probe.path}?rowsPerPage={requested_rows}&pageNumber=1"
             operation = f"{probe.object_type}_bounded_get"
-            try:
-                response = self.http_client.get(
-                    endpoint, context, node=node, interface="cuc_cupi", operation=operation,
+            response = None
+            selected_path = probe.path
+            failure: CapturedHttpError | None = None
+            for path_index, path in enumerate((probe.path, *probe.alternate_paths)):
+                endpoint = (
+                    f"https://{node}{path}?rowsPerPage={requested_rows}&pageNumber=1"
                 )
-            except CapturedHttpError as exc:
-                warnings.append(f"CUC CUPI {probe.label.lower()} GET failed: {exc}")
+                try:
+                    response = self.http_client.get(
+                        endpoint, context, node=node, interface="cuc_cupi",
+                        operation=(operation if path_index == 0 else f"{operation}_fallback"),
+                    )
+                    selected_path = path
+                    break
+                except CapturedHttpError as exc:
+                    failure = exc
+                    if exc.status != 404:
+                        break
+            if response is None:
+                final_error = failure or CapturedHttpError("No supported endpoint succeeded.")
+                warnings.append(f"CUC CUPI {probe.label.lower()} GET failed: {final_error}")
                 continue
+            if selected_path != probe.path:
+                notes.append(
+                    f"CUC CUPI {probe.label.lower()} used compatibility endpoint "
+                    f"{selected_path} after {probe.path} returned HTTP 404."
+                )
             evidence.append(EvidenceRef(
                 source="CUC.CUPI", operation=operation, node=node,
                 artifact_path=response.response_artifact_path, confidence="high",
@@ -210,10 +234,12 @@ class CucCollector:
                     "total": str(total) if total is not None else "unknown",
                     "requested_rows": str(requested_rows),
                 },
-                source=f"CUC.CUPI{probe.path}",
+                source=f"CUC.CUPI{selected_path}",
             ))
             if probe.record_names:
-                facts.configuration_objects.extend(_cupi_configuration_records(response.body, probe))
+                facts.configuration_objects.extend(
+                    _cupi_configuration_records(response.body, probe, source_path=selected_path)
+                )
 
         if self.diagnostic_capture:
             notes.append(
@@ -247,7 +273,9 @@ def _cupi_total(payload: str) -> int | None:
         return None
 
 
-def _cupi_configuration_records(payload: str, probe: CupiProbe) -> list[ConfigurationObjectFact]:
+def _cupi_configuration_records(
+    payload: str, probe: CupiProbe, *, source_path: str | None = None,
+) -> list[ConfigurationObjectFact]:
     """Normalize allowlisted CUPI fields without retaining arbitrary response content."""
 
     records: list[dict[str, str]] = []
@@ -289,7 +317,7 @@ def _cupi_configuration_records(payload: str, probe: CupiProbe) -> list[Configur
             object_type=probe.object_type,
             name=identity,
             details=details,
-            source=f"CUC.CUPI{probe.path}",
+            source=f"CUC.CUPI{source_path or probe.path}",
             uuid=_first(record, ("objectid",)) or None,
         ))
     return normalized

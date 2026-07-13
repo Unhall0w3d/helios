@@ -27,6 +27,7 @@ from cisco_collab_health.collectors.axl.parsers import (
     parse_device_pools,
     parse_phone_inventory,
     parse_process_nodes,
+    parse_line_forwarding,
     parse_route_pattern_relationships,
 )
 from cisco_collab_health.collectors.axl.version import (
@@ -97,15 +98,6 @@ DIAGNOSTIC_AXL_OPERATIONS = (
         ("name", "distributionAlgorithm"),
     ),
     (
-        "listLine", "pattern",
-        (
-            "pattern", "routePartitionName", "usage",
-            "callForwardAll/destination", "callForwardAll/callingSearchSpaceName",
-            "callForwardBusy/destination", "callForwardNoAnswer/destination",
-            "callForwardNotRegistered/destination",
-        ),
-    ),
-    (
         "listLdapDirectory", "name",
         ("name", "ldapDn", "userSearchBase", "active", "repeatInterval", "nextSyncTime"),
     ),
@@ -138,6 +130,16 @@ DIAGNOSTIC_AXL_GET_RELATIONSHIPS = {
         "getMediaResourceList", ("members/member/mediaResourceGroupName",),
     ),
 }
+
+
+LINE_FORWARDING_SQL = """select first 500
+n.pkid as lineuuid, n.dnorpattern as pattern, rp.name as partition,
+cfd.cfadestination as forwardall, cfd.cfavoicemailenabled as forwardallvoicemail
+from numplan as n
+inner join callforwarddynamic as cfd on cfd.fknumplan=n.pkid
+left join routepartition as rp on rp.pkid=n.fkroutepartition
+where cfd.cfadestination is not null and cfd.cfadestination != ''
+order by n.pkid"""
 
 
 class AxlCollector:
@@ -219,6 +221,7 @@ class AxlCollector:
 
         if context.diagnostic_capture:
             self._collect_diagnostic_axl(context, facts, warnings, evidence, notes)
+            self._collect_line_forwarding_sql(context, facts, warnings, evidence, notes)
             self._enrich_diagnostic_relationships(context, facts, warnings, evidence, notes)
             self._enrich_route_pattern_relationships_sql(
                 context, facts, warnings, evidence, notes,
@@ -470,6 +473,13 @@ class AxlCollector:
                 )
                 evidence.append(_evidence_from_soap_response(response, context.publisher_ip))
                 details = parse_configuration_object_details(response.body, operation, tags)
+                if details is None:
+                    enriched.append(replace(
+                        fact,
+                        details={**fact.details, "relationship_collection": "unavailable"},
+                    ))
+                    failures.append(f"{operation} returned no {fact.object_type} object")
+                    continue
                 enriched.append(replace(
                     fact,
                     details={
@@ -491,6 +501,28 @@ class AxlCollector:
         notes.append(
             f"Diagnostic AXL relationship enrichment completed {succeeded} of {attempted} "
             f"bounded get request(s); request limit {limit}."
+        )
+
+    def _collect_line_forwarding_sql(
+        self, context: CollectionContext, facts: AssessmentFacts, warnings: list[str],
+        evidence: list[EvidenceRef], notes: list[str],
+    ) -> None:
+        """Collect configured CFA destinations without an unbounded listLine request."""
+
+        try:
+            response = self._call_axl_response(
+                context, "executeSQLQuery", execute_sql_query_body(LINE_FORWARDING_SQL),
+                artifact_operation="diagnostic_lineForwarding_executeSQLQuery",
+            )
+            evidence.append(_evidence_from_soap_response(response, context.publisher_ip))
+            forwarding = parse_line_forwarding(response.body)
+        except AxlCollectionError as exc:
+            warnings.append(f"Diagnostic line-forwarding SQL failed: {exc}")
+            return
+        facts.configuration_objects.extend(forwarding)
+        notes.append(
+            f"Diagnostic line-forwarding SQL collected {len(forwarding)} configured CFA "
+            "destination(s), server-bounded to the first 500 rows."
         )
 
     def _enrich_route_pattern_relationships_sql(
