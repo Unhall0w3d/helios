@@ -435,11 +435,14 @@ artifact paths:
 
 HTML reports use the `aletheiauc` template by default. It draws on the project
 palette—midnight, violet, blue, cyan, and horizon gold—to create a beacon-like
-engineering brief without embedding or reproducing the repository artwork. The
-same visual system is used by both the full engineering report and the customer
-deliverable. The customer edition retains target names, hostnames, IP addresses,
-devices, dial-plan values, and configuration so customer engineers can interpret
-the assessment.
+next-generation engineering brief with purpose-built techno-sorcery artwork.
+The same semantic report-design components are used by the full engineering
+report, the customer deliverable, ComSource, and future templates. Themes retain
+their own colors, typography, imagery, and logo rules while sharing functional
+metric cards, chapter structure, responsive containment, findings, and evidence
+presentation. The customer edition retains target names, hostnames, IP
+addresses, devices, dial-plan values, and configuration so customer engineers
+can interpret the assessment.
 
 The template is selected with `--html-template aletheiauc`. Template selection
 is intentionally explicit in the report builder and CLI so customer or partner

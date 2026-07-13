@@ -68,23 +68,48 @@ Duplicate extensions produce a warning, while configured alternate-contact and
 system-transfer paths produce an informational restriction-table/toll-fraud
 review; neither finding is emitted when its experimental probe did not complete.
 
-The standalone AletheiaUC report embeds only the artwork it actively renders;
-the hero image is not duplicated as a section watermark or accompanied by a
-second logo above the engineering-brief label. The full-width divider between
-the hero and executive overview uses a compact 16-pixel display height to avoid
-vertical stretching. This keeps the report self-contained while avoiding
-unnecessary bundle growth. Active service
+The standalone AletheiaUC report embeds only the artwork it actively renders.
+The hero image is not duplicated as a section watermark, and the footer omits a
+redundant logo. A code-native SVG transition connects the hero to the executive
+overview without stretching raster artwork. Chapter and executive artwork is
+stored at its intended display ratio and rendered with `cover`, never resized by
+independent width and height rules. This keeps the report self-contained while
+avoiding unnecessary bundle growth. Active service
 certificates and trust-store entries are summarized separately so stale trust
 entries are not presented as proof of an outage.
 
 ## Shared design system
 
 All templates use one semantic report structure with shared `rds-*` components
-for the hero, metadata chips, sections, metrics, findings, tables, and footer.
-Themes provide only their tokens and named asset slots. The AletheiaUC template
-uses the canonical repository logo; the ComSource template uses the supplied
-official SVG unchanged. Theme presentation must not change facts, health logic,
-or customer-deliverable data policy.
+for the hero, metadata chips, scalable transition, chapter headers, executive
+metric groups, findings, recommendations, tables, and footer. Shared components
+own layout, information hierarchy, overflow containment, responsive breakpoints,
+and print behavior. This ensures that fixes to cards and other report behavior
+automatically apply to ComSource and future templates.
+
+Themes provide presentation tokens and map named asset slots onto the shared
+components. Each theme therefore retains its own colors, fonts, imagery, logo
+rules, and decorative treatment without forking report markup. The current slot
+contract includes:
+
+- `hero-background` and `executive-background`
+- `chapter-findings`, `chapter-scope`, `chapter-infrastructure`,
+  `chapter-analysis`, and `chapter-evidence`
+- `recommendation-background`, `watermark`, and `footer-background`
+- `logo-primary` for placements enabled by that theme
+
+A theme may map several slots to one reusable image, as ComSource currently does
+with its supplied section artwork, or provide purpose-built imagery for every
+slot, as AletheiaUC does. AletheiaUC intentionally has no footer logo; ComSource
+continues to use the supplied official SVG in its hero and footer. Theme
+presentation must not change facts, health logic, severity meaning, or the
+customer-deliverable data policy.
+
+The Executive Overview is shared functional content rather than a decorative
+number grid. Its four groups cover environment scale, runtime telemetry, risk
+signals, and evidence traceability. Every card includes a value, label, state,
+and short interpretation. Three-, two-, and one-column layouts use zero-minimum
+grid tracks and explicit wrapping so long labels remain within their cards.
 
 Every troubleshooting/review ZIP now includes all presentation comparisons,
 rendered from the same assessment facts:

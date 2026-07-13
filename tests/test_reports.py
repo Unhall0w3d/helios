@@ -70,6 +70,12 @@ class ReportBuilderTests(unittest.TestCase):
             self.assertIn("rds-report", payload)
             self.assertIn("rds-hero__art", payload)
             self.assertIn("rds-section", payload)
+            self.assertIn("rds-transition", payload)
+            self.assertIn("rds-executive", payload)
+            self.assertEqual(payload.count('class="rds-metric-group"'), 4)
+            self.assertEqual(payload.count('class="rds-metric rds-metric--'), 12)
+            self.assertIn("rds-chapter--scope", payload)
+            self.assertIn("rds-recommendation", payload)
             self.assertIn("rds-footer", payload)
             self.assertIn("data:image", payload)
             self.assertNotIn("https://", payload)
@@ -188,7 +194,7 @@ class ReportBuilderTests(unittest.TestCase):
             self.assertIn("report-shell", payload)
             self.assertIn("report-hero", payload)
             self.assertIn('class="hero-art rds-hero__art"', payload)
-            self.assertIn("visual-divider", payload)
+            self.assertIn("rds-transition", payload)
             self.assertIn("data:image/jpeg;base64", payload)
             self.assertNotIn("https://", payload)
         self.assertIn("Engineering edition", engineering)
@@ -199,20 +205,29 @@ class ReportBuilderTests(unittest.TestCase):
     def test_aletheiauc_template_uses_shared_design_system_composition(self) -> None:
         payload = HtmlReportBuilder().build(self.report)
         hero_copy = payload.split('<div class="hero-copy rds-hero__content">', 1)[1].split(
-            '<div class="capability-row', 1,
+            '<div class="capability-row',
+            1,
         )[0]
 
         self.assertIn("rds-hero__overlay", payload)
-        self.assertIn("rds-section rds-watermark", payload)
+        self.assertIn("rds-executive", payload)
+        self.assertEqual(payload.count('class="rds-metric-group"'), 4)
+        self.assertEqual(payload.count('class="rds-metric rds-metric--'), 12)
+        self.assertIn("rds-chapter--findings", payload)
+        self.assertIn("rds-chapter--evidence", payload)
+        self.assertIn("rds-recommendation", payload)
         self.assertIn("--section-band-image", payload)
+        self.assertIn("--executive-image", payload)
         self.assertIn("--footer-image", payload)
-        self.assertIn("metric-card", payload)
         self.assertIn("body.aletheiauc-report::before", payload)
         self.assertIn("AletheiaUC Assessment", payload)
         self.assertNotIn('class="rds-logo"', hero_copy)
-        self.assertIn(".aletheiauc-report .rds-divider", payload)
-        self.assertIn("height: 16px", payload)
-        self.assertIn("background-size: 100% 16px", payload)
+        footer = payload.split('<footer class="template-footer rds-footer"', 1)[1]
+        self.assertNotIn('class="rds-logo"', footer)
+        self.assertIn(".rds-metric-grid", payload)
+        self.assertIn("repeat(3, minmax(0, 1fr))", payload)
+        self.assertIn("overflow-wrap: anywhere", payload)
+        self.assertIn("@media (max-width: 620px)", payload)
 
     def test_comsource_template_is_standalone_and_brand_isolated(self) -> None:
         payload = HtmlReportBuilder(customer_safe=True, template="comsource").build(self.report)
@@ -232,6 +247,11 @@ class ReportBuilderTests(unittest.TestCase):
         )
         self.assertIn("ComSource", payload)
         self.assertIn("Prepared by ComSource, Inc.", payload)
+        self.assertIn('<footer class="template-footer rds-footer"', payload)
+        footer = payload.split('<footer class="template-footer rds-footer"', 1)[1]
+        self.assertIn('class="rds-logo"', footer)
+        self.assertIn("rds-metric-group", payload)
+        self.assertIn("rds-chapter--analysis", payload)
         self.assertIn("data:image/svg+xml;base64", payload)
         self.assertIn("@media print", payload)
         self.assertIn("Customer deliverable", payload)
@@ -256,7 +276,11 @@ class ReportBuilderTests(unittest.TestCase):
             runtime_metadata={
                 "targets": [
                     {"target_id": "Yorktown-Voice", "technology": "cuc", "address": "192.0.2.20"},
-                    {"target_id": "Yorktown-Call-Control", "technology": "cucm", "address": "192.0.2.10"},
+                    {
+                        "target_id": "Yorktown-Call-Control",
+                        "technology": "cucm",
+                        "address": "192.0.2.10",
+                    },
                 ]
             },
         )
@@ -297,7 +321,9 @@ class ReportBuilderTests(unittest.TestCase):
         self.assertIn("Server address", customer)
         self.assertIn("192.0.2.10", customer)
 
-    def test_priority_findings_retain_customer_facts_and_evidence_without_artifact_paths(self) -> None:
+    def test_priority_findings_retain_customer_facts_and_evidence_without_artifact_paths(
+        self,
+    ) -> None:
         finding = HealthFinding(
             rule_id="certificates.expired",
             title="One certificate is expired",
@@ -388,7 +414,9 @@ class ReportBuilderTests(unittest.TestCase):
                 CollectionResult(
                     collector_name="axl",
                     facts=AssessmentFacts(),
-                    evidence=[EvidenceRef(source="AXL", operation="getCCMVersion", node="192.0.2.11")],
+                    evidence=[
+                        EvidenceRef(source="AXL", operation="getCCMVersion", node="192.0.2.11")
+                    ],
                 )
             ],
             findings=[],

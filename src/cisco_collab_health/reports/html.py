@@ -52,6 +52,8 @@ class ReportTheme:
     hero_overlay: str
     hero_focal_point: str
     watermark_opacity: str
+    show_hero_logo: bool
+    show_footer_logo: bool
 
 
 REPORT_TEMPLATES = {
@@ -76,11 +78,18 @@ REPORT_THEMES = {
         asset_directory="aletheiauc",
         slots={
             "logo-primary": "repository:assets/brand/svg/aletheiauc-logo-lockup.svg",
-            "hero-background": "hero-background-3840x960.jpg",
+            "hero-background": "hero-techno-sorcery-3198x800.jpg",
+            "executive-background": "executive-background-2400x960.jpg",
+            "chapter-findings": "chapter-findings-2400x240.jpg",
+            "chapter-scope": "chapter-scope-2400x240.jpg",
+            "chapter-infrastructure": "chapter-infrastructure-2400x240.jpg",
+            "chapter-analysis": "chapter-analysis-2400x240.jpg",
+            "chapter-evidence": "chapter-evidence-2400x240.jpg",
+            "recommendation-background": "recommendation-background-2400x240.jpg",
             "section-band": "section-band-2400x240.jpg",
             "divider-horizontal": "divider-horizontal.svg",
             "watermark": "watermark.svg",
-            "footer-background": "footer-background-2400x220.jpg",
+            "footer-background": "footer-techno-sorcery-2397x220.jpg",
             "status-icons": "status-icons.svg",
         },
         colors={
@@ -95,6 +104,8 @@ REPORT_THEMES = {
         hero_overlay="linear-gradient(90deg,rgba(5,8,18,.96) 0%,rgba(10,15,30,.86) 46%,rgba(10,15,30,.18) 100%)",
         hero_focal_point="72% 50%",
         watermark_opacity=".06",
+        show_hero_logo=False,
+        show_footer_logo=False,
     ),
     "comsource": ReportTheme(
         key="comsource",
@@ -102,6 +113,13 @@ REPORT_THEMES = {
         slots={
             "logo-primary": "ComSource_Logo.svg",
             "hero-background": "hero-background.svg",
+            "executive-background": "section-band.svg",
+            "chapter-findings": "section-band.svg",
+            "chapter-scope": "section-band.svg",
+            "chapter-infrastructure": "section-band.svg",
+            "chapter-analysis": "section-band.svg",
+            "chapter-evidence": "section-band.svg",
+            "recommendation-background": "section-band.svg",
             "section-band": "section-band.svg",
             "divider-horizontal": "divider-horizontal.svg",
             "watermark": "watermark.svg",
@@ -120,6 +138,8 @@ REPORT_THEMES = {
         hero_overlay="linear-gradient(90deg,rgba(8,13,34,.98) 0%,rgba(16,22,51,.9) 48%,rgba(46,29,103,.25) 100%)",
         hero_focal_point="72% 50%",
         watermark_opacity=".05",
+        show_hero_logo=True,
+        show_footer_logo=True,
     ),
 }
 
@@ -167,9 +187,17 @@ class HtmlReportBuilder:
         collector_evidence_count = sum(len(result.evidence) for result in report.collector_results)
         header_metadata = self._header_metadata(report)
         hero_image = _theme_asset_data_uri(self.template.key, "hero-background")
-        divider_image = _theme_asset_data_uri(self.template.key, "divider-horizontal")
         watermark_image = _theme_asset_data_uri(self.template.key, "watermark")
         section_band_image = _theme_asset_data_uri(self.template.key, "section-band")
+        executive_image = _theme_asset_data_uri(self.template.key, "executive-background")
+        chapter_findings_image = _theme_asset_data_uri(self.template.key, "chapter-findings")
+        chapter_scope_image = _theme_asset_data_uri(self.template.key, "chapter-scope")
+        chapter_infrastructure_image = _theme_asset_data_uri(
+            self.template.key, "chapter-infrastructure"
+        )
+        chapter_analysis_image = _theme_asset_data_uri(self.template.key, "chapter-analysis")
+        chapter_evidence_image = _theme_asset_data_uri(self.template.key, "chapter-evidence")
+        recommendation_image = _theme_asset_data_uri(self.template.key, "recommendation-background")
         footer_image = _theme_asset_data_uri(self.template.key, "footer-background")
         logo_image = _theme_asset_data_uri(self.template.key, "logo-primary")
         template_css = (
@@ -179,7 +207,6 @@ class HtmlReportBuilder:
             header_metadata,
             hero_image=hero_image,
             logo_image=logo_image,
-            is_comsource=self.template.key == "comsource",
         )
         template_footer = self._template_footer(logo_image=logo_image, footer_image=footer_image)
         methodology_scope_section = self._methodology_scope_section(report)
@@ -276,6 +303,43 @@ class HtmlReportBuilder:
             f"{priority_sections}{observations_section}</section>"
         )
         certificate_summary = self._certificate_summary(report)
+        executive_overview = self._executive_overview(
+            report,
+            severity_counts=severity_counts,
+            collector_note_count=collector_note_count,
+            collector_issue_count=collector_issue_count,
+            collector_evidence_count=collector_evidence_count,
+        )
+        findings_chapter = self._chapter_header(
+            "02 / FINDINGS",
+            "Findings and Observations",
+            "Observed conditions, operational impact, and action priority",
+            "findings",
+        )
+        scope_chapter = self._chapter_header(
+            "03 / SCOPE",
+            "Scope and Method",
+            "Targets, data sources, boundaries, and confidence",
+            "scope",
+        )
+        infrastructure_chapter = self._chapter_header(
+            "04 / INFRASTRUCTURE",
+            "Infrastructure and Inventory",
+            "CUCM and Unity Connection topology, objects, and runtime state",
+            "infrastructure",
+        )
+        analysis_chapter = self._chapter_header(
+            "05 / ANALYSIS",
+            "Discovery and Analysis",
+            "Collection depth across topology, services, firmware, and configuration",
+            "analysis",
+        )
+        evidence_chapter = self._chapter_header(
+            "06 / EVIDENCE",
+            "Appendices and Engineering Evidence",
+            "Collector detail, reconciliation, provenance, and inventories",
+            "evidence",
+        )
 
         return f"""<!doctype html>
 <html lang="en">
@@ -546,12 +610,6 @@ class HtmlReportBuilder:
     .report-hero h1 {{ font-size: clamp(32px, 4vw, 46px); max-width: 680px; }}
     .report-hero .beacon {{ width: 72px; height: 72px; }}
     .report-hero .header-meta {{ justify-content: flex-start; max-width: 760px; }}
-    .visual-divider {{
-      height: 72px;
-      margin: 0 5%;
-      background: var(--divider-image) center/contain no-repeat;
-      opacity: 0.78;
-    }}
     main {{ max-width: none; padding: 0; }}
     section {{
       position: relative;
@@ -606,14 +664,13 @@ class HtmlReportBuilder:
       .report-hero .masthead {{ min-height: 195px; }}
       .report-hero .beacon {{ display: none; }}
       .report-hero .header-meta {{ justify-content: center; }}
-      .visual-divider {{ height: 48px; }}
     }}
     @media print {{
       :root {{ color-scheme: light; }}
       body {{ background: #fff !important; color: #111 !important; }}
       .report-shell {{ width: 100%; padding: 0; }}
       .report-hero {{ min-height: 155px; background: #fff !important; border: 2px solid #20283a; box-shadow: none; }}
-      .report-hero::after, .visual-divider, section::before, .beacon {{ display: none !important; }}
+      .report-hero::after, section::before, .beacon {{ display: none !important; }}
       .report-hero h1, .report-hero p, .meta {{ color: #111 !important; }}
       section, .metric, .finding {{ background: #fff !important; color: #111 !important; box-shadow: none !important; }}
       section {{ border-color: #cbd1dc; break-inside: avoid; }}
@@ -625,42 +682,24 @@ class HtmlReportBuilder:
   </style>
 </head>
 <body class="{escape(self.template.key)}-report">
-  <div class="report-shell rds-report" style="--divider-image: url('{divider_image}'); --watermark-image: url('{watermark_image}'); --section-band-image: url('{section_band_image}');">
+  <div class="report-shell rds-report" style="--watermark-image: url('{watermark_image}'); --section-band-image: url('{section_band_image}'); --executive-image: url('{executive_image}'); --chapter-findings-image: url('{chapter_findings_image}'); --chapter-scope-image: url('{chapter_scope_image}'); --chapter-infrastructure-image: url('{chapter_infrastructure_image}'); --chapter-analysis-image: url('{chapter_analysis_image}'); --chapter-evidence-image: url('{chapter_evidence_image}'); --recommendation-image: url('{recommendation_image}');">
   <header class="report-hero rds-hero" style="--hero-image: url('{hero_image}');">
     {template_header}
   </header>
-  <div class="visual-divider rds-divider" aria-hidden="true"></div>
+  {self._report_transition()}
   <main>
-    <section class="section executive-section rds-section rds-watermark">
-      <header class="section-heading"><h2>Executive Overview</h2></header>
-      <div class="section-body rds-section__body"><div class="metric-grid rds-metrics">
-        <div class="metric-card rds-metric"><strong>{len(report.facts.nodes)}</strong><span>Nodes</span></div>
-        <div class="metric-card rds-metric"><strong>{len(report.facts.devices)}</strong><span>Devices</span></div>
-        <div class="metric-card rds-metric"><strong>{len(report.facts.registrations)}</strong>
-          <span>Registrations</span></div>
-        <div class="metric-card rds-metric"><strong>{len(report.facts.services)}</strong><span>Services</span></div>
-        <div class="metric-card rds-metric"><strong>{len(report.facts.perf_counters)}</strong>
-          <span>Performance Samples</span></div>
-        <div class="metric-card rds-metric"><strong>{len(report.facts.platform_checks)}</strong>
-          <span>Health Checks Captured</span></div>
-        <div class="metric-card critical rds-metric rds-critical"><strong>{severity_counts[FindingSeverity.CRITICAL]}</strong>
-          <span>Critical</span></div>
-        <div class="metric-card warning rds-metric rds-warning"><strong>{severity_counts[FindingSeverity.WARNING]}</strong>
-          <span>Warnings</span></div>
-        <div class="metric-card info rds-metric rds-info"><strong>{severity_counts[FindingSeverity.INFO]}</strong>
-          <span>Observations</span></div>
-        <div class="metric-card rds-metric"><strong>{collector_note_count}</strong><span>Collection Notes</span></div>
-        <div class="metric-card rds-metric"><strong>{collector_issue_count}</strong><span>Collection Issues</span></div>
-        <div class="metric-card rds-metric"><strong>{collector_evidence_count}</strong><span>Evidence References</span></div>
-      </div></div>
-    </section>
+    {executive_overview}
+    {findings_chapter}
     {findings_section}
+    {scope_chapter}
     {methodology_scope_section}
     {target_scope_section}
+    {infrastructure_chapter}
     {cuc_inventory_section}
     {cuc_configuration_section}
     {cuc_platform_section}
     {cuc_informix_section}
+    {analysis_chapter}
     {coverage_section}
     {cluster_section}
     <section>
@@ -898,6 +937,7 @@ class HtmlReportBuilder:
         </tbody>
       </table>
     </section>
+    {evidence_chapter}
     {collector_issues_section}
     {collector_notes_section}
     {collector_evidence_section}
@@ -947,14 +987,13 @@ class HtmlReportBuilder:
 </html>
 """
 
-    def _template_header(
-        self, header_metadata: str, *, hero_image: str, logo_image: str, is_comsource: bool
-    ) -> str:
+    def _template_header(self, header_metadata: str, *, hero_image: str, logo_image: str) -> str:
         """Render the stable hero structure; themes only supply identity and art."""
 
-        logo_alt = "ComSource" if is_comsource else "AletheiaUC"
         logo_markup = (
-            f'<img class="rds-logo" src="{logo_image}" alt="{logo_alt}">' if is_comsource else ""
+            f'<img class="rds-logo" src="{logo_image}" alt="{escape(self.template.title)}">'
+            if self.theme.show_hero_logo
+            else ""
         )
         return f"""
     <img class="hero-art rds-hero__art" src="{hero_image}" alt="" aria-hidden="true">
@@ -969,6 +1008,218 @@ class HtmlReportBuilder:
       <span>Assess</span><span>Diagnose</span><span>Improve</span><span>Optimize</span>
     </div>
     <div class="header-meta rds-meta">{header_metadata}</div>"""
+
+    @staticmethod
+    def _report_transition() -> str:
+        """Render the scalable, theme-tokenized transition below the hero."""
+
+        return """
+  <div class="rds-transition" aria-hidden="true">
+    <svg viewBox="0 0 1200 64" preserveAspectRatio="none">
+      <defs><linearGradient id="rds-transition-line" x1="0" x2="1">
+        <stop stop-color="var(--rds-transition-edge)"/>
+        <stop offset=".2" stop-color="var(--rds-cyan)"/>
+        <stop offset=".5" stop-color="var(--rds-accent)"/>
+        <stop offset=".82" stop-color="var(--rds-cyan)"/>
+        <stop offset="1" stop-color="var(--rds-transition-edge)"/>
+      </linearGradient></defs>
+      <path d="M0 31H350c65 0 72-21 124-21h252c52 0 59 21 124 21h350"/>
+      <path class="rds-transition__soft" d="M0 38h410c42 0 58 16 98 16h184c40 0 56-16 98-16h410"/>
+      <circle cx="474" cy="10" r="3"/><circle cx="600" cy="10" r="4"/>
+      <circle cx="726" cy="10" r="3"/>
+    </svg>
+  </div>"""
+
+    @staticmethod
+    def _metric_icon(kind: str) -> str:
+        """Return one accessible decorative icon from the shared metric library."""
+
+        paths = {
+            "nodes": '<circle cx="6" cy="12" r="2"/><circle cx="18" cy="6" r="2"/><circle cx="18" cy="18" r="2"/><path d="m8 11 8-4M8 13l8 4M18 8v8"/>',
+            "devices": '<rect x="4" y="5" width="16" height="12" rx="2"/><path d="M9 21h6m-3-4v4"/>',
+            "services": '<path d="M6 7h12M6 12h12M6 17h12"/><circle cx="8" cy="7" r="1"/><circle cx="16" cy="12" r="1"/><circle cx="11" cy="17" r="1"/>',
+            "runtime": '<circle cx="12" cy="12" r="8"/><path d="M8 12h8m-4-4v8"/>',
+            "samples": '<path d="M3 15h4l2-8 4 12 2-7h6"/>',
+            "checks": '<path d="M12 3 4 7v5c0 5 3.4 8 8 9 4.6-1 8-4 8-9V7l-8-4Z"/><path d="m8.5 12 2.2 2.2 4.8-5"/>',
+            "critical": '<path d="M12 4 3 20h18L12 4Z"/><path d="M12 9v5m0 3h.01"/>',
+            "warning": '<circle cx="12" cy="12" r="9"/><path d="M12 7v6m0 4h.01"/>',
+            "observe": '<path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="2.5"/>',
+            "issues": '<path d="M5 5h14v14H5z"/><path d="m8 8 8 8m0-8-8 8"/>',
+            "notes": '<path d="M5 3h11l3 3v15H5z"/><path d="M8 10h8M8 14h8M8 18h5"/>',
+            "evidence": '<path d="M4 6h16v13H4z"/><path d="M8 3h8v3M8 10h8m-8 4h5"/>',
+        }
+        return f'<svg viewBox="0 0 24 24" aria-hidden="true">{paths[kind]}</svg>'
+
+    def _executive_overview(
+        self,
+        report: AssessmentReport,
+        *,
+        severity_counts: Counter[FindingSeverity],
+        collector_note_count: int,
+        collector_issue_count: int,
+        collector_evidence_count: int,
+    ) -> str:
+        """Render the shared functional metric groups using assessment facts."""
+
+        groups = (
+            (
+                "Environment",
+                "Discovered scale",
+                (
+                    (
+                        len(report.facts.nodes),
+                        "Nodes",
+                        "Topology targets discovered",
+                        "Discovered",
+                        "nodes",
+                        "normal",
+                    ),
+                    (
+                        len(report.facts.devices),
+                        "Devices",
+                        "Inventory objects collected",
+                        "Inventory",
+                        "devices",
+                        "normal",
+                    ),
+                    (
+                        len(report.facts.services),
+                        "Services",
+                        "Service status records assessed",
+                        "Service state",
+                        "services",
+                        "normal",
+                    ),
+                ),
+            ),
+            (
+                "Telemetry",
+                "Runtime collection",
+                (
+                    (
+                        len(report.facts.registrations),
+                        "Registrations",
+                        "Runtime registration records",
+                        "Runtime",
+                        "runtime",
+                        "normal",
+                    ),
+                    (
+                        len(report.facts.perf_counters),
+                        "Performance Samples",
+                        "Performance counter samples",
+                        "Sampled",
+                        "samples",
+                        "normal",
+                    ),
+                    (
+                        len(report.facts.platform_checks),
+                        "Health Checks Captured",
+                        "Platform checks captured",
+                        "Captured",
+                        "checks",
+                        "normal",
+                    ),
+                ),
+            ),
+            (
+                "Risk signals",
+                "Prioritized assessment",
+                (
+                    (
+                        severity_counts[FindingSeverity.CRITICAL],
+                        "Critical",
+                        "Conditions requiring action",
+                        "Action",
+                        "critical",
+                        "critical",
+                    ),
+                    (
+                        severity_counts[FindingSeverity.WARNING],
+                        "Warnings",
+                        "Conditions requiring review",
+                        "Review",
+                        "warning",
+                        "warning",
+                    ),
+                    (
+                        severity_counts[FindingSeverity.INFO],
+                        "Observations",
+                        "Engineering context and insights",
+                        "Context",
+                        "observe",
+                        "info",
+                    ),
+                ),
+            ),
+            (
+                "Traceability",
+                "Collection confidence",
+                (
+                    (
+                        collector_issue_count,
+                        "Collection Issues",
+                        "Known collection gaps",
+                        "Gaps",
+                        "issues",
+                        "warning",
+                    ),
+                    (
+                        collector_note_count,
+                        "Collection Notes",
+                        "Collection and interpretation notes",
+                        "Notes",
+                        "notes",
+                        "normal",
+                    ),
+                    (
+                        collector_evidence_count,
+                        "Evidence References",
+                        "Traceable source references",
+                        "Evidence",
+                        "evidence",
+                        "normal",
+                    ),
+                ),
+            ),
+        )
+        group_markup = []
+        for name, description, metrics in groups:
+            cards = []
+            for value, label, context, state, icon, severity in metrics:
+                cards.append(
+                    f"""<article class="rds-metric rds-metric--{severity}">
+          <div class="rds-metric__top"><span class="rds-metric__icon">{self._metric_icon(icon)}</span><span class="rds-metric__state">{escape(state)}</span></div>
+          <strong>{value}</strong><h4>{escape(label)}</h4><p>{escape(context)}</p>
+        </article>"""
+                )
+            group_markup.append(
+                f"""<div class="rds-metric-group">
+      <header><span>{escape(name)}</span><p>{escape(description)}</p></header>
+      <div class="rds-metric-grid">{"".join(cards)}</div>
+    </div>"""
+            )
+        return f"""<section class="section executive-section rds-section rds-executive">
+  <header class="rds-executive__heading"><span>Assessment control plane</span>
+    <h2>Executive Overview</h2>
+    <p>Environment scale, runtime telemetry, prioritized risk, and evidence coverage.</p>
+  </header>
+  <div class="rds-metric-groups">{"".join(group_markup)}</div>
+</section>"""
+
+    @staticmethod
+    def _chapter_header(code: str, title: str, description: str, art: str) -> str:
+        """Render one semantic chapter transition using a theme-owned art slot."""
+
+        return f"""<div class="rds-chapter rds-chapter--{escape(art)}">
+  <div class="rds-chapter__copy"><span>{escape(code)}</span><h2>{escape(title)}</h2>
+    <p>{escape(description)}</p></div>
+  <svg class="rds-chapter__sigil" viewBox="0 0 80 80" aria-hidden="true">
+    <circle cx="40" cy="40" r="27"/><circle cx="40" cy="40" r="13"/>
+    <path d="M40 3v74M3 40h74M14 14l52 52M66 14 14 66"/>
+    <circle cx="40" cy="13" r="3"/><circle cx="67" cy="40" r="3"/>
+  </svg>
+</div>"""
 
     @staticmethod
     def _aletheiauc_feature_panel() -> str:
@@ -994,9 +1245,14 @@ class HtmlReportBuilder:
             if self.template.key == "comsource"
             else f"AletheiaUC Assessment · {'Customer deliverable' if self.customer_safe else 'Engineering report'}"
         )
+        logo_markup = (
+            f'<img class="rds-logo" src="{logo_image}" alt="{escape(self.template.title)}">'
+            if self.theme.show_footer_logo
+            else ""
+        )
         return f"""
   <footer class=\"template-footer rds-footer\" style=\"--footer-image: url('{footer_image}');\">
-    <img class=\"rds-logo\" src=\"{logo_image}\" alt=\"{escape(self.template.title)}\">
+    {logo_markup}
     <small>{escape(footer_label)}</small>
   </footer>"""
 
@@ -1010,7 +1266,18 @@ class HtmlReportBuilder:
             else ""
         )
         return f"""
-    .rds-report {{ width: min(1440px, calc(100% - 48px)); margin: 24px auto 64px; }}
+    .rds-report {{
+      --rds-page: {color["page"]};
+      --rds-panel: {color["surface"]};
+      --rds-text: {color["text"]};
+      --rds-muted: {color["muted"]};
+      --rds-accent: {color["accent"]};
+      --rds-cyan: {color["cyan"]};
+      --rds-gold: {color["gold"]};
+      --rds-transition-edge: {color["page"]};
+      width: min(1440px, calc(100% - 48px));
+      margin: 24px auto 64px;
+    }}
     .rds-hero {{ min-height: 360px; overflow: hidden; border-radius: 12px; background: {color["page"]}; }}
     .rds-hero__art {{ position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: {self.theme.hero_focal_point}; }}
     .rds-hero__overlay {{ position: absolute; inset: 0; background: {self.theme.hero_overlay}; }}
@@ -1019,19 +1286,62 @@ class HtmlReportBuilder:
     .rds-eyebrow {{ margin-top: 28px; }} .rds-title {{ line-height: 1.02; }}
     .rds-subtitle {{ font-size: 18px; line-height: 1.5; }}
     .rds-meta {{ position: relative; z-index: 2; }}
-    .rds-divider {{ height: 32px; margin: 15px 0; background: var(--divider-image) center / 100% 32px no-repeat; }}
+    .rds-transition {{ height: 64px; overflow: hidden; color: var(--rds-cyan); background: var(--rds-page); }}
+    .rds-transition svg {{ display: block; width: 100%; height: 100%; }}
+    .rds-transition path {{ fill: none; stroke: url(#rds-transition-line); stroke-width: 1.4; vector-effect: non-scaling-stroke; }}
+    .rds-transition__soft {{ stroke: var(--rds-accent) !important; opacity: .42; }}
+    .rds-transition circle {{ fill: var(--rds-gold); }}
     .rds-section {{ position: relative; overflow: hidden; border-radius: 12px; }}
     .rds-watermark::before {{ content: ""; position: absolute; right: -50px; bottom: -85px; width: 300px; height: 300px; background: var(--watermark-image) center / contain no-repeat; opacity: {self.theme.watermark_opacity}; pointer-events: none; }}
     .rds-section__heading {{ min-height: 58px; }} .rds-section__body {{ padding: 20px; }}
-    .rds-metrics {{ grid-template-columns: repeat(auto-fit, minmax(165px, 1fr)); gap: 12px; }}
-    .rds-metric {{ min-height: 102px; border-radius: 8px; }}
+    .rds-executive, .rds-executive *, .rds-executive *::before, .rds-executive *::after {{ box-sizing: border-box; }}
+    .rds-executive {{ width: auto; max-width: 100%; min-width: 0; overflow: hidden; text-align: left; }}
+    .rds-executive > .rds-executive__heading, .rds-executive > .rds-metric-groups {{ width: 100% !important; max-width: 100% !important; min-width: 0 !important; margin-left: 0 !important; margin-right: 0 !important; transform: none !important; text-align: left !important; }}
+    .rds-executive__heading {{ position: relative; z-index: 1; max-width: 720px; margin: 0 0 26px; padding: 0; overflow: visible; color: inherit; background: none; text-align: left; }}
+    .rds-executive__heading::after {{ display: none; }}
+    .rds-executive__heading > span {{ font: 700 10px/1.2 ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing: .2em; text-transform: uppercase; }}
+    .rds-executive__heading h2 {{ margin: 8px 0 6px; padding: 0; border: 0; background: none; font-size: clamp(26px, 3.2vw, 42px); letter-spacing: -.035em; }}
+    .rds-executive__heading p {{ margin: 0; font-size: 14px; }}
+    .rds-metric-groups {{ position: relative; z-index: 1; display: grid; width: 100%; min-width: 0; gap: 20px; }}
+    .rds-metric-group {{ width: 100%; min-width: 0; max-width: 100%; margin: 0; padding: 0; text-align: left; }}
+    .rds-metric-group > header {{ position: relative; display: flex; align-items: baseline; justify-content: flex-start; width: 100%; min-width: 0; gap: 12px; margin: 0 0 9px; padding: 0; overflow: visible; color: inherit; background: none; text-align: left; }}
+    .rds-metric-group > header::after {{ display: none; }}
+    .rds-metric-group > header span {{ font: 700 10px/1 ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing: .16em; text-transform: uppercase; }}
+    .rds-metric-group > header p {{ margin: 0; font-size: 11px; }}
+    .rds-metric-grid {{ display: grid; width: 100%; min-width: 0; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }}
+    .rds-metric {{ position: relative; width: 100%; min-width: 0; max-width: 100%; min-height: 154px; padding: 15px 16px 14px; overflow: hidden; border-radius: 12px; text-align: left; }}
+    .rds-metric__top {{ display: flex; align-items: center; justify-content: space-between; width: 100%; min-width: 0; gap: 8px; margin-bottom: 12px; }}
+    .rds-metric__icon {{ display: grid; flex: 0 0 auto; width: 30px; height: 30px; place-items: center; border-radius: 8px; }}
+    .rds-metric__icon svg, .rds-recommendation__icon svg {{ width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.55; stroke-linecap: round; stroke-linejoin: round; }}
+    .rds-metric__state {{ min-width: 0; max-width: calc(100% - 40px); padding: 4px 7px; overflow: hidden; border-radius: 999px; font: 700 9px/1 ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing: .08em; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; }}
+    .rds-metric strong {{ display: block; width: 100%; margin: 0 0 2px; font-size: clamp(25px, 3vw, 38px); line-height: 1; letter-spacing: -.04em; text-align: left; overflow-wrap: anywhere; }}
+    .rds-metric h4 {{ width: 100%; margin: 5px 0; font-size: 13px; line-height: 1.25; text-align: left; overflow-wrap: anywhere; }}
+    .rds-metric p {{ width: 100%; margin: 0; font-size: 11px; line-height: 1.35; text-align: left; overflow-wrap: anywhere; }}
+    .rds-chapter {{ position: relative; display: flex; align-items: center; min-height: 140px; margin: 42px 0 22px; overflow: hidden; border-radius: 14px; break-inside: avoid; }}
+    .rds-chapter::before {{ content: ""; position: absolute; inset: 0; pointer-events: none; }}
+    .rds-chapter--findings {{ background-image: var(--chapter-findings-image); }}
+    .rds-chapter--scope {{ background-image: var(--chapter-scope-image); }}
+    .rds-chapter--infrastructure {{ background-image: var(--chapter-infrastructure-image); }}
+    .rds-chapter--analysis {{ background-image: var(--chapter-analysis-image); }}
+    .rds-chapter--evidence {{ background-image: var(--chapter-evidence-image); }}
+    .rds-chapter {{ background-position: center; background-size: cover; background-repeat: no-repeat; }}
+    .rds-chapter__copy {{ position: relative; z-index: 1; max-width: 68%; padding: 25px 30px; }}
+    .rds-chapter__copy > span {{ font: 700 10px/1 ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing: .17em; text-transform: uppercase; }}
+    .rds-chapter__copy h2 {{ margin: 7px 0 5px; font-size: clamp(23px, 3vw, 34px); letter-spacing: -.03em; }}
+    .rds-chapter__copy p {{ margin: 0; font-size: 12px; }}
+    .rds-chapter__sigil {{ position: absolute; z-index: 1; right: 24px; width: 84px; height: 84px; fill: none; stroke-width: .75; }}
+    .rds-recommendation {{ position: relative; isolation: isolate; padding: 15px 16px 15px 48px !important; overflow: hidden; border-radius: 10px; background-position: center; background-size: cover; background-repeat: no-repeat; }}
+    .rds-recommendation::after {{ content: ""; position: absolute; z-index: -1; inset: 0; pointer-events: none; }}
+    .rds-recommendation__icon {{ position: absolute; left: 14px; top: 13px; display: grid; width: 25px; height: 25px; place-items: center; border-radius: 7px; }}
     .rds-finding {{ display: grid; grid-template-columns: auto 1fr; gap: 12px; }}
     .rds-badge {{ align-self: start; padding: 5px 8px; border-radius: 5px; color: #fff; font-size: 11px; font-weight: 700; }}
     .rds-footer {{ min-height: 96px; background: {color["page"]} var(--footer-image) center / cover no-repeat; }}
     .rds-footer .rds-logo {{ max-width: 220px; max-height: 60px; }}
     {logo_panel}
-    @media (max-width: 700px) {{ .rds-report {{ width: calc(100% - 18px); margin-top: 9px; }} .rds-hero {{ min-height: 420px; }} .rds-hero__content {{ padding: 24px 20px 38px; }} .rds-section__body {{ padding: 13px; }} }}
-    @media print {{ .rds-report {{ width: 100%; margin: 0; }} .rds-hero__art, .rds-hero__overlay, .rds-watermark::before {{ display: none !important; }} .rds-hero {{ min-height: auto; }} .rds-section {{ break-inside: avoid; }} }}
+    @media (max-width: 980px) {{ .rds-metric-grid {{ grid-template-columns: repeat(2, minmax(0, 1fr)); }} }}
+    @media (max-width: 700px) {{ .rds-report {{ width: calc(100% - 18px); margin-top: 9px; }} .rds-hero {{ min-height: 420px; }} .rds-hero__content {{ padding: 24px 20px 38px; }} .rds-section__body {{ padding: 13px; }} .rds-chapter__copy {{ max-width: 84%; }} .rds-chapter__sigil {{ opacity: .35; }} }}
+    @media (max-width: 620px) {{ .rds-executive {{ padding: 24px 18px !important; }} .rds-metric-grid {{ grid-template-columns: minmax(0, 1fr); }} .rds-metric-group > header {{ display: block; }} .rds-metric-group > header p {{ margin-top: 4px; }} }}
+    @media print {{ .rds-report {{ width: 100%; margin: 0; }} .rds-hero__art, .rds-hero__overlay, .rds-watermark::before {{ display: none !important; }} .rds-hero {{ min-height: auto; }} .rds-section {{ break-inside: avoid; }} .rds-transition {{ height: 38px; }} .rds-metric {{ min-height: 118px; box-shadow: none !important; }} .rds-chapter {{ min-height: 112px; margin: 25px 0 16px; box-shadow: none !important; }} .rds-recommendation {{ background-image: none !important; }} }}
 """
 
     @staticmethod
@@ -1052,7 +1362,7 @@ class HtmlReportBuilder:
     .aletheiauc-report .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
     .aletheiauc-report .report-shell { position: relative; }
     .aletheiauc-report .report-hero {
-      min-height: clamp(280px, 32vw, 480px);
+      min-height: clamp(320px, 32vw, 460px);
       padding: 0;
       background: #050812;
     }
@@ -1068,10 +1378,9 @@ class HtmlReportBuilder:
       height: 5px;
       background: linear-gradient(90deg, #6a4cff, #22d3ee, #ffc75e);
     }
-    .aletheiauc-report .rds-divider {
-      height: 16px;
-      background-size: 100% 16px;
-    }
+    .aletheiauc-report .rds-transition { background: linear-gradient(180deg, #02050f, #061027 52%, #02050f); }
+    .aletheiauc-report .rds-transition path { filter: drop-shadow(0 0 5px rgba(39, 211, 243, .75)); }
+    .aletheiauc-report .rds-transition circle { filter: drop-shadow(0 0 5px #ffc75e); }
     .aletheiauc-report .report-hero .header-meta {
       position: absolute;
       z-index: 2;
@@ -1083,49 +1392,53 @@ class HtmlReportBuilder:
       margin: 0;
     }
     .aletheiauc-report .meta-chip { background: rgba(5, 8, 18, .55); backdrop-filter: blur(5px); }
-    .aletheiauc-report .visual-divider {
-      height: clamp(110px, 10vw, 155px);
-      margin: 0;
-      background-size: cover;
-      background-position: center;
-      opacity: .9;
-    }
     .aletheiauc-report main { display: grid; gap: 25px; }
     .aletheiauc-report main > section { margin: 0; }
-    .aletheiauc-report .section-heading {
-      position: relative;
-      z-index: 1;
+    .aletheiauc-report .rds-executive {
       margin: 0;
-      padding: 0;
-      border-bottom: 1px solid var(--line);
-      background: linear-gradient(90deg, rgba(106, 76, 255, .13), rgba(34, 211, 238, .025));
+      padding: clamp(28px, 4vw, 52px);
+      border-color: rgba(59, 199, 232, .25);
+      border-radius: 0 0 18px 18px;
+      background: linear-gradient(90deg, rgba(2, 6, 18, .97), rgba(4, 10, 26, .88) 58%, rgba(4, 10, 26, .68)), var(--executive-image) center / cover no-repeat;
+      box-shadow: inset 0 1px rgba(255, 255, 255, .04), 0 30px 80px rgba(0, 0, 0, .28);
     }
-    .aletheiauc-report .section-heading h2 {
-      margin: 0;
-      padding: 17px 20px;
-      border: 0;
-      background: none;
+    .aletheiauc-report .rds-executive::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      opacity: .28;
+      background-image: linear-gradient(rgba(50, 159, 206, .10) 1px, transparent 1px), linear-gradient(90deg, rgba(50, 159, 206, .10) 1px, transparent 1px);
+      background-size: 32px 32px;
+      mask-image: linear-gradient(90deg, #000, transparent 75%);
     }
-    .aletheiauc-report .section-body { position: relative; z-index: 1; margin: 0; padding: 20px; }
-    .aletheiauc-report .metric-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-      gap: 12px;
+    .aletheiauc-report .rds-executive__heading > span, .aletheiauc-report .rds-chapter__copy > span { color: var(--gold); }
+    .aletheiauc-report .rds-executive__heading h2, .aletheiauc-report .rds-chapter__copy h2 { color: #eff8ff; }
+    .aletheiauc-report .rds-executive__heading p, .aletheiauc-report .rds-chapter__copy p { color: #9bb5ca; }
+    .aletheiauc-report .rds-metric-group > header span { color: #b89cff; }
+    .aletheiauc-report .rds-metric-group > header p { color: #7894aa; }
+    .aletheiauc-report .rds-metric {
+      border: 1px solid rgba(67, 190, 226, .24);
+      background: linear-gradient(145deg, rgba(11, 26, 52, .97), rgba(5, 11, 28, .94));
+      box-shadow: inset 0 1px rgba(255, 255, 255, .035), 0 12px 30px rgba(0, 0, 0, .22);
     }
-    .aletheiauc-report .metric-card {
-      min-height: 102px;
-      padding: 15px;
-      border: 1px solid rgba(38, 52, 81, .95);
-      border-top: 3px solid #2f7cff;
-      border-radius: 10px;
-      background: linear-gradient(145deg, rgba(21, 31, 54, .96), rgba(5, 8, 18, .66));
-      box-shadow: inset 0 2px 0 rgba(47, 124, 255, .14);
-    }
-    .aletheiauc-report .metric-card strong { display: block; margin-bottom: 4px; font-size: 26px; }
-    .aletheiauc-report .metric-card span { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .06em; }
-    .aletheiauc-report .metric-card.critical { border-top-color: var(--critical); }
-    .aletheiauc-report .metric-card.warning { border-top-color: var(--warning); }
-    .aletheiauc-report .metric-card.info { border-top-color: var(--info); }
+    .aletheiauc-report .rds-metric::after { content: ""; position: absolute; width: 64px; height: 64px; right: -35px; bottom: -35px; border: 1px solid rgba(140, 92, 245, .26); transform: rotate(45deg); }
+    .aletheiauc-report .rds-metric__icon { color: var(--cyan); border: 1px solid rgba(39, 211, 243, .30); background: linear-gradient(145deg, rgba(39, 211, 243, .12), rgba(140, 92, 245, .15)); }
+    .aletheiauc-report .rds-metric__state { color: #85a7bd; border: 1px solid rgba(119, 148, 172, .20); }
+    .aletheiauc-report .rds-metric strong { color: #fff; }
+    .aletheiauc-report .rds-metric h4 { color: #e8f6ff; }
+    .aletheiauc-report .rds-metric p { color: #86a3b9; }
+    .aletheiauc-report .rds-metric--critical { border-color: rgba(255, 89, 118, .45); }
+    .aletheiauc-report .rds-metric--critical .rds-metric__icon { color: #ff607b; border-color: rgba(255, 96, 123, .34); }
+    .aletheiauc-report .rds-metric--warning { border-color: rgba(255, 183, 94, .40); }
+    .aletheiauc-report .rds-metric--warning .rds-metric__icon { color: var(--gold); border-color: rgba(255, 183, 94, .34); }
+    .aletheiauc-report .rds-metric--info .rds-metric__icon { color: #b58aff; }
+    .aletheiauc-report .rds-chapter { border: 1px solid rgba(54, 190, 229, .28); background-color: #030817; box-shadow: 0 20px 55px rgba(0, 0, 0, .27); }
+    .aletheiauc-report .rds-chapter::before { background: linear-gradient(90deg, rgba(1, 4, 14, .98), rgba(2, 7, 20, .80) 48%, rgba(2, 7, 20, .14)), linear-gradient(180deg, transparent, rgba(1, 4, 14, .55)); }
+    .aletheiauc-report .rds-chapter__sigil { stroke: rgba(82, 213, 241, .48); filter: drop-shadow(0 0 5px rgba(82, 213, 241, .55)); }
+    .aletheiauc-report .rds-recommendation { border: 1px solid rgba(255, 183, 94, .30); background-image: linear-gradient(90deg, rgba(4, 10, 25, .97), rgba(4, 10, 25, .73)), var(--recommendation-image); }
+    .aletheiauc-report .rds-recommendation::after { background: linear-gradient(90deg, rgba(3, 8, 20, .98) 0%, rgba(3, 8, 20, .87) 72%, rgba(3, 8, 20, .35)); }
+    .aletheiauc-report .rds-recommendation__icon { color: #08101f; background: var(--gold); }
     .aletheiauc-report .report-feature {
       display: grid;
       grid-template-columns: minmax(0, 1.08fr) minmax(300px, .92fr);
@@ -1151,12 +1464,12 @@ class HtmlReportBuilder:
       .aletheiauc-report .report-feature-art { min-height: 340px; order: -1; background: linear-gradient(180deg, transparent 58%, rgba(16, 24, 43, .9)), var(--ritual-image) center / cover no-repeat; }
     }
     @media print {
-      .aletheiauc-report::before, .aletheiauc-report .visual-divider, .aletheiauc-report .report-feature-art, .aletheiauc-report .hero-art { display: none !important; }
+      .aletheiauc-report::before, .aletheiauc-report .report-feature-art, .aletheiauc-report .hero-art { display: none !important; }
       .aletheiauc-report .report-hero { min-height: 155px; background: #fff !important; border: 2px solid #20283a; }
       .aletheiauc-report .report-hero::before { content: "AletheiaUC Assessment"; position: absolute; left: 24px; top: 34px; color: #111; font-size: 34px; font-weight: 750; }
       .aletheiauc-report .report-hero .header-meta { right: 24px; bottom: 20px; left: 24px; }
       .aletheiauc-report .report-feature { display: block; min-height: 0; }
-      .aletheiauc-report .metric-card { background: #fff !important; color: #111 !important; box-shadow: none; }
+      .aletheiauc-report .rds-metric { background: #fff !important; color: #111 !important; box-shadow: none; }
     }"""
 
     @staticmethod
@@ -1204,7 +1517,8 @@ class HtmlReportBuilder:
     .comsource-report .report-hero .header-meta { justify-content: flex-start; max-width: 780px; margin-top: 24px; }
     .comsource-report .meta-chip { background: rgba(255, 255, 255, .08); color: #fff; }
     .comsource-report .meta-chip::before { color: #62d4ff; }
-    .comsource-report .visual-divider { height: 26px; margin: 18px 0; background: var(--divider-image) center / 100% 24px no-repeat; }
+    .comsource-report .rds-transition { height: 42px; background: #eef2f6; }
+    .comsource-report .rds-transition path { filter: drop-shadow(0 0 3px rgba(0, 150, 214, .35)); }
     .comsource-report main { display: grid; gap: 18px; }
     .comsource-report section {
       position: relative;
@@ -1246,6 +1560,35 @@ class HtmlReportBuilder:
     .comsource-report .metric { background: #fff; border-color: #d8e1ea; border-top: 4px solid #147cc1; box-shadow: none; }
     .comsource-report .metric strong { color: #101633; }
     .comsource-report .metric span, .comsource-report .meta { color: #667085; }
+    .comsource-report .rds-executive {
+      padding: 32px;
+      background: linear-gradient(90deg, rgba(255, 255, 255, .98), rgba(255, 255, 255, .92) 68%, rgba(255, 255, 255, .78)), var(--executive-image) center / cover no-repeat;
+      box-shadow: 0 14px 36px rgba(16, 22, 51, .09);
+    }
+    .comsource-report .rds-executive::before { opacity: .13; }
+    .comsource-report .rds-executive__heading > span, .comsource-report .rds-chapter__copy > span { color: #0096d6; }
+    .comsource-report .rds-executive__heading h2 { color: #101633; }
+    .comsource-report .rds-executive__heading p { color: #667085; }
+    .comsource-report .rds-metric-group > header span { color: #2e1d67; }
+    .comsource-report .rds-metric-group > header p { color: #667085; }
+    .comsource-report .rds-metric { border: 1px solid #d8e1ea; border-top: 4px solid #147cc1; background: #fff; box-shadow: 0 8px 20px rgba(16, 22, 51, .06); }
+    .comsource-report .rds-metric__icon { color: #147cc1; border: 1px solid #b9dff0; background: #eef9fd; }
+    .comsource-report .rds-metric__state { color: #536679; border: 1px solid #d8e1ea; background: #f5f8fb; }
+    .comsource-report .rds-metric strong, .comsource-report .rds-metric h4 { color: #101633; }
+    .comsource-report .rds-metric p { color: #667085; }
+    .comsource-report .rds-metric--critical { border-top-color: #b42318; }
+    .comsource-report .rds-metric--critical .rds-metric__icon { color: #b42318; border-color: #f1b7b2; background: #fff4f3; }
+    .comsource-report .rds-metric--warning { border-top-color: #b54708; }
+    .comsource-report .rds-metric--warning .rds-metric__icon { color: #b54708; border-color: #f2c59e; background: #fff8f0; }
+    .comsource-report .rds-metric--info .rds-metric__icon { color: #2e1d67; border-color: #cfc6ec; background: #f7f5fc; }
+    .comsource-report .rds-chapter { margin: 0; border: 1px solid #d8e1ea; background-color: #101633; box-shadow: 0 10px 28px rgba(16, 22, 51, .10); }
+    .comsource-report .rds-chapter::before { background: linear-gradient(90deg, rgba(8, 13, 34, .98), rgba(16, 22, 51, .90) 52%, rgba(46, 29, 103, .38)); }
+    .comsource-report .rds-chapter__copy h2 { color: #fff; }
+    .comsource-report .rds-chapter__copy p { color: #d5e2ee; }
+    .comsource-report .rds-chapter__sigil { stroke: rgba(98, 212, 255, .58); }
+    .comsource-report .rds-recommendation { border: 1px solid #c8d9e6; background-image: linear-gradient(90deg, rgba(245, 248, 251, .98), rgba(255, 255, 255, .93)), var(--recommendation-image); }
+    .comsource-report .rds-recommendation::after { background: linear-gradient(90deg, rgba(255, 255, 255, .98), rgba(255, 255, 255, .88)); }
+    .comsource-report .rds-recommendation__icon { color: #fff; background: #2e1d67; }
     .comsource-report .finding { background: #fff; border-color: #d8e1ea; }
     .comsource-report th { background: #101633; color: #fff; }
     .comsource-report th, .comsource-report td { border-bottom-color: #d8e1ea; }
@@ -1968,10 +2311,7 @@ class HtmlReportBuilder:
             item
             for item in report.facts.configuration_objects
             if item.source in {"CUC.INFORMIX.SQL"}
-            or (
-                item.source.startswith("CUC.CUPI")
-                and not item.object_type.endswith("Inventory")
-            )
+            or (item.source.startswith("CUC.CUPI") and not item.object_type.endswith("Inventory"))
         ]
         if not configuration:
             return ""
@@ -2024,8 +2364,7 @@ class HtmlReportBuilder:
 
     def _cuc_informix_section(self, report: AssessmentReport) -> str:
         checks = [
-            item for item in report.facts.platform_checks
-            if item.source == "CUC.INFORMIX.SQL"
+            item for item in report.facts.platform_checks if item.source == "CUC.INFORMIX.SQL"
         ]
         if not checks:
             return ""
@@ -2532,7 +2871,9 @@ class HtmlReportBuilder:
         if finding.recommendation:
             escaped_recommendation = escape(finding.recommendation)
             recommendation = (
-                f"<p><strong>Recommended next step:</strong> {escaped_recommendation}</p>"
+                '<p class="rds-recommendation">'
+                f'<span class="rds-recommendation__icon">{self._metric_icon("checks")}</span>'
+                f"<strong>Recommended next step:</strong> {escaped_recommendation}</p>"
             )
         evidence = self._evidence_list(finding)
         finding_metadata = f"Priority: {self._finding_priority_label(finding.severity)}"
