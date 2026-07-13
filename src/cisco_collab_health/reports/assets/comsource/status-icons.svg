@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 24">
+<g font-family="Arial" font-size="16" font-weight="700" text-anchor="middle">
+<circle cx="12" cy="12" r="10" fill="#C93648"/><text x="12" y="18" fill="white">!</text>
+<path d="M36 2l11 20H25z" fill="#D97706"/><text x="36" y="18" fill="#20283A">!</text>
+<circle cx="60" cy="12" r="10" fill="#218739"/><text x="60" y="18" fill="#20283A">✓</text>
+<circle cx="84" cy="12" r="10" fill="#147CC1"/><text x="84" y="18" fill="#20283A">i</text>
+<circle cx="108" cy="12" r="10" fill="#98A2B8"/><text x="108" y="18" fill="white">?</text>
+</g></svg>

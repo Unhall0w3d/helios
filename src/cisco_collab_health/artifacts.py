@@ -295,6 +295,8 @@ def write_log_bundle(
 ) -> list[Path]:
     """Write troubleshooting files that are easy to share for analysis."""
 
+    from cisco_collab_health.reports.html import REPORT_TEMPLATES, HtmlReportBuilder
+
     metadata = getattr(report, "runtime_metadata", {})
     store.write_manifest(
         {
@@ -305,6 +307,11 @@ def write_log_bundle(
             "ssh_host_key_enrollment": metadata.get("ssh_accept_new_host_key", False),
             "customer_safe_report": metadata.get("customer_safe_report", False),
             "customer_safe_html_included": bool(customer_safe_html_report_path),
+            "review_report_variants": [
+                f"reports/{theme}/{audience}.html"
+                for theme in sorted(REPORT_TEMPLATES)
+                for audience in ("engineering", "customer-facing")
+            ],
             "target_technologies": sorted(
                 {
                     target.get("technology")
@@ -320,6 +327,22 @@ def write_log_bundle(
         store.write_json("assessment_report.json", report),
         store.write_json("collector_warnings.json", _collector_warnings(report)),
     ]
+    # Review bundles intentionally include both report audiences for every
+    # installed theme. This lets report development compare presentation only;
+    # all variants are rendered from the exact same normalized assessment data.
+    for theme in sorted(REPORT_TEMPLATES):
+        paths.append(
+            store.write_text(
+                Path("reports") / theme / "engineering.html",
+                HtmlReportBuilder(template=theme).build(report),
+            )
+        )
+        paths.append(
+            store.write_text(
+                Path("reports") / theme / "customer-facing.html",
+                HtmlReportBuilder(customer_safe=True, template=theme).build(report),
+            )
+        )
     if artifact_store is not None:
         copied_root = store.copy_artifact_tree(artifact_store.root, "artifacts")
         paths.append(

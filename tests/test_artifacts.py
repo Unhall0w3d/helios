@@ -220,6 +220,9 @@ class ArtifactStoreTests(unittest.TestCase):
             self.assertEqual(manifest["sensitivity_classification"], "private diagnostic")
             self.assertTrue(manifest["raw_evidence_included"])
             self.assertTrue(manifest["customer_safe_html_included"])
+            for theme in ("aletheiauc", "comsource"):
+                self.assertTrue((log_store.root / "reports" / theme / "engineering.html").exists())
+                self.assertTrue((log_store.root / "reports" / theme / "customer-facing.html").exists())
 
 
 if __name__ == "__main__":

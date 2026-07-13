@@ -36,7 +36,11 @@ from cisco_collab_health.reports.formatting import (
     display_status_label,
     display_text,
 )
-from cisco_collab_health.reports.html import HtmlReportBuilder
+from cisco_collab_health.reports.html import (
+    REPORT_THEMES,
+    HtmlReportBuilder,
+    _theme_asset_data_uri,
+)
 from cisco_collab_health.reports.json import JsonReportBuilder
 from cisco_collab_health.reports.reconciliation import (
     build_inventory_runtime_reconciliation,
@@ -59,6 +63,23 @@ class ReportBuilderTests(unittest.TestCase):
             display_source("ControlCenter.soapGetServiceStatus"),
             "Control Center – Service status",
         )
+
+    def test_themes_share_design_system_components_and_remain_standalone(self) -> None:
+        for theme in ("aletheiauc", "comsource"):
+            payload = HtmlReportBuilder(template=theme).build(self.report)
+            self.assertIn("rds-report", payload)
+            self.assertIn("rds-hero__art", payload)
+            self.assertIn("rds-section", payload)
+            self.assertIn("rds-footer", payload)
+            self.assertIn("data:image", payload)
+            self.assertNotIn("https://", payload)
+
+    def test_every_required_theme_asset_slot_resolves_without_remote_dependency(self) -> None:
+        for theme, package in REPORT_THEMES.items():
+            for slot in package.slots:
+                asset = _theme_asset_data_uri(theme, slot)
+                self.assertTrue(asset.startswith("data:image/"))
+                self.assertNotIn("https://", asset)
 
     def test_multi_target_scope_is_visible_in_html_and_summary(self) -> None:
         report = AssessmentReport(
@@ -166,24 +187,25 @@ class ReportBuilderTests(unittest.TestCase):
             self.assertIn("capability-row", payload)
             self.assertIn("report-shell", payload)
             self.assertIn("report-hero", payload)
-            self.assertIn('class="hero-art"', payload)
+            self.assertIn('class="hero-art rds-hero__art"', payload)
             self.assertIn("visual-divider", payload)
-            self.assertIn("data:image/png;base64", payload)
+            self.assertIn("data:image/jpeg;base64", payload)
             self.assertNotIn("https://", payload)
         self.assertIn("Engineering edition", engineering)
         self.assertIn("Customer deliverable", customer)
         self.assertIn(".header-meta", engineering)
         self.assertIn("justify-content: center", engineering)
 
-    def test_aletheiauc_template_uses_beaconveil_feature_composition(self) -> None:
+    def test_aletheiauc_template_uses_shared_design_system_composition(self) -> None:
         payload = HtmlReportBuilder().build(self.report)
 
-        self.assertIn("report-feature", payload)
-        self.assertIn("report-feature-art", payload)
-        self.assertIn("--ritual-image", payload)
+        self.assertIn("rds-hero__overlay", payload)
+        self.assertIn("rds-section rds-watermark", payload)
+        self.assertIn("--section-band-image", payload)
+        self.assertIn("--footer-image", payload)
         self.assertIn("metric-card", payload)
         self.assertIn("body.aletheiauc-report::before", payload)
-        self.assertIn("Assessment context", payload)
+        self.assertIn("AletheiaUC Assessment", payload)
 
     def test_comsource_template_is_standalone_and_brand_isolated(self) -> None:
         payload = HtmlReportBuilder(customer_safe=True, template="comsource").build(self.report)

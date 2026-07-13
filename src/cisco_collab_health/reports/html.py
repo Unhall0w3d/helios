@@ -41,6 +41,19 @@ class ReportTemplate:
     tagline: str
 
 
+@dataclass(frozen=True)
+class ReportTheme:
+    """Standalone asset slots and tokens for one report presentation theme."""
+
+    key: str
+    asset_directory: str
+    slots: dict[str, str]
+    colors: dict[str, str]
+    hero_overlay: str
+    hero_focal_point: str
+    watermark_opacity: str
+
+
 REPORT_TEMPLATES = {
     "aletheiauc": ReportTemplate(
         key="aletheiauc",
@@ -57,20 +70,49 @@ REPORT_TEMPLATES = {
 }
 
 
+REPORT_THEMES = {
+    "aletheiauc": ReportTheme(
+        key="aletheiauc", asset_directory="aletheiauc",
+        slots={
+            "logo-primary": "repository:assets/brand/svg/aletheiauc-logo-lockup.svg",
+            "hero-background": "hero-background-3840x960.jpg",
+            "section-band": "section-band-2400x240.jpg",
+            "divider-horizontal": "divider-horizontal.svg",
+            "watermark": "watermark.svg",
+            "footer-background": "footer-background-2400x220.jpg",
+            "status-icons": "status-icons.svg",
+        },
+        colors={"page": "#050812", "surface": "#10182B", "text": "#E6E8F1", "muted": "#98A2B8", "accent": "#6A4CFF", "cyan": "#22D3EE", "gold": "#FFC75E"},
+        hero_overlay="linear-gradient(90deg,rgba(5,8,18,.96) 0%,rgba(10,15,30,.86) 46%,rgba(10,15,30,.18) 100%)",
+        hero_focal_point="72% 50%", watermark_opacity=".06",
+    ),
+    "comsource": ReportTheme(
+        key="comsource", asset_directory="comsource",
+        slots={
+            "logo-primary": "ComSource_Logo.svg", "hero-background": "hero-background.svg",
+            "section-band": "section-band.svg", "divider-horizontal": "divider-horizontal.svg",
+            "watermark": "watermark.svg", "footer-background": "footer-background.svg",
+            "status-icons": "status-icons.svg",
+        },
+        colors={"page": "#EAF7FC", "surface": "#FFFFFF", "text": "#20283A", "muted": "#667085", "accent": "#2E1D67", "cyan": "#0096D6", "gold": "#0096D6"},
+        hero_overlay="linear-gradient(90deg,rgba(8,13,34,.98) 0%,rgba(16,22,51,.9) 48%,rgba(46,29,103,.25) 100%)",
+        hero_focal_point="72% 50%", watermark_opacity=".05",
+    ),
+}
+
+
 @lru_cache(maxsize=None)
-def _aletheiauc_asset_data_uri(filename: str) -> str:
-    """Embed a template asset so generated reports remain standalone."""
+def _theme_asset_data_uri(theme: str, slot: str) -> str:
+    """Resolve one named asset slot as a standalone data URI."""
 
-    path = Path(__file__).with_name("assets") / filename
-    return f"data:image/png;base64,{b64encode(path.read_bytes()).decode('ascii')}"
-
-
-@lru_cache(maxsize=None)
-def _comsource_asset_data_uri(filename: str) -> str:
-    """Embed supplied ComSource assets without external report dependencies."""
-
-    path = Path(__file__).with_name("assets") / "comsource" / filename
-    return f"data:image/svg+xml;base64,{b64encode(path.read_bytes()).decode('ascii')}"
+    package = REPORT_THEMES[theme]
+    filename = package.slots[slot]
+    if filename.startswith("repository:"):
+        path = Path(__file__).parents[3] / filename.removeprefix("repository:")
+    else:
+        path = Path(__file__).with_name("assets") / package.asset_directory / filename
+    mime = {".svg": "image/svg+xml", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".webp": "image/webp"}[path.suffix.lower()]
+    return f"data:{mime};base64,{b64encode(path.read_bytes()).decode('ascii')}"
 
 
 class HtmlReportBuilder:
@@ -80,6 +122,7 @@ class HtmlReportBuilder:
         self.customer_safe = customer_safe
         try:
             self.template = REPORT_TEMPLATES[template]
+            self.theme = REPORT_THEMES[template]
         except KeyError as exc:
             available = ", ".join(sorted(REPORT_TEMPLATES))
             raise ValueError(
@@ -94,45 +137,24 @@ class HtmlReportBuilder:
         )
         collector_evidence_count = sum(len(result.evidence) for result in report.collector_results)
         header_metadata = self._header_metadata(report)
-        is_comsource = self.template.key == "comsource"
-        is_aletheiauc = self.template.key == "aletheiauc"
-        hero_image = (
-            _comsource_asset_data_uri("comsource-cover-network.svg")
-            if is_comsource
-            else _aletheiauc_asset_data_uri("aletheiauc-report-emblem.png")
-        )
-        divider_image = (
-            _comsource_asset_data_uri("comsource-divider.svg")
-            if is_comsource
-            else _aletheiauc_asset_data_uri("aletheiauc-report-divider.png")
-        )
-        watermark_image = (
-            _comsource_asset_data_uri("comsource-watermark.svg") if is_comsource else ""
-        )
-        ritual_image = (
-            _aletheiauc_asset_data_uri("aletheiauc-report-ritual-landscape.png")
-            if is_aletheiauc
-            else ""
-        )
-        logo_image = _comsource_asset_data_uri("ComSource_Logo.svg") if is_comsource else ""
-        # The hero artwork already carries the visual identity. Avoid embedding that
-        # multi-megabyte image a second time as a decorative section watermark.
-        emblem_image = "none"
+        hero_image = _theme_asset_data_uri(self.template.key, "hero-background")
+        divider_image = _theme_asset_data_uri(self.template.key, "divider-horizontal")
+        watermark_image = _theme_asset_data_uri(self.template.key, "watermark")
+        section_band_image = _theme_asset_data_uri(self.template.key, "section-band")
+        footer_image = _theme_asset_data_uri(self.template.key, "footer-background")
+        logo_image = _theme_asset_data_uri(self.template.key, "logo-primary")
         template_css = (
             self._comsource_css()
-            if is_comsource
-            else self._aletheiauc_css() if is_aletheiauc else ""
+            if self.template.key == "comsource"
+            else self._aletheiauc_css()
         )
         template_header = self._template_header(
             header_metadata,
             hero_image=hero_image,
             logo_image=logo_image,
-            is_comsource=is_comsource,
+            is_comsource=self.template.key == "comsource",
         )
-        template_footer = self._template_footer(logo_image=logo_image, is_comsource=is_comsource)
-        brand_feature_panel = (
-            self._aletheiauc_feature_panel() if is_aletheiauc else ""
-        )
+        template_footer = self._template_footer(logo_image=logo_image, footer_image=footer_image)
         methodology_scope_section = self._methodology_scope_section(report)
         target_scope_section = self._target_scope_section(report)
         cuc_inventory_section = self._cuc_inventory_section(report)
@@ -199,7 +221,7 @@ class HtmlReportBuilder:
         {observation_cards}
       </details>"""
         findings_section = (
-            f"<section class=\"findings-section\"><h2>Priority Findings</h2>"
+            f"<section class=\"findings-section rds-section\"><h2>Priority Findings</h2>"
             f"<p class=\"meta finding-intro\">Issues below need attention. Each includes what was found, why it matters, and the recommended next step.</p>"
             f"{priority_sections}{observations_section}</section>"
         )
@@ -549,39 +571,39 @@ class HtmlReportBuilder:
       th {{ color: #245ec9; background: #f2f5fa; }}
     }}
     {template_css}
+    {self._design_system_css()}
   </style>
 </head>
 <body class="{escape(self.template.key)}-report">
-  <div class="report-shell" style="--divider-image: url('{divider_image}'); --emblem-image: url('{emblem_image}'); --watermark-image: url('{watermark_image}'); --ritual-image: url('{ritual_image}');">
-  <header class="report-hero" style="--hero-image: url('{hero_image}');">
+  <div class="report-shell rds-report" style="--divider-image: url('{divider_image}'); --watermark-image: url('{watermark_image}'); --section-band-image: url('{section_band_image}');">
+  <header class="report-hero rds-hero" style="--hero-image: url('{hero_image}');">
     {template_header}
   </header>
-  <div class="visual-divider" aria-hidden="true"></div>
+  <div class="visual-divider rds-divider" aria-hidden="true"></div>
   <main>
-    <section class="section executive-section">
+    <section class="section executive-section rds-section rds-watermark">
       <header class="section-heading"><h2>Executive Overview</h2></header>
-      <div class="section-body"><div class="metric-grid">
-        <div class="metric-card"><strong>{len(report.facts.nodes)}</strong><span>Nodes</span></div>
-        <div class="metric-card"><strong>{len(report.facts.devices)}</strong><span>Devices</span></div>
-        <div class="metric-card"><strong>{len(report.facts.registrations)}</strong>
+      <div class="section-body rds-section__body"><div class="metric-grid rds-metrics">
+        <div class="metric-card rds-metric"><strong>{len(report.facts.nodes)}</strong><span>Nodes</span></div>
+        <div class="metric-card rds-metric"><strong>{len(report.facts.devices)}</strong><span>Devices</span></div>
+        <div class="metric-card rds-metric"><strong>{len(report.facts.registrations)}</strong>
           <span>Registrations</span></div>
-        <div class="metric-card"><strong>{len(report.facts.services)}</strong><span>Services</span></div>
-        <div class="metric-card"><strong>{len(report.facts.perf_counters)}</strong>
+        <div class="metric-card rds-metric"><strong>{len(report.facts.services)}</strong><span>Services</span></div>
+        <div class="metric-card rds-metric"><strong>{len(report.facts.perf_counters)}</strong>
           <span>Performance Samples</span></div>
-        <div class="metric-card"><strong>{len(report.facts.platform_checks)}</strong>
+        <div class="metric-card rds-metric"><strong>{len(report.facts.platform_checks)}</strong>
           <span>Health Checks Captured</span></div>
-        <div class="metric-card critical"><strong>{severity_counts[FindingSeverity.CRITICAL]}</strong>
+        <div class="metric-card critical rds-metric rds-critical"><strong>{severity_counts[FindingSeverity.CRITICAL]}</strong>
           <span>Critical</span></div>
-        <div class="metric-card warning"><strong>{severity_counts[FindingSeverity.WARNING]}</strong>
+        <div class="metric-card warning rds-metric rds-warning"><strong>{severity_counts[FindingSeverity.WARNING]}</strong>
           <span>Warnings</span></div>
-        <div class="metric-card info"><strong>{severity_counts[FindingSeverity.INFO]}</strong>
+        <div class="metric-card info rds-metric rds-info"><strong>{severity_counts[FindingSeverity.INFO]}</strong>
           <span>Observations</span></div>
-        <div class="metric-card"><strong>{collector_note_count}</strong><span>Collection Notes</span></div>
-        <div class="metric-card"><strong>{collector_issue_count}</strong><span>Collection Issues</span></div>
-        <div class="metric-card"><strong>{collector_evidence_count}</strong><span>Evidence References</span></div>
+        <div class="metric-card rds-metric"><strong>{collector_note_count}</strong><span>Collection Notes</span></div>
+        <div class="metric-card rds-metric"><strong>{collector_issue_count}</strong><span>Collection Issues</span></div>
+        <div class="metric-card rds-metric"><strong>{collector_evidence_count}</strong><span>Evidence References</span></div>
       </div></div>
     </section>
-    {brand_feature_panel}
     {findings_section}
     {methodology_scope_section}
     {target_scope_section}
@@ -858,31 +880,22 @@ class HtmlReportBuilder:
     def _template_header(
         self, header_metadata: str, *, hero_image: str, logo_image: str, is_comsource: bool
     ) -> str:
-        """Render only the selected template's identity treatment."""
+        """Render the stable hero structure; themes only supply identity and art."""
 
-        if is_comsource:
-            return f"""
-    <div class=\"masthead\">
-      <div>
-        <div class=\"logo-panel\"><img src=\"{logo_image}\" alt=\"ComSource\"></div>
-        <p class=\"eyebrow\">{escape(self.template.eyebrow)}</p>
-        <h1>{escape(self.template.title)}</h1>
-        <p>{escape(self.template.tagline)}</p>
-      </div>
-    </div>
-    <div class=\"header-meta\">{header_metadata}</div>"""
-
+        logo_alt = "ComSource" if is_comsource else "AletheiaUC"
         return f"""
-    <img class="hero-art" src="{hero_image}" alt="AletheiaUC constellation and beacon artwork">
-    <div class="hero-copy">
-      <p class="eyebrow">Engineering health brief</p>
-      <h1>{escape(self.template.title)}</h1>
-      <p>{escape(self.template.tagline)}</p>
+    <img class="hero-art rds-hero__art" src="{hero_image}" alt="" aria-hidden="true">
+    <div class="rds-hero__overlay"></div>
+    <div class="hero-copy rds-hero__content">
+      <img class="rds-logo" src="{logo_image}" alt="{logo_alt}">
+      <p class="eyebrow rds-eyebrow">{escape(self.template.eyebrow)}</p>
+      <h1 class="rds-title">{escape(self.template.title)}</h1>
+      <p class="rds-subtitle">{escape(self.template.tagline)}</p>
     </div>
     <div class="capability-row sr-only">
       <span>Assess</span><span>Diagnose</span><span>Improve</span><span>Optimize</span>
     </div>
-    <div class="header-meta">{header_metadata}</div>"""
+    <div class="header-meta rds-meta">{header_metadata}</div>"""
 
     @staticmethod
     def _aletheiauc_feature_panel() -> str:
@@ -902,15 +915,50 @@ class HtmlReportBuilder:
       <div class="report-feature-art" aria-hidden="true"></div>
     </section>"""
 
-    @staticmethod
-    def _template_footer(*, logo_image: str, is_comsource: bool) -> str:
-        if not is_comsource:
-            return ""
+    def _template_footer(self, *, logo_image: str, footer_image: str) -> str:
+        footer_label = (
+            "Prepared by ComSource, Inc. · Confidential customer report"
+            if self.template.key == "comsource"
+            else f"AletheiaUC Assessment · {'Customer deliverable' if self.customer_safe else 'Engineering report'}"
+        )
         return f"""
-  <footer class=\"template-footer\">
-    <div class=\"footer-logo\"><img src=\"{logo_image}\" alt=\"ComSource\"></div>
-    <small>Prepared by ComSource, Inc. · Confidential customer report</small>
+  <footer class=\"template-footer rds-footer\" style=\"--footer-image: url('{footer_image}');\">
+    <img class=\"rds-logo\" src=\"{logo_image}\" alt=\"{escape(self.template.title)}\">
+    <small>{escape(footer_label)}</small>
   </footer>"""
+
+    def _design_system_css(self) -> str:
+        """Shared layout contract plus tokenized theme presentation."""
+
+        color = self.theme.colors
+        logo_panel = (
+            ".comsource-report .rds-hero__content > .rds-logo, .comsource-report .rds-footer > .rds-logo { padding: 10px 14px; border-radius: 8px; background: #fff; }"
+            if self.theme.key == "comsource" else ""
+        )
+        return f"""
+    .rds-report {{ width: min(1440px, calc(100% - 48px)); margin: 24px auto 64px; }}
+    .rds-hero {{ min-height: 360px; overflow: hidden; border-radius: 12px; background: {color['page']}; }}
+    .rds-hero__art {{ position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: {self.theme.hero_focal_point}; }}
+    .rds-hero__overlay {{ position: absolute; inset: 0; background: {self.theme.hero_overlay}; }}
+    .rds-hero__content {{ position: relative; z-index: 2; max-width: 760px; padding: 36px 42px 48px; }}
+    .rds-logo {{ display: block; max-width: min(360px, 60vw); max-height: 96px; }}
+    .rds-eyebrow {{ margin-top: 28px; }} .rds-title {{ line-height: 1.02; }}
+    .rds-subtitle {{ font-size: 18px; line-height: 1.5; }}
+    .rds-meta {{ position: relative; z-index: 2; }}
+    .rds-divider {{ height: 32px; margin: 15px 0; background: var(--divider-image) center / 100% 32px no-repeat; }}
+    .rds-section {{ position: relative; overflow: hidden; border-radius: 12px; }}
+    .rds-watermark::before {{ content: ""; position: absolute; right: -50px; bottom: -85px; width: 300px; height: 300px; background: var(--watermark-image) center / contain no-repeat; opacity: {self.theme.watermark_opacity}; pointer-events: none; }}
+    .rds-section__heading {{ min-height: 58px; }} .rds-section__body {{ padding: 20px; }}
+    .rds-metrics {{ grid-template-columns: repeat(auto-fit, minmax(165px, 1fr)); gap: 12px; }}
+    .rds-metric {{ min-height: 102px; border-radius: 8px; }}
+    .rds-finding {{ display: grid; grid-template-columns: auto 1fr; gap: 12px; }}
+    .rds-badge {{ align-self: start; padding: 5px 8px; border-radius: 5px; color: #fff; font-size: 11px; font-weight: 700; }}
+    .rds-footer {{ min-height: 96px; background: {color['page']} var(--footer-image) center / cover no-repeat; }}
+    .rds-footer .rds-logo {{ max-width: 220px; max-height: 60px; }}
+    {logo_panel}
+    @media (max-width: 700px) {{ .rds-report {{ width: calc(100% - 18px); margin-top: 9px; }} .rds-hero {{ min-height: 420px; }} .rds-hero__content {{ padding: 24px 20px 38px; }} .rds-section__body {{ padding: 13px; }} }}
+    @media print {{ .rds-report {{ width: 100%; margin: 0; }} .rds-hero__art, .rds-hero__overlay, .rds-watermark::before {{ display: none !important; }} .rds-hero {{ min-height: auto; }} .rds-section {{ break-inside: avoid; }} }}
+"""
 
     @staticmethod
     def _aletheiauc_css() -> str:
@@ -2323,8 +2371,9 @@ class HtmlReportBuilder:
             finding_metadata += f" | Severity: {severity}"
 
         return f"""
-      <article class="finding {severity}">
-        <h3>{escape(finding.title)}</h3>
+      <article class="finding rds-finding rds-{severity}">
+        <div class="rds-badge">{severity.upper()}</div>
+        <div><h3>{escape(finding.title)}</h3>
         <div class="meta">
           {finding_metadata}
         </div>
@@ -2334,7 +2383,7 @@ class HtmlReportBuilder:
           {facts}
         </ul>
         {evidence}
-        {recommendation}
+        {recommendation}</div>
       </article>
 """
 

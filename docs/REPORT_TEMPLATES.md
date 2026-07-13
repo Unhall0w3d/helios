@@ -46,3 +46,23 @@ the hero image is not duplicated as a section watermark. This keeps the report
 self-contained while avoiding unnecessary bundle growth. Active service
 certificates and trust-store entries are summarized separately so stale trust
 entries are not presented as proof of an outage.
+
+## Shared design system
+
+All templates use one semantic report structure with shared `rds-*` components
+for the hero, metadata chips, sections, metrics, findings, tables, and footer.
+Themes provide only their tokens and named asset slots. The AletheiaUC template
+uses the canonical repository logo; the ComSource template uses the supplied
+official SVG unchanged. Theme presentation must not change facts, health logic,
+or customer-safe masking.
+
+Every troubleshooting/review ZIP now includes all presentation comparisons,
+rendered from the same assessment facts:
+
+- `reports/aletheiauc/engineering.html`
+- `reports/aletheiauc/customer-facing.html`
+- `reports/comsource/engineering.html`
+- `reports/comsource/customer-facing.html`
+
+The existing `report.html` and `customer_safe_report.html` remain as compatible
+copies of the operator-selected template.

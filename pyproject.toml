@@ -30,7 +30,12 @@ Issues = "https://github.com/unhall0w3d/aletheiauc/issues"
 where = ["src"]
 
 [tool.setuptools.package-data]
-cisco_collab_health = ["reports/assets/*.png", "reports/assets/comsource/*.svg"]
+cisco_collab_health = [
+  "reports/assets/*.png",
+  "reports/assets/aletheiauc/*.jpg",
+  "reports/assets/aletheiauc/*.svg",
+  "reports/assets/comsource/*.svg",
+]
 
 [tool.ruff]
 line-length = 100
