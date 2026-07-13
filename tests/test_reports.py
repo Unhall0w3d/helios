@@ -79,7 +79,10 @@ class ReportBuilderTests(unittest.TestCase):
             self.assertIn("rds-chapter--scope", payload)
             self.assertIn("rds-recommendation", payload)
             self.assertIn("rds-footer", payload)
-            self.assertIn("data:image", payload)
+            if theme == "comsource":
+                self.assertIn("data:image", payload)
+            else:
+                self.assertNotIn("data:image", payload)
             self.assertNotIn("https://", payload)
 
     def test_every_required_theme_asset_slot_resolves_without_remote_dependency(self) -> None:
@@ -157,7 +160,7 @@ class ReportBuilderTests(unittest.TestCase):
         payload = HtmlReportBuilder().build(self.report)
 
         self.assertIn("<!doctype html>", payload)
-        self.assertIn("AletheiaUC Assessment", payload)
+        self.assertIn("Collaboration Health Assessment", payload)
         self.assertIn("Assessment Methodology and Scope", payload)
         self.assertIn("synthetic sample data", payload)
         self.assertIn("SampleCollector synthetic fixture data", payload)
@@ -184,28 +187,28 @@ class ReportBuilderTests(unittest.TestCase):
         self.assertIn("Call Manager Group", payload)
         self.assertIn("Region", payload)
 
-    def test_default_aletheiauc_template_brands_both_report_editions(self) -> None:
+    def test_default_template_is_generic_dark_and_text_first_in_both_editions(self) -> None:
         engineering = HtmlReportBuilder().build(self.report)
         customer = HtmlReportBuilder(customer_safe=True).build(self.report)
 
         for payload in (engineering, customer):
-            self.assertIn("Bringing UC Health to Light", payload)
-            self.assertIn("--midnight: #0a0f1e", payload)
-            self.assertIn("--violet: #6a4cff", payload)
-            self.assertIn("--cyan: #22d3ee", payload)
+            self.assertIn("Collaboration Health Assessment", payload)
+            self.assertIn("Evidence-led review and actionable findings", payload)
+            self.assertIn('class="default-dark-report"', payload)
             self.assertIn("capability-row", payload)
             self.assertIn("report-shell", payload)
             self.assertIn("report-hero", payload)
-            self.assertIn('class="hero-art rds-hero__art"', payload)
-            self.assertIn("rds-transition", payload)
-            self.assertIn("data:image/jpeg;base64", payload)
+            self.assertNotIn('class="hero-art rds-hero__art"', payload)
+            self.assertNotIn("data:image", payload)
+            self.assertNotIn("AletheiaUC", payload)
+            self.assertIn("body.default-dark-report", payload)
             self.assertNotIn("https://", payload)
         self.assertIn("Engineering edition", engineering)
         self.assertIn("Customer deliverable", customer)
         self.assertIn(".header-meta", engineering)
         self.assertIn("justify-content: center", engineering)
 
-    def test_aletheiauc_template_uses_shared_design_system_composition(self) -> None:
+    def test_default_template_uses_shared_design_system_without_artwork(self) -> None:
         payload = HtmlReportBuilder().build(self.report)
         hero_copy = payload.split('<div class="hero-copy rds-hero__content">', 1)[1].split(
             '<div class="capability-row',
@@ -222,8 +225,9 @@ class ReportBuilderTests(unittest.TestCase):
         self.assertIn("--section-band-image", payload)
         self.assertIn("--executive-image", payload)
         self.assertIn("--footer-image", payload)
-        self.assertIn("body.aletheiauc-report::before", payload)
-        self.assertIn("AletheiaUC Assessment", payload)
+        self.assertIn("body.default-dark-report", payload)
+        self.assertIn("Collaboration Health Assessment", payload)
+        self.assertNotIn("data:image", payload)
         self.assertNotIn('class="rds-logo"', hero_copy)
         footer = payload.split('<footer class="template-footer rds-footer"', 1)[1]
         self.assertNotIn('class="rds-logo"', footer)

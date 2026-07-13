@@ -434,17 +434,16 @@ artifact paths:
 ## HTML Report Templates
 
 HTML reports use the `aletheiauc` template by default. It draws on the project
-palette—midnight, violet, blue, cyan, and horizon gold—to create a beacon-like
-next-generation engineering brief with purpose-built techno-sorcery artwork.
-The same semantic report-design components are used by the full engineering
-report, the customer deliverable, ComSource, and future templates. Themes retain
-their own colors, typography, imagery, and logo rules while sharing functional
-metric cards, chapter structure, responsive containment, findings, and evidence
+key for compatibility, but renders as a generic, text-first dark assessment
+report with no logo, imagery, or product-specific report branding. The same
+semantic report-design components are used by the full engineering report, the
+customer deliverable, ComSource, and future templates. Themes retain their own
+colors, typography, imagery, and logo rules while sharing functional metric
+cards, chapter structure, responsive containment, findings, and evidence
 presentation. The customer edition retains target names, hostnames, IP
 addresses, devices, dial-plan values, and configuration so customer engineers
 can interpret the assessment.
 
-The default AletheiaUC assets are tracked in the repository.
 The CLI discovers other registered templates only when their complete local
 asset pack is present, so a clean clone remains fully functional. Template
 selection never changes collection, findings, or report facts.

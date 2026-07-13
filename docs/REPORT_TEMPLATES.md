@@ -3,11 +3,13 @@
 Report templates change presentation only. Collection, evidence, findings, and
 the customer-deliverable data policy are shared by every template.
 
-## AletheiaUC
+## Default dark report
 
-`aletheiauc` is the default engineering and customer-deliverable template. Its
-identity is documented in [Brand Pack](BRANDING.md). Its complete asset pack is
-tracked in the repository, so it is always available on a clean clone.
+`aletheiauc` remains the default template key for CLI and saved-assessment
+compatibility, but its presentation is a generic, text-first dark report. It
+has no logo, product naming, imagery, watermark, or required asset pack. The
+shared cards, tables, chapter structure, responsive behavior, print behavior,
+and report data policy remain unchanged.
 
 ## Template discovery
 
@@ -15,12 +17,12 @@ The CLI and interactive menu list only registered templates whose complete
 asset packs are present. Review bundles render the same installed set. A missing
 optional pack therefore cannot break the default report or a review export.
 
-Template behavior—metadata, design tokens, asset-slot mappings, and shared
-rendering code—belongs in source control. Partner or customer artwork does not.
-Local packs live under `src/cisco_collab_health/reports/assets/<template>/`;
-all such directories except `aletheiauc` are ignored by Git and excluded from
-package data. Adding a future template requires a registered code definition and
-a complete local pack matching its slot map.
+Template behavior—metadata, design tokens, optional asset-slot mappings, and
+shared rendering code—belongs in source control. Partner or customer artwork
+does not. Local packs live under
+`src/cisco_collab_health/reports/assets/<template>/`. A template with no asset
+slots, such as the default dark report, requires no files; an illustrated or
+branded template requires every file declared in its slot map.
 
 ## ComSource
 
@@ -95,15 +97,10 @@ Duplicate extensions produce a warning, while configured alternate-contact and
 system-transfer paths produce an informational restriction-table/toll-fraud
 review; neither finding is emitted when its experimental probe did not complete.
 
-The standalone AletheiaUC report embeds only the artwork it actively renders.
-The hero image is not duplicated as a section watermark, and the footer omits a
-redundant logo. A code-native SVG transition connects the hero to the executive
-overview without stretching raster artwork. Chapter and executive artwork is
-stored at its intended display ratio and rendered with `cover`, never resized by
-independent width and height rules. This keeps the report self-contained while
-avoiding unnecessary bundle growth. Active service
-certificates and trust-store entries are summarized separately so stale trust
-entries are not presented as proof of an outage.
+The default dark report deliberately embeds no images, keeping it compact,
+generic, and easy to read. Active service certificates and trust-store entries
+are summarized separately so stale trust entries are not presented as proof of
+an outage.
 
 ## Shared design system
 
@@ -116,8 +113,8 @@ automatically apply to ComSource and future templates.
 
 Themes provide presentation tokens and map named asset slots onto the shared
 components. Each theme therefore retains its own colors, fonts, imagery, logo
-rules, and decorative treatment without forking report markup. The current slot
-contract includes:
+rules, and decorative treatment without forking report markup. The slot
+contract for themes that use artwork includes:
 
 - `hero-background` and `executive-background`
 - `chapter-findings`, `chapter-scope`, `chapter-infrastructure`,
@@ -126,9 +123,9 @@ contract includes:
 - `logo-primary` for placements enabled by that theme
 
 A theme may map several slots to one reusable image, as ComSource does with its
-local section artwork, or provide purpose-built imagery for every slot, as
-AletheiaUC does. AletheiaUC intentionally has no footer logo; an installed
-ComSource pack uses its local official SVG in the hero and footer. Theme
+local section artwork. A theme may also declare no slots, as the default dark
+report does. An installed ComSource pack uses its local official SVG in the
+hero and footer. Theme
 presentation must not change facts, health logic, severity meaning, or the
 customer-deliverable data policy.
 

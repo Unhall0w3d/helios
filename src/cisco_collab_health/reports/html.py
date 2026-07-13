@@ -59,9 +59,9 @@ class ReportTheme:
 REPORT_TEMPLATES = {
     "aletheiauc": ReportTemplate(
         key="aletheiauc",
-        title="AletheiaUC Assessment",
-        eyebrow="Engineering health brief",
-        tagline="Bringing UC Health to Light",
+        title="Collaboration Health Assessment",
+        eyebrow="Engineering health report",
+        tagline="Evidence-led review and actionable findings",
     ),
     "comsource": ReportTemplate(
         key="comsource",
@@ -75,35 +75,20 @@ REPORT_TEMPLATES = {
 REPORT_THEMES = {
     "aletheiauc": ReportTheme(
         key="aletheiauc",
-        asset_directory="aletheiauc",
-        slots={
-            "logo-primary": "repository:assets/brand/svg/aletheiauc-logo-lockup.svg",
-            "hero-background": "hero-techno-sorcery-3198x800.jpg",
-            "executive-background": "executive-background-2400x960.jpg",
-            "chapter-findings": "chapter-findings-2400x240.jpg",
-            "chapter-scope": "chapter-scope-2400x240.jpg",
-            "chapter-infrastructure": "chapter-infrastructure-2400x240.jpg",
-            "chapter-analysis": "chapter-analysis-2400x240.jpg",
-            "chapter-evidence": "chapter-evidence-2400x240.jpg",
-            "recommendation-background": "recommendation-background-2400x240.jpg",
-            "section-band": "section-band-2400x240.jpg",
-            "divider-horizontal": "divider-horizontal.svg",
-            "watermark": "watermark.svg",
-            "footer-background": "footer-techno-sorcery-2397x220.jpg",
-            "status-icons": "status-icons.svg",
-        },
+        asset_directory="",
+        slots={},
         colors={
-            "page": "#050812",
-            "surface": "#10182B",
-            "text": "#E6E8F1",
-            "muted": "#98A2B8",
-            "accent": "#6A4CFF",
-            "cyan": "#22D3EE",
-            "gold": "#FFC75E",
+            "page": "#111827",
+            "surface": "#182230",
+            "text": "#F3F4F6",
+            "muted": "#A8B2C1",
+            "accent": "#8190A5",
+            "cyan": "#73C7D8",
+            "gold": "#E8B86D",
         },
-        hero_overlay="linear-gradient(90deg,rgba(5,8,18,.96) 0%,rgba(10,15,30,.86) 46%,rgba(10,15,30,.18) 100%)",
-        hero_focal_point="72% 50%",
-        watermark_opacity=".06",
+        hero_overlay="none",
+        hero_focal_point="center",
+        watermark_opacity="0",
         show_hero_logo=False,
         show_footer_logo=False,
     ),
@@ -161,6 +146,14 @@ def _theme_asset_data_uri(theme: str, slot: str) -> str:
         ".webp": "image/webp",
     }[path.suffix.lower()]
     return f"data:{mime};base64,{b64encode(path.read_bytes()).decode('ascii')}"
+
+
+def _optional_theme_asset_data_uri(theme: str, slot: str) -> str:
+    """Resolve an optional presentation asset, or no image for a text-first theme."""
+
+    if slot not in REPORT_THEMES[theme].slots:
+        return ""
+    return _theme_asset_data_uri(theme, slot)
 
 
 def _theme_asset_path(theme: str, slot: str) -> Path:
@@ -221,22 +214,22 @@ class HtmlReportBuilder:
         )
         collector_evidence_count = sum(len(result.evidence) for result in report.collector_results)
         header_metadata = self._header_metadata(report)
-        hero_image = _theme_asset_data_uri(self.template.key, "hero-background")
-        watermark_image = _theme_asset_data_uri(self.template.key, "watermark")
-        section_band_image = _theme_asset_data_uri(self.template.key, "section-band")
-        executive_image = _theme_asset_data_uri(self.template.key, "executive-background")
-        chapter_findings_image = _theme_asset_data_uri(self.template.key, "chapter-findings")
-        chapter_scope_image = _theme_asset_data_uri(self.template.key, "chapter-scope")
-        chapter_infrastructure_image = _theme_asset_data_uri(
+        hero_image = _optional_theme_asset_data_uri(self.template.key, "hero-background")
+        watermark_image = _optional_theme_asset_data_uri(self.template.key, "watermark")
+        section_band_image = _optional_theme_asset_data_uri(self.template.key, "section-band")
+        executive_image = _optional_theme_asset_data_uri(self.template.key, "executive-background")
+        chapter_findings_image = _optional_theme_asset_data_uri(self.template.key, "chapter-findings")
+        chapter_scope_image = _optional_theme_asset_data_uri(self.template.key, "chapter-scope")
+        chapter_infrastructure_image = _optional_theme_asset_data_uri(
             self.template.key, "chapter-infrastructure"
         )
-        chapter_analysis_image = _theme_asset_data_uri(self.template.key, "chapter-analysis")
-        chapter_evidence_image = _theme_asset_data_uri(self.template.key, "chapter-evidence")
-        recommendation_image = _theme_asset_data_uri(self.template.key, "recommendation-background")
-        footer_image = _theme_asset_data_uri(self.template.key, "footer-background")
-        logo_image = _theme_asset_data_uri(self.template.key, "logo-primary")
+        chapter_analysis_image = _optional_theme_asset_data_uri(self.template.key, "chapter-analysis")
+        chapter_evidence_image = _optional_theme_asset_data_uri(self.template.key, "chapter-evidence")
+        recommendation_image = _optional_theme_asset_data_uri(self.template.key, "recommendation-background")
+        footer_image = _optional_theme_asset_data_uri(self.template.key, "footer-background")
+        logo_image = _optional_theme_asset_data_uri(self.template.key, "logo-primary")
         template_css = (
-            self._comsource_css() if self.template.key == "comsource" else self._aletheiauc_css()
+            self._comsource_css() if self.template.key == "comsource" else self._default_dark_css()
         )
         template_header = self._template_header(
             header_metadata,
@@ -716,7 +709,7 @@ class HtmlReportBuilder:
     {self._design_system_css()}
   </style>
 </head>
-<body class="{escape(self.template.key)}-report">
+<body class="{escape('default-dark' if self.template.key == 'aletheiauc' else self.template.key)}-report">
   <div class="report-shell rds-report" style="--watermark-image: url('{watermark_image}'); --section-band-image: url('{section_band_image}'); --executive-image: url('{executive_image}'); --chapter-findings-image: url('{chapter_findings_image}'); --chapter-scope-image: url('{chapter_scope_image}'); --chapter-infrastructure-image: url('{chapter_infrastructure_image}'); --chapter-analysis-image: url('{chapter_analysis_image}'); --chapter-evidence-image: url('{chapter_evidence_image}'); --recommendation-image: url('{recommendation_image}');">
   <header class="report-hero rds-hero" style="--hero-image: url('{hero_image}');">
     {template_header}
@@ -1030,8 +1023,13 @@ class HtmlReportBuilder:
             if self.theme.show_hero_logo
             else ""
         )
+        hero_art = (
+            f'<img class="hero-art rds-hero__art" src="{hero_image}" alt="" aria-hidden="true">'
+            if hero_image
+            else ""
+        )
         return f"""
-    <img class="hero-art rds-hero__art" src="{hero_image}" alt="" aria-hidden="true">
+    {hero_art}
     <div class="rds-hero__overlay"></div>
     <div class="hero-copy rds-hero__content">
       {logo_markup}
@@ -1278,7 +1276,7 @@ class HtmlReportBuilder:
         footer_label = (
             "Prepared by ComSource, Inc. · Confidential customer report"
             if self.template.key == "comsource"
-            else f"AletheiaUC Assessment · {'Customer deliverable' if self.customer_safe else 'Engineering report'}"
+            else f"Collaboration Health Assessment · {'Customer deliverable' if self.customer_safe else 'Engineering report'}"
         )
         logo_markup = (
             f'<img class="rds-logo" src="{logo_image}" alt="{escape(self.template.title)}">'
@@ -1377,6 +1375,62 @@ class HtmlReportBuilder:
     @media (max-width: 700px) {{ .rds-report {{ width: calc(100% - 18px); margin-top: 9px; }} .rds-hero {{ min-height: 420px; }} .rds-hero__content {{ padding: 24px 20px 38px; }} .rds-section__body {{ padding: 13px; }} .rds-chapter__copy {{ max-width: 84%; }} .rds-chapter__sigil {{ opacity: .35; }} }}
     @media (max-width: 620px) {{ .rds-executive {{ padding: 24px 18px !important; }} .rds-metric-grid {{ grid-template-columns: minmax(0, 1fr); }} .rds-metric-group > header {{ display: block; }} .rds-metric-group > header p {{ margin-top: 4px; }} }}
     @media print {{ .rds-report {{ width: 100%; margin: 0; }} .rds-hero__art, .rds-hero__overlay, .rds-watermark::before {{ display: none !important; }} .rds-hero {{ min-height: auto; }} .rds-section {{ break-inside: avoid; }} .rds-transition {{ height: 38px; }} .rds-metric {{ min-height: 118px; box-shadow: none !important; }} .rds-chapter {{ min-height: 112px; margin: 25px 0 16px; box-shadow: none !important; }} .rds-recommendation {{ background-image: none !important; }} }}
+"""
+
+    @staticmethod
+    def _default_dark_css() -> str:
+        """Neutral dark presentation for the default, text-first report."""
+
+        return """
+    body.default-dark-report { background: #111827; color: #f3f4f6; }
+    .default-dark-report .report-shell { width: min(1320px, calc(100% - 40px)); margin: 24px auto 64px; padding: 0; }
+    .default-dark-report .report-hero { min-height: 0; padding: 34px 42px 28px; border: 1px solid #334155; border-radius: 12px; background: #182230; box-shadow: 0 14px 34px rgba(0, 0, 0, .18); }
+    .default-dark-report .rds-hero__overlay, .default-dark-report .hero-art, .default-dark-report .rds-watermark::before { display: none; }
+    .default-dark-report .hero-copy { position: relative; max-width: 760px; padding: 0; border: 0; border-radius: 0; background: none; box-shadow: none; }
+    .default-dark-report .hero-copy .eyebrow { margin: 0 0 7px; color: #a8b2c1; }
+    .default-dark-report .hero-copy h1 { color: #f9fafb; font-size: clamp(28px, 4vw, 42px); }
+    .default-dark-report .hero-copy p:last-child { color: #c5ceda; }
+    .default-dark-report .report-hero::after { display: none; }
+    .default-dark-report .report-hero .header-meta { justify-content: flex-start; max-width: none; margin-top: 22px; }
+    .default-dark-report .meta-chip { border-color: #435268; background: #202c3d; color: #e5e7eb; }
+    .default-dark-report .meta-chip::before { content: "•"; color: #a8b2c1; }
+    .default-dark-report .meta-chip.scope { border-color: #4f8090; color: #d7eef2; }
+    .default-dark-report .meta-chip.diagnostic { border-color: #8c7041; color: #f4dfba; }
+    .default-dark-report .rds-transition { display: none; }
+    .default-dark-report main { display: grid; gap: 18px; margin-top: 18px; }
+    .default-dark-report section { margin: 0; border-color: #334155; background: #182230; box-shadow: 0 8px 20px rgba(0, 0, 0, .14); }
+    .default-dark-report section::before { display: none; }
+    .default-dark-report section > h2 { background: #1d2938; border-bottom-color: #334155; color: #f3f4f6; }
+    .default-dark-report .rds-executive { padding: 32px; border: 1px solid #334155; border-radius: 12px; background: #182230; box-shadow: 0 8px 20px rgba(0, 0, 0, .14); }
+    .default-dark-report .rds-executive::after { display: none; }
+    .default-dark-report .rds-executive__heading > span, .default-dark-report .rds-chapter__copy > span { color: #a8b2c1; }
+    .default-dark-report .rds-executive__heading h2, .default-dark-report .rds-chapter__copy h2 { color: #f3f4f6; }
+    .default-dark-report .rds-executive__heading p, .default-dark-report .rds-chapter__copy p { color: #b8c2cf; }
+    .default-dark-report .rds-metric-group > header span { color: #b8c2cf; }
+    .default-dark-report .rds-metric-group > header p { color: #94a3b8; }
+    .default-dark-report .rds-metric { border: 1px solid #3b4a60; background: #202c3d; box-shadow: none; }
+    .default-dark-report .rds-metric::after { display: none; }
+    .default-dark-report .rds-metric__icon { color: #9bd7e2; border: 1px solid #4d7883; background: #223746; }
+    .default-dark-report .rds-metric__state { color: #c6d0dc; border-color: #4a5b70; background: #263448; }
+    .default-dark-report .rds-metric strong, .default-dark-report .rds-metric h4 { color: #f3f4f6; }
+    .default-dark-report .rds-metric p { color: #aeb9c6; }
+    .default-dark-report .rds-metric--critical { border-color: #9f3d4d; }
+    .default-dark-report .rds-metric--critical .rds-metric__icon { color: #ff9aa9; border-color: #87404b; background: #3b252c; }
+    .default-dark-report .rds-metric--warning { border-color: #8f7142; }
+    .default-dark-report .rds-metric--warning .rds-metric__icon { color: #f4c677; border-color: #80653d; background: #3c3324; }
+    .default-dark-report .rds-metric--info .rds-metric__icon { color: #a9c7f0; border-color: #536d90; background: #26364c; }
+    .default-dark-report .rds-chapter { min-height: 0; margin: 0; border: 1px solid #334155; background: #1d2938; box-shadow: none; }
+    .default-dark-report .rds-chapter::before, .default-dark-report .rds-chapter__sigil { display: none; }
+    .default-dark-report .rds-chapter__copy { max-width: none; padding: 21px 24px; }
+    .default-dark-report .rds-recommendation { border-color: #5a674f; background: #222f28; }
+    .default-dark-report .rds-recommendation::after { display: none; }
+    .default-dark-report .rds-recommendation__icon { color: #182230; background: #c5d4a8; }
+    .default-dark-report .finding { border-color: #3b4a60; background: #202c3d; }
+    .default-dark-report th { color: #dce7ef; background: #1d2938; }
+    .default-dark-report th, .default-dark-report td { border-bottom-color: #334155; }
+    .default-dark-report tbody tr:nth-child(even) { background: #1c2736; }
+    .default-dark-report .template-footer { display: flex; align-items: center; min-height: 0; margin-top: 18px; padding: 17px 20px; border: 1px solid #334155; border-radius: 10px; background: #182230; color: #aeb9c6; }
+    @media print { .default-dark-report .report-hero { min-height: auto; padding: 24px; border: 1px solid #334155; } .default-dark-report .rds-transition { display: none; } }
 """
 
     @staticmethod
