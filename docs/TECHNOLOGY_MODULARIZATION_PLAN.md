@@ -6,6 +6,39 @@ Load and run only the collectors, parsers, rules, and report sections relevant t
 the technologies selected for an assessment, while retaining shared transports,
 facts, artifact handling, and report composition.
 
+This adopts the useful convention from the legacy health-check project: technology
+parsers live with their technology and are called only when that technology is in
+scope. This is technology-scoped loading, not forced Python module unloading.
+Collectors must still close HTTP and SSH resources immediately after collection.
+
+## Target architecture
+
+```text
+technologies/
+  cuc/
+    collectors.py
+    parsers.py
+    rules.py
+    report_sections.py
+  cucm/
+    collectors.py
+    parsers.py
+    rules.py
+    report_sections.py
+  cer/ …
+  imp/ …
+shared/
+  transport/
+  artifacts/
+  facts/
+  report_shell/
+```
+
+Each technology package owns only technology-specific API callers, command
+catalogues, parsers, rules, and optional report sections. Shared code owns the
+common collection contract, bounded transport sessions, normalized fact models,
+artifact retention, report shell, and customer-safe policy.
+
 ## Phase 1: Explicit technology plugins
 
 - Replace eager imports in the collector registry with a small manifest keyed by
@@ -13,7 +46,11 @@ facts, artifact handling, and report composition.
 - Each plugin exposes its collector factory, applicable rules, report-section
   provider, and capability requirements.
 - Import a plugin only after an in-scope target selects that technology.
+- Do not import or initialize CUCM SOAP clients/parsers for a CUC-only run, or
+  CUC CLI parsers for a CUCM-only run.
 - Keep the current `TargetPipelineCollector` as the common multi-target boundary.
+- A plugin hands normalized facts and evidence to the shared assessment engine;
+  downstream rules and reports do not retain client/session objects.
 
 ## Phase 2: Shared UCOS CLI collection
 
