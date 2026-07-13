@@ -46,7 +46,14 @@ class CucCollector:
             product="Cisco Unity Connection",
             version="unknown",
         )
-        probes = [("CucMailboxInventory", "Mailboxes", "/vmrest/users")]
+        probes = [
+            ("CucMailboxInventory", "Mailboxes", "/vmrest/users"),
+            (
+                "CucUnifiedMessagingServiceInventory",
+                "Unified messaging services",
+                "/vmrest/externalservices",
+            ),
+        ]
         if self.diagnostic_capture:
             probes.extend(
                 [

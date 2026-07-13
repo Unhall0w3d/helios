@@ -6,6 +6,16 @@ Each command has a stable ID, an explicit timeout, diagnostic-only scope, and a
 sensitive-output classification. Output is retained as private diagnostic
 evidence after configured redaction.
 
+## Reporting boundary
+
+Reports describe only checks AletheiaUC actually performs and evidence it
+actually collects. A configured feature is not described as tested unless its
+result was collected as assessment evidence.
+
+The normal CUC CUPI pass records only bounded inventory counts for mailboxes
+and unified-messaging services. It does not retrieve per-user external-service
+account details, email addresses, or stored credentials.
+
 | ID | Command | Timeout |
 | --- | --- | --- |
 | `cuc.show_status` | `show status` | 30s |
