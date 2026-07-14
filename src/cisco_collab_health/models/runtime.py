@@ -44,5 +44,6 @@ class CollectionContext:
     diagnostic_max_devices: int = 2000
     diagnostic_axl_page_size: int = 250
     diagnostic_axl_max_records: int = 500
+    diagnostic_cupi_max_records: int = 2000
     discovered_nodes: tuple[str, ...] = ()
     discovered_device_names: tuple[str, ...] = ()

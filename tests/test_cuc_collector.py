@@ -88,6 +88,32 @@ class LiveShapeHttpClient:
         return CapturedHttpResponse(200, "OK", body, Path("response.txt"))
 
 
+class PaginatedScheduleHttpClient:
+    def __init__(self) -> None:
+        self.endpoints: list[str] = []
+
+    def get(self, endpoint, context, **kwargs):
+        del context, kwargs
+        self.endpoints.append(endpoint)
+        if "/vmrest/schedules?" not in endpoint:
+            return CapturedHttpResponse(200, "OK", '<Items total="0" />', Path("response.txt"))
+
+        page_number = 2 if "pageNumber=2" in endpoint else 1
+        start = 500 if page_number == 2 else 0
+        count = 382 if page_number == 2 else 500
+        rows = "".join(
+            f"<Schedule><DisplayName>Schedule {index}</DisplayName></Schedule>"
+            for index in range(start, start + count)
+        )
+        body = f'<Schedules total="882">{rows}</Schedules>'
+        return CapturedHttpResponse(
+            200,
+            "OK",
+            body,
+            Path(f"schedule-page-{page_number}.txt"),
+        )
+
+
 class CucCollectorTests(unittest.TestCase):
     def test_total_parser_supports_xml_and_json(self) -> None:
         self.assertEqual(_cupi_total('<Users total="42" />'), 42)
@@ -121,6 +147,34 @@ class CucCollectorTests(unittest.TestCase):
                 for item in result.facts.configuration_objects
             )
         )
+
+    def test_diagnostic_cupi_configuration_is_paginated_to_its_independent_limit(self) -> None:
+        client = PaginatedScheduleHttpClient()
+
+        result = CucCollector(http_client=client, diagnostic_capture=True).collect(
+            CollectionContext(
+                product="cuc",
+                publisher_ip="192.0.2.20",
+                diagnostic_cupi_max_records=1000,
+            )
+        )
+
+        schedules = [
+            item
+            for item in result.facts.configuration_objects
+            if item.object_type == "CucSchedule"
+        ]
+        inventory = next(
+            item
+            for item in result.facts.configuration_objects
+            if item.object_type == "CucScheduleInventory"
+        )
+        self.assertEqual(len(schedules), 882)
+        self.assertEqual(inventory.details["coverage"], "882 of 882")
+        self.assertEqual(inventory.details["collection_status"], "complete")
+        self.assertEqual(inventory.details["pages_collected"], "2")
+        self.assertTrue(any("/vmrest/schedules?" in value for value in client.endpoints))
+        self.assertTrue(any("pageNumber=2" in value for value in client.endpoints))
 
     def test_configuration_parser_retains_only_allowlisted_smtp_fields(self) -> None:
         probe = next(

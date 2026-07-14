@@ -87,6 +87,7 @@ def run_assessment(
         diagnostic_max_devices=args.diagnostic_max_devices,
         diagnostic_axl_page_size=args.diagnostic_axl_page_size,
         diagnostic_axl_max_records=args.diagnostic_axl_max_records,
+        diagnostic_cupi_max_records=args.diagnostic_cupi_max_records,
     )
     run_started = datetime.now()
     artifact_store: ArtifactStore | None = None
@@ -124,6 +125,7 @@ def run_assessment(
             diagnostic_max_devices=args.diagnostic_max_devices,
             diagnostic_axl_page_size=args.diagnostic_axl_page_size,
             diagnostic_axl_max_records=args.diagnostic_axl_max_records,
+            diagnostic_cupi_max_records=args.diagnostic_cupi_max_records,
             tls=tls_policy,
             accept_new_host_key=host_key_enrollment,
             host_key_approval=host_key_approval,
@@ -343,6 +345,7 @@ def run_multi_assessment(
             diagnostic_max_devices=args.diagnostic_max_devices,
             diagnostic_axl_page_size=args.diagnostic_axl_page_size,
             diagnostic_axl_max_records=args.diagnostic_axl_max_records,
+            diagnostic_cupi_max_records=args.diagnostic_cupi_max_records,
             tls=tls_policy,
             artifact_store=artifact_store,
             accept_new_host_key=host_key_enrollment,

@@ -404,6 +404,9 @@ def _configure_collection(args: argparse.Namespace) -> None:
         args.diagnostic_axl_max_records = _positive_integer(
             "Diagnostic AXL maximum records", args.diagnostic_axl_max_records
         )
+        args.diagnostic_cupi_max_records = _positive_integer(
+            "Diagnostic CUPI maximum records", args.diagnostic_cupi_max_records
+        )
     args.ssh_parallel_workers = _positive_integer(
         "Independent UCOS SSH node workers", args.ssh_parallel_workers
     )

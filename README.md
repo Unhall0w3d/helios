@@ -398,14 +398,19 @@ default bounds unless you are deliberately testing a lab with known capacity:
 ./aletheiauc.py --diagnostic-capture \
   --diagnostic-max-devices 2000 \
   --diagnostic-axl-page-size 250 \
-  --diagnostic-axl-max-records 500
+  --diagnostic-axl-max-records 500 \
+  --diagnostic-cupi-max-records 2000
 ```
 
 `--diagnostic-max-devices` is limited to the documented RISPort maximum of
 2,000. `--diagnostic-axl-max-records` is a per-operation cap; CUCM can return
 more than the requested AXL page size, in which case AletheiaUC records an
-explicit server-unbounded note and preserves the response. Diagnostic capture
-is evidence-oriented and is not a claim of complete configuration inventory.
+explicit server-unbounded note and preserves the response.
+`--diagnostic-cupi-max-records` is an independent per-resource cap. Unity
+Connection configuration resources are collected in read-only pages of up to
+500 records until that cap or the server-reported total is reached. Diagnostic
+capture is evidence-oriented and is not a claim of complete configuration
+inventory.
 
 If a lab uses alternate API ports, override them at startup:
 

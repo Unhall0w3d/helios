@@ -17,24 +17,26 @@ The CLI and interactive menu list only registered templates whose complete
 asset packs are present. Review bundles render the same installed set. A missing
 optional pack therefore cannot break the default report or a review export.
 
-Template behavior—metadata, design tokens, optional asset-slot mappings, and
-shared rendering code—belongs in source control. Partner or customer artwork
-does not. Local packs live under
-`src/cisco_collab_health/reports/assets/<template>/`. A template with no asset
-slots, such as the default dark report, requires no files; an illustrated or
-branded template requires every file declared in its slot map.
+Template behavior—metadata, design tokens, asset-slot mappings, and shared
+rendering code—belongs in source control. Supported built-in asset packs are
+packaged with the application so source checkouts, wheels, and installed
+assessment runtimes discover the same templates. Unregistered local packs may
+still live under `src/cisco_collab_health/reports/assets/<template>/`. A
+template with no asset slots, such as the default dark report, requires no
+files; an illustrated or branded template requires every file declared in its
+slot map.
 
 ## ComSource
 
-`comsource` is an optional customer-facing template selected with:
+`comsource` is a built-in customer-facing template selected with:
 
 ```bash
 ./aletheiauc.py --html-template comsource --customer-safe-report
 ```
 
-Its backing rules and shared layout remain in the repository. Its logo and
-artwork stay local at `src/cisco_collab_health/reports/assets/comsource/` and
-must not be committed. A complete pack contains:
+Its backing rules, shared layout, logo, and artwork are distributed with
+AletheiaUC so every installed assessment runtime can include it in review
+bundles. The pack contains:
 
 - `ComSource_Logo.svg`
 - `hero-background.svg`
@@ -77,10 +79,11 @@ separate sections. CUCM configuration reporting includes dedicated expandable
 tables for hunt/directory-number topology, trunk/directory/device security, and
 media-resource membership. Customer-safe reports expose the same operational
 configuration names, dial-plan values, LDAP paths, destinations, and settings.
-CUC inventory rows display API totals, normalized rows, and complete/partial
-coverage so a 500-row cap cannot be mistaken for full inventory. Message-aging
-rule details include the owning policy name. Repeated CUC schedule/schedule-set
-rows with the same normalized name and fields
+CUC inventory rows display API totals, normalized rows, page counts, and
+complete/partial coverage. Configuration resources are collected in pages up
+to the configured CUPI record limit, so a bounded partial result cannot be
+mistaken for full inventory. Message-aging rule details include the owning
+policy name. Repeated CUC schedule/schedule-set rows with the same normalized name and fields
 are grouped with an occurrence count in report details; source facts and private
 evidence remain unchanged. CUCM line-group directory numbers and SIP destination
 addresses are also recovered through fixed, server-bounded SQL when the standard

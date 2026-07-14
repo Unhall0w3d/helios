@@ -212,6 +212,12 @@ def build_parser() -> argparse.ArgumentParser:
         default=500,
         help="Maximum records retained per diagnostic AXL inventory operation.",
     )
+    parser.add_argument(
+        "--diagnostic-cupi-max-records",
+        type=int,
+        default=2000,
+        help="Maximum records retained per diagnostic CUPI configuration resource.",
+    )
     tls_group = parser.add_mutually_exclusive_group()
     tls_group.add_argument(
         "--verify-tls",
@@ -293,6 +299,8 @@ def _validate_args(parser: argparse.ArgumentParser, args: argparse.Namespace) ->
         parser.error("--diagnostic-axl-page-size must be at least 1")
     if args.diagnostic_axl_max_records < 1:
         parser.error("--diagnostic-axl-max-records must be at least 1")
+    if args.diagnostic_cupi_max_records < 1:
+        parser.error("--diagnostic-cupi-max-records must be at least 1")
 
 
 def _run(args: argparse.Namespace, status: StatusPrinter) -> int:

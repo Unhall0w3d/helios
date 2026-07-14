@@ -214,6 +214,8 @@ class CliTests(unittest.TestCase):
                     "50",
                     "--diagnostic-axl-max-records",
                     "100",
+                    "--diagnostic-cupi-max-records",
+                    "1000",
                     "--no-html-report",
                     "--no-artifacts",
                     "--no-logs",
@@ -225,12 +227,14 @@ class CliTests(unittest.TestCase):
         self.assertEqual(contexts[0].diagnostic_max_devices, 250)
         self.assertEqual(contexts[0].diagnostic_axl_page_size, 50)
         self.assertEqual(contexts[0].diagnostic_axl_max_records, 100)
+        self.assertEqual(contexts[0].diagnostic_cupi_max_records, 1000)
 
     def test_diagnostic_capture_bounds_are_validated(self) -> None:
         for arguments in (
             ["--diagnostic-max-devices", "2001"],
             ["--diagnostic-axl-page-size", "0"],
             ["--diagnostic-axl-max-records", "0"],
+            ["--diagnostic-cupi-max-records", "0"],
         ):
             with self.subTest(arguments=arguments):
                 with self.assertRaises(SystemExit) as exc:

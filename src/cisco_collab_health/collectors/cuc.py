@@ -253,9 +253,10 @@ class CucCollector:
             probes.extend(DIAGNOSTIC_CONFIGURATION_PROBES)
 
         configuration_types = {probe.object_type for probe in DIAGNOSTIC_CONFIGURATION_PROBES}
-        max_rows = min(max(1, context.diagnostic_axl_max_records), 500)
+        max_records = max(1, context.diagnostic_cupi_max_records)
+        page_size = min(max_records, 500)
         for probe in probes:
-            requested_rows = max_rows if probe.object_type in configuration_types else 1
+            requested_rows = page_size if probe.object_type in configuration_types else 1
             operation = f"{probe.object_type}_bounded_get"
             response = None
             selected_path = probe.path
@@ -300,12 +301,65 @@ class CucCollector:
                 if probe.record_names
                 else []
             )
+            pages_collected = 1
+            collection_limit = max_records if probe.object_type in configuration_types else requested_rows
+            records = records[:collection_limit]
+            target_records = min(total, collection_limit) if total is not None else len(records)
+            previous_payload = response.body
+            while records and len(records) < target_records:
+                page_number = pages_collected + 1
+                page_operation = f"{operation}_page_{page_number:06d}"
+                endpoint = (
+                    f"https://{node}{selected_path}?rowsPerPage={requested_rows}"
+                    f"&pageNumber={page_number}"
+                )
+                try:
+                    page_response = self.http_client.get(
+                        endpoint,
+                        context,
+                        node=node,
+                        interface="cuc_cupi",
+                        operation=page_operation,
+                    )
+                except CapturedHttpError as exc:
+                    warnings.append(
+                        f"CUC CUPI {probe.label.lower()} page {page_number} GET failed: {exc}"
+                    )
+                    break
+                if page_response.body == previous_payload:
+                    notes.append(
+                        f"CUC CUPI {probe.label.lower()} stopped after page {pages_collected}; "
+                        "the server repeated the previous page."
+                    )
+                    break
+                evidence.append(
+                    EvidenceRef(
+                        source="CUC.CUPI",
+                        operation=page_operation,
+                        node=node,
+                        artifact_path=page_response.response_artifact_path,
+                        confidence="high",
+                    )
+                )
+                page_records = _cupi_configuration_records(
+                    page_response.body,
+                    probe,
+                    source_path=selected_path,
+                )
+                if not page_records:
+                    break
+                remaining = target_records - len(records)
+                records.extend(page_records[:remaining])
+                previous_payload = page_response.body
+                pages_collected += 1
             inventory_details = {
                 "total": str(total) if total is not None else "unknown",
                 "requested_rows": str(requested_rows),
             }
             if probe.record_names:
                 inventory_details["normalized_records"] = str(len(records))
+                inventory_details["collection_limit"] = str(collection_limit)
+                inventory_details["pages_collected"] = str(pages_collected)
                 if total is not None:
                     inventory_details["collection_status"] = (
                         "partial" if len(records) < total else "complete"
@@ -314,7 +368,7 @@ class CucCollector:
                     if len(records) < total:
                         notes.append(
                             f"CUC CUPI {probe.label.lower()} normalized {len(records)} of "
-                            f"{total} record(s); collection was bounded to {requested_rows}."
+                            f"{total} record(s); collection was bounded to {collection_limit}."
                         )
                 else:
                     inventory_details["collection_status"] = "collected"
@@ -336,7 +390,7 @@ class CucCollector:
                     response.body,
                     node,
                     context,
-                    max_rows,
+                    page_size,
                     facts,
                     warnings,
                     evidence,
@@ -346,7 +400,8 @@ class CucCollector:
         if self.diagnostic_capture:
             notes.append(
                 "Detailed CUPI configuration collection retained only reviewed non-secret fields; "
-                f"each resource was bounded to {max_rows} record(s)."
+                f"each resource was bounded to {max_records} record(s), collected in pages of "
+                f"up to {page_size}."
             )
         return CollectionResult(self.name, facts, warnings=warnings, evidence=evidence, notes=notes)
 
