@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
 from cisco_collab_health.transport.tls import TlsPolicy
+
+
+HostKeyApproval = Callable[[str, str, str], bool]
 
 
 @dataclass(frozen=True)
@@ -23,6 +27,7 @@ class CollectionContext:
     os_password: str | None = field(default=None, repr=False)
     timeout_seconds: int = 30
     accept_new_host_key: bool = False
+    host_key_approval: HostKeyApproval | None = field(default=None, repr=False, compare=False)
     artifact_store: Any | None = field(default=None, repr=False)
     tls: TlsPolicy = field(default_factory=TlsPolicy)
     axl_port: int = 8443

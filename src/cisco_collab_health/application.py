@@ -25,7 +25,7 @@ from cisco_collab_health.config import (
 from cisco_collab_health.engine import AssessmentEngine
 from cisco_collab_health.interfaces import PreflightResult, run_publisher_preflight
 from cisco_collab_health.models.assessment import AssessmentReport
-from cisco_collab_health.models.runtime import CollectionContext
+from cisco_collab_health.models.runtime import CollectionContext, HostKeyApproval
 from cisco_collab_health.reports.html import HtmlReportBuilder
 from cisco_collab_health.reports.json import JsonReportBuilder
 from cisco_collab_health.reports.summary import ExecutiveSummaryBuilder
@@ -41,6 +41,25 @@ from cisco_collab_health.technologies import load_plugins
 from cisco_collab_health.transport.tls import TlsPolicy
 
 
+def _interactive_host_key_approval(args: argparse.Namespace) -> HostKeyApproval | None:
+    """Return the menu-only SSH host-key approval prompt, when enabled."""
+
+    if not getattr(args, "_prompt_ssh_host_keys", False):
+        return None
+
+    def approve(hostname: str, algorithm: str, fingerprint: str) -> bool:
+        print("\nSSH host key verification required")
+        print(f"Host: {hostname}")
+        print(f"Algorithm: {algorithm}")
+        print(f"SHA-256 fingerprint: {fingerprint}")
+        answer = input(
+            "After verifying this fingerprint out of band, trust and save this key? [y/N]: "
+        ).strip().lower()
+        return answer in {"y", "yes"}
+
+    return approve
+
+
 def run_assessment(
     args: argparse.Namespace,
     status: StatusPrinter,
@@ -49,10 +68,13 @@ def run_assessment(
     """Run one assessment from parsed CLI arguments and an optional profile."""
 
     tls_policy = tls_policy_from_args(args)
+    host_key_approval = _interactive_host_key_approval(args)
+    host_key_enrollment = args.accept_new_host_key or host_key_approval is not None
     context = CollectionContext(
         product=args.product,
         tls=tls_policy,
-        accept_new_host_key=args.accept_new_host_key,
+        accept_new_host_key=host_key_enrollment,
+        host_key_approval=host_key_approval,
         collect_phone_inventory=args.collect_phone_inventory,
         phone_inventory_page_size=args.phone_inventory_page_size,
         phone_inventory_max_devices=args.phone_inventory_max_devices,
@@ -98,7 +120,8 @@ def run_assessment(
             diagnostic_axl_page_size=args.diagnostic_axl_page_size,
             diagnostic_axl_max_records=args.diagnostic_axl_max_records,
             tls=tls_policy,
-            accept_new_host_key=args.accept_new_host_key,
+            accept_new_host_key=host_key_enrollment,
+            host_key_approval=host_key_approval,
         )
         artifact_store = _create_artifact_store(args, status, profile_name, run_started)
         context = replace(context, artifact_store=artifact_store)
@@ -267,6 +290,8 @@ def run_multi_assessment(
     """Run independently credentialed technology targets into one report."""
 
     tls_policy = tls_policy_from_args(args)
+    host_key_approval = _interactive_host_key_approval(args)
+    host_key_enrollment = args.accept_new_host_key or host_key_approval is not None
     run_started = datetime.now()
     log_store = _create_log_store(args, status, assessment_name, run_started)
     _write_log_manifest(log_store, profile_name=assessment_name, publisher_ip=None)
@@ -312,7 +337,8 @@ def run_multi_assessment(
             diagnostic_axl_max_records=args.diagnostic_axl_max_records,
             tls=tls_policy,
             artifact_store=artifact_store,
-            accept_new_host_key=args.accept_new_host_key,
+            accept_new_host_key=host_key_enrollment,
+            host_key_approval=host_key_approval,
         )
         preflight = None
         if target.technology == "cucm":
@@ -376,7 +402,7 @@ def run_multi_assessment(
             "artifacts_enabled": artifact_store is not None,
             "artifact_redaction": args.artifact_redaction if artifact_store else None,
             "tls_verification": tls_policy.verify,
-            "ssh_accept_new_host_key": args.accept_new_host_key,
+            "ssh_accept_new_host_key": host_key_enrollment,
             "diagnostic_capture": args.diagnostic_capture,
             "customer_safe_report": args.customer_safe_report,
         },

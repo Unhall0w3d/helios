@@ -306,6 +306,9 @@ def _edit_profile(profile_name: str, status: StatusPrinter) -> None:
 
 def _prompt_run_mode(args: argparse.Namespace) -> argparse.Namespace | None:
     run_args = argparse.Namespace(**vars(args))
+    # Interactive assessments ask about each actual, previously unseen SSH key.
+    # This is deliberately separate from the non-interactive CLI enrollment flag.
+    run_args._prompt_ssh_host_keys = True
     while True:
         print("\nRun Options\n===========")
         print("1. Output and reports")
@@ -400,10 +403,6 @@ def _configure_collection(args: argparse.Namespace) -> None:
         )
         args.diagnostic_axl_max_records = _positive_integer(
             "Diagnostic AXL maximum records", args.diagnostic_axl_max_records
-        )
-        args.accept_new_host_key = _yes_no(
-            "After verifying fingerprints out of band, enroll newly discovered UCOS SSH host keys?",
-            default=args.accept_new_host_key,
         )
 
 

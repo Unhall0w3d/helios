@@ -5,7 +5,11 @@ from __future__ import annotations
 import unittest
 
 from cisco_collab_health.models.runtime import CollectionContext
-from cisco_collab_health.transport.ssh import UcosSshSession
+from cisco_collab_health.transport.ssh import (
+    HostKeyApprovalPolicy,
+    UcosSshSession,
+    ssh_host_key_fingerprint,
+)
 
 
 class FakeChannel:
@@ -58,6 +62,30 @@ class FakeClient:
         return None
 
 
+class FakeHostKey:
+    def asbytes(self) -> bytes:
+        return b"server-public-key"
+
+    def get_name(self) -> str:
+        return "ssh-ed25519"
+
+
+class FakeHostKeys:
+    def __init__(self) -> None:
+        self.added: list[tuple[str, str, FakeHostKey]] = []
+
+    def add(self, hostname: str, algorithm: str, key: FakeHostKey) -> None:
+        self.added.append((hostname, algorithm, key))
+
+
+class FakePolicyClient:
+    def __init__(self) -> None:
+        self.host_keys = FakeHostKeys()
+
+    def get_host_keys(self) -> FakeHostKeys:
+        return self.host_keys
+
+
 class UcosSshSessionTests(unittest.TestCase):
     def test_pty_shell_reads_to_prompt_and_strips_echo(self) -> None:
         client = FakeClient()
@@ -72,3 +100,28 @@ class UcosSshSessionTests(unittest.TestCase):
         self.assertTrue(client.connected)
         self.assertEqual(result.output, "result")
         self.assertIn("show status\n", client.channel.sent)
+
+    def test_host_key_approval_records_fingerprint_and_saves_approved_key(self) -> None:
+        client = FakePolicyClient()
+        key = FakeHostKey()
+        requested: list[tuple[str, str, str]] = []
+        policy = HostKeyApprovalPolicy(
+            lambda host, algorithm, fingerprint: requested.append((host, algorithm, fingerprint))
+            or True
+        )
+
+        policy.missing_host_key(client, "192.0.2.20", key)
+
+        self.assertEqual(
+            requested,
+            [("192.0.2.20", "ssh-ed25519", ssh_host_key_fingerprint(key))],
+        )
+        self.assertTrue(policy.approved)
+        self.assertEqual(client.host_keys.added, [("192.0.2.20", "ssh-ed25519", key)])
+
+    def test_host_key_approval_rejects_unapproved_key(self) -> None:
+        policy = HostKeyApprovalPolicy(lambda *_: False)
+
+        with self.assertRaisesRegex(RuntimeError, "not approved"):
+            policy.missing_host_key(FakePolicyClient(), "192.0.2.20", FakeHostKey())
+        self.assertFalse(policy.approved)

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import base64
+import hashlib
 import re
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -34,6 +36,29 @@ class SshCommandTimeout(TimeoutError):
         self.paged = paged
 
 
+def ssh_host_key_fingerprint(key: Any) -> str:
+    """Return the OpenSSH-style SHA-256 fingerprint for a server key."""
+
+    digest = hashlib.sha256(key.asbytes()).digest()
+    return "SHA256:" + base64.b64encode(digest).decode("ascii").rstrip("=")
+
+
+class HostKeyApprovalPolicy:
+    """Paramiko missing-key policy that asks an interactive operator to approve a key."""
+
+    def __init__(self, approval: Callable[[str, str, str], bool]) -> None:
+        self.approval = approval
+        self.approved = False
+
+    def missing_host_key(self, client: Any, hostname: str, key: Any) -> None:
+        algorithm = key.get_name()
+        fingerprint = ssh_host_key_fingerprint(key)
+        if not self.approval(hostname, algorithm, fingerprint):
+            raise RuntimeError(f"SSH host key for {hostname} was not approved")
+        client.get_host_keys().add(hostname, algorithm, key)
+        self.approved = True
+
+
 class UcosSshSession:
     """One PTY-backed, prompt-driven SSH session for UCOS commands."""
 
@@ -49,6 +74,7 @@ class UcosSshSession:
         self.sleeper = sleeper
         self.client: Any | None = None
         self.channel: Any | None = None
+        self._host_key_policy: HostKeyApprovalPolicy | None = None
 
     def __enter__(self) -> "UcosSshSession":
         host = self.context.publisher_ip or self.context.target
@@ -64,7 +90,11 @@ class UcosSshSession:
             known_hosts = Path.home() / ".ssh" / "known_hosts"
             if known_hosts.exists():
                 self.client.load_host_keys(str(known_hosts))
-            if self.context.accept_new_host_key:
+            if self.context.host_key_approval is not None:
+                known_hosts.parent.mkdir(parents=True, exist_ok=True)
+                self._host_key_policy = HostKeyApprovalPolicy(self.context.host_key_approval)
+                self.client.set_missing_host_key_policy(self._host_key_policy)
+            elif self.context.accept_new_host_key:
                 known_hosts.parent.mkdir(parents=True, exist_ok=True)
                 self.client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
             else:
@@ -81,7 +111,10 @@ class UcosSshSession:
             look_for_keys=False,
             allow_agent=False,
         )
-        if self.client_factory is None and self.context.accept_new_host_key:
+        if self.client_factory is None and (
+            self.context.accept_new_host_key
+            or (self._host_key_policy is not None and self._host_key_policy.approved)
+        ):
             self.client.save_host_keys(str(Path.home() / ".ssh" / "known_hosts"))
         transport = self.client.get_transport()
         if transport is None:
