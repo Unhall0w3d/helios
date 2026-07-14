@@ -275,6 +275,60 @@ class ArtifactStoreTests(unittest.TestCase):
             )
             self.assertFalse((log_store.root / "reports" / "comsource").exists())
 
+    def test_log_bundle_renders_both_audiences_for_every_available_template(self) -> None:
+        class FakeHtmlReportBuilder:
+            def __init__(
+                self,
+                *,
+                customer_safe: bool = False,
+                template: str = "aletheiauc",
+            ) -> None:
+                self.customer_safe = customer_safe
+                self.template = template
+
+            def build(self, report: AssessmentReport) -> str:
+                audience = "customer-facing" if self.customer_safe else "engineering"
+                return f"{self.template}:{audience}:{len(report.findings)}\n"
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_store = RunLogStore.create(Path(tmpdir), "all-templates")
+            report = AssessmentReport(AssessmentFacts(), [], [])
+
+            with (
+                patch(
+                    "cisco_collab_health.reports.html.available_report_templates",
+                    return_value=("aletheiauc", "comsource"),
+                ),
+                patch(
+                    "cisco_collab_health.reports.html.HtmlReportBuilder",
+                    FakeHtmlReportBuilder,
+                ),
+            ):
+                write_log_bundle(
+                    log_store,
+                    report=report,
+                    summary_text="Executive Summary\n",
+                    artifact_store=None,
+                    html_report_path=None,
+                )
+
+            expected = {
+                "reports/aletheiauc/engineering.html": "aletheiauc:engineering:0\n",
+                "reports/aletheiauc/customer-facing.html": "aletheiauc:customer-facing:0\n",
+                "reports/comsource/engineering.html": "comsource:engineering:0\n",
+                "reports/comsource/customer-facing.html": "comsource:customer-facing:0\n",
+            }
+            for relative_path, expected_content in expected.items():
+                self.assertEqual(
+                    (log_store.root / relative_path).read_text(encoding="utf-8"),
+                    expected_content,
+                )
+
+            manifest = json.loads(
+                (log_store.root / "manifest.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual(set(manifest["review_report_variants"]), set(expected))
+
 
 if __name__ == "__main__":
     unittest.main()
