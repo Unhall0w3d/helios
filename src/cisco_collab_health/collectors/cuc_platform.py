@@ -195,6 +195,10 @@ class CucPlatformCollector:
         definition = next(item for item in CUC_COMMAND_CATALOG if item.command == "show network cluster")
         try:
             with self.session_factory(context) as session:
+                _progress(
+                    context,
+                    f"CUC CLI {node}: running '{definition.command}' (up to {definition.timeout_seconds}s)",
+                )
                 result = session.execute(definition.command, timeout_seconds=definition.timeout_seconds)
         except Exception as exc:
             warnings.append(f"CUC SSH session failed on {node}: {exc}")
@@ -202,6 +206,7 @@ class CucPlatformCollector:
         if context.artifact_store is not None:
             context.artifact_store.write_command_output(node, definition.command, result.output)
         facts.platform_checks.append(_cuc_check(node, definition, "collected", result.output, result.paged))
+        _progress(context, f"CUC CLI {node}: completed '{definition.command}'")
         return result.output
 
     def _collect_node(
@@ -213,6 +218,11 @@ class CucPlatformCollector:
                 for definition in CUC_COMMAND_CATALOG:
                     if definition.command == "show network cluster":
                         continue
+                    _progress(
+                        context,
+                        f"CUC CLI {node}: running '{definition.command}' "
+                        f"(up to {definition.timeout_seconds}s)",
+                    )
                     try:
                         result = session.execute(definition.command, timeout_seconds=definition.timeout_seconds)
                     except SshCommandTimeout as exc:
@@ -220,6 +230,7 @@ class CucPlatformCollector:
                             context.artifact_store.write_command_output(node, definition.command, exc.output)
                         facts.platform_checks.append(_cuc_check(node, definition, "incomplete", exc.output, exc.paged, incomplete=True))
                         warnings.append(f"CUC CLI '{definition.command}' on {node} did not return to the prompt; retained {len(exc.output)} characters of partial output.")
+                        _progress(context, f"CUC CLI {node}: partial output retained for '{definition.command}'")
                         continue
                     except Exception as exc:
                         warnings.append(f"CUC CLI '{definition.command}' on {node} failed: {exc}")
@@ -231,6 +242,7 @@ class CucPlatformCollector:
                     if definition.command == "utils service list":
                         facts.services.extend(_cuc_service_status(node, result.output))
                     facts.platform_checks.append(_cuc_check(node, definition, "collected", result.output, result.paged))
+                    _progress(context, f"CUC CLI {node}: completed '{definition.command}'")
         except Exception as exc:
             warnings.append(f"CUC SSH session failed on {node}: {exc}")
         return version
@@ -245,6 +257,11 @@ class CucPlatformCollector:
             with self.session_factory(context) as session:
                 for probe in CUC_INFORMIX_PROBE_CATALOG:
                     try:
+                        _progress(
+                            context,
+                            f"CUC Informix {node}: running '{probe.probe_id}' "
+                            f"(up to {probe.timeout_seconds}s)",
+                        )
                         _validate_cuc_informix_probe(probe)
                         result = session.execute(
                             probe.command, timeout_seconds=probe.timeout_seconds,
@@ -298,8 +315,14 @@ class CucPlatformCollector:
                     facts.configuration_objects.extend(
                         _cuc_informix_facts(probe, rows)
                     )
+                    _progress(context, f"CUC Informix {node}: completed '{probe.probe_id}'")
         except Exception as exc:
             warnings.append(f"CUC Informix validation session failed on {node}: {exc}")
+
+
+def _progress(context: CollectionContext, message: str) -> None:
+    if context.progress is not None:
+        context.progress(message)
 
 
 def _cuc_check(

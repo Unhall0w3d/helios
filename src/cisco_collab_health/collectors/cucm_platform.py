@@ -75,6 +75,11 @@ class CucmPlatformCollector:
         try:
             with self.session_factory(context) as session:
                 for definition in CUCM_COMMAND_CATALOG:
+                    _progress(
+                        context,
+                        f"CUCM CLI {node}: running '{definition.command}' "
+                        f"(up to {definition.timeout_seconds}s)",
+                    )
                     try:
                         result = session.execute(definition.command, timeout_seconds=definition.timeout_seconds)
                     except SshCommandTimeout as exc:
@@ -82,6 +87,7 @@ class CucmPlatformCollector:
                             context.artifact_store.write_command_output(node, definition.command, exc.output)
                         warnings.append(f"CUCM CLI '{definition.command}' on {node} did not return to the prompt.")
                         facts.platform_checks.append(_check(node, definition, "incomplete", exc.output, incomplete=True))
+                        _progress(context, f"CUCM CLI {node}: partial output retained for '{definition.command}'")
                         continue
                     except Exception as exc:
                         warnings.append(f"CUCM CLI '{definition.command}' on {node} failed: {exc}")
@@ -89,9 +95,15 @@ class CucmPlatformCollector:
                     if context.artifact_store is not None:
                         context.artifact_store.write_command_output(node, definition.command, result.output)
                     facts.platform_checks.append(_check(node, definition, "collected", result.output))
+                    _progress(context, f"CUCM CLI {node}: completed '{definition.command}'")
         except Exception as exc:
             warnings.append(f"CUCM SSH session failed on {node}: {exc}")
         return facts, warnings
+
+
+def _progress(context: CollectionContext, message: str) -> None:
+    if context.progress is not None:
+        context.progress(message)
 
 
 def _check(node: str, definition: UcosCommand, status: str, output: str, *, incomplete: bool = False) -> PlatformCheckFact:

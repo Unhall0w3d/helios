@@ -78,6 +78,7 @@ def run_assessment(
         tls=tls_policy,
         accept_new_host_key=host_key_enrollment,
         host_key_approval=host_key_approval,
+        progress=status.info,
         ssh_parallel_workers=ssh_parallel_workers,
         collect_phone_inventory=args.collect_phone_inventory,
         phone_inventory_page_size=args.phone_inventory_page_size,
@@ -126,6 +127,7 @@ def run_assessment(
             tls=tls_policy,
             accept_new_host_key=host_key_enrollment,
             host_key_approval=host_key_approval,
+            progress=status.info,
             ssh_parallel_workers=ssh_parallel_workers,
         )
         artifact_store = _create_artifact_store(args, status, profile_name, run_started)
@@ -345,6 +347,7 @@ def run_multi_assessment(
             artifact_store=artifact_store,
             accept_new_host_key=host_key_enrollment,
             host_key_approval=host_key_approval,
+            progress=status.info,
             ssh_parallel_workers=ssh_parallel_workers,
         )
         preflight = None
