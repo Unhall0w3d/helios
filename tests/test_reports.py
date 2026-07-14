@@ -207,6 +207,9 @@ class ReportBuilderTests(unittest.TestCase):
         self.assertIn("Customer deliverable", customer)
         self.assertIn(".header-meta", engineering)
         self.assertIn("justify-content: center", engineering)
+        self.assertIn("Engineering health report", engineering)
+        self.assertIn("Customer assessment report", customer)
+        self.assertNotIn("Engineering health report", customer)
 
     def test_default_template_uses_shared_design_system_without_artwork(self) -> None:
         payload = HtmlReportBuilder().build(self.report)
@@ -235,6 +238,25 @@ class ReportBuilderTests(unittest.TestCase):
         self.assertIn("repeat(3, minmax(0, 1fr))", payload)
         self.assertIn("overflow-wrap: anywhere", payload)
         self.assertIn("@media (max-width: 620px)", payload)
+
+    def test_methodology_uses_runtime_metadata_aliases_and_preserves_unknown_scope(self) -> None:
+        report = AssessmentReport(
+            facts=self.report.facts,
+            collector_results=[],
+            findings=self.report.findings,
+            runtime_metadata={
+                "assessment_profile": "Production Assessment",
+                "publisher_ip": "192.0.2.10",
+            },
+        )
+
+        payload = HtmlReportBuilder().build(report)
+
+        self.assertIn("Production Assessment", payload)
+        self.assertIn("192.0.2.10", payload)
+        self.assertIn("<th>Phone inventory scope</th><td>Not specified</td>", payload)
+        self.assertIn("Source: Read-only SSH/CLI platform diagnostics.", payload)
+        self.assertNotIn("Real collector not implemented yet", payload)
 
     def test_comsource_template_is_standalone_and_brand_isolated(self) -> None:
         if "comsource" not in available_report_templates():

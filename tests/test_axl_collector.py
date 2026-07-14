@@ -280,6 +280,8 @@ class AxlCollectorTests(unittest.TestCase):
         self.assertIn("inner join callforwarddynamic", LINE_FORWARDING_SQL.lower())
         self.assertIn("select first 500", LINE_GROUP_MEMBERS_SQL.lower())
         self.assertIn("linegroupnumplanmap", LINE_GROUP_MEMBERS_SQL.lower())
+        self.assertIn("lgmap.lineselectionorder", LINE_GROUP_MEMBERS_SQL.lower())
+        self.assertNotIn("lgmap.selectionorder", LINE_GROUP_MEMBERS_SQL.lower())
         self.assertIn("select first 500", SIP_TRUNK_DESTINATIONS_SQL.lower())
         self.assertIn("siptrunkdestination", SIP_TRUNK_DESTINATIONS_SQL.lower())
 

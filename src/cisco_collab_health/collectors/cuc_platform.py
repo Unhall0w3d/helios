@@ -72,7 +72,7 @@ CUC_INFORMIX_PROBE_CATALOG = (
         "unitydirdb",
         "select first 100 dtmfaccessid, count(dtmfaccessid) as occurrencecount "
         "from vw_user where dtmfaccessid is not null and dtmfaccessid != '' "
-        "group by dtmfaccessid having count(dtmfaccessid) > 1 "
+        "group by dtmfaccessid having count(dtmfaccessid) != 1 "
         "order by occurrencecount desc",
         "CucSqlDuplicateExtension",
         "dtmfaccessid",

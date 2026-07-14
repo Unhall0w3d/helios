@@ -70,12 +70,12 @@ order by n.pkid, rl.selectionorder"""
 LINE_GROUP_MEMBERS_SQL = """select first 500
 lg.pkid as linegroupuuid, lg.name as linegroup,
 n.dnorpattern as directorynumber, rp.name as partition,
-lgmap.selectionorder as selectionorder
+lgmap.lineselectionorder as selectionorder
 from linegroup as lg
 inner join linegroupnumplanmap as lgmap on lgmap.fklinegroup=lg.pkid
 inner join numplan as n on lgmap.fknumplan=n.pkid
 left join routepartition as rp on rp.pkid=n.fkroutepartition
-order by lg.pkid, lgmap.selectionorder"""
+order by lg.pkid, lgmap.lineselectionorder"""
 
 
 SIP_TRUNK_DESTINATIONS_SQL = """select first 500

@@ -224,7 +224,7 @@ class ArtifactStoreTests(unittest.TestCase):
                 write_log_bundle(
                     log_store,
                     report=report,
-                    summary_text="Executive Summary\n",
+                    summary_text="Executive Summary\nHTML report: reports/source.html\n",
                     artifact_store=artifact_store,
                     html_report_path=html_report,
                     customer_safe_html_report_path=customer_safe_html_report,
@@ -257,6 +257,10 @@ class ArtifactStoreTests(unittest.TestCase):
             self.assertEqual(artifact_copy.read_text(encoding="utf-8"), "<xml />")
             self.assertTrue(report_copy.exists())
             self.assertEqual(
+                summary.read_text(encoding="utf-8"),
+                "Executive Summary\nHTML report: report.html\n",
+            )
+            self.assertEqual(
                 customer_safe_report_copy.read_text(encoding="utf-8"), "<html>safe</html>"
             )
             manifest = json.loads((log_store.root / "manifest.json").read_text(encoding="utf-8"))
@@ -270,6 +274,60 @@ class ArtifactStoreTests(unittest.TestCase):
                 (log_store.root / "reports" / "aletheiauc" / "customer-facing.html").exists()
             )
             self.assertFalse((log_store.root / "reports" / "comsource").exists())
+
+    def test_log_bundle_renders_both_audiences_for_every_available_template(self) -> None:
+        class FakeHtmlReportBuilder:
+            def __init__(
+                self,
+                *,
+                customer_safe: bool = False,
+                template: str = "aletheiauc",
+            ) -> None:
+                self.customer_safe = customer_safe
+                self.template = template
+
+            def build(self, report: AssessmentReport) -> str:
+                audience = "customer-facing" if self.customer_safe else "engineering"
+                return f"{self.template}:{audience}:{len(report.findings)}\n"
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_store = RunLogStore.create(Path(tmpdir), "all-templates")
+            report = AssessmentReport(AssessmentFacts(), [], [])
+
+            with (
+                patch(
+                    "cisco_collab_health.reports.html.available_report_templates",
+                    return_value=("aletheiauc", "comsource"),
+                ),
+                patch(
+                    "cisco_collab_health.reports.html.HtmlReportBuilder",
+                    FakeHtmlReportBuilder,
+                ),
+            ):
+                write_log_bundle(
+                    log_store,
+                    report=report,
+                    summary_text="Executive Summary\n",
+                    artifact_store=None,
+                    html_report_path=None,
+                )
+
+            expected = {
+                "reports/aletheiauc/engineering.html": "aletheiauc:engineering:0\n",
+                "reports/aletheiauc/customer-facing.html": "aletheiauc:customer-facing:0\n",
+                "reports/comsource/engineering.html": "comsource:engineering:0\n",
+                "reports/comsource/customer-facing.html": "comsource:customer-facing:0\n",
+            }
+            for relative_path, expected_content in expected.items():
+                self.assertEqual(
+                    (log_store.root / relative_path).read_text(encoding="utf-8"),
+                    expected_content,
+                )
+
+            manifest = json.loads(
+                (log_store.root / "manifest.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual(set(manifest["review_report_variants"]), set(expected))
 
 
 if __name__ == "__main__":

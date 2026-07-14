@@ -132,7 +132,9 @@ def _summary(command: str, output: str) -> dict[str, str]:
         return {"successful_backup_entries": str(len(successes)), "drs_unavailable": str(unavailable).lower()}
     if command == "utils dbreplication runtimestate":
         rows = re.findall(r"(?m)^\S+\s+\d{1,3}(?:\.\d{1,3}){3}.*$", output)
-        bad = [row for row in rows if "(2) Setup Completed" not in row]
+        bad = [
+            row for row in rows if not re.search(r"\([^)]+\)\s+Setup Completed\b", row, re.I)
+        ]
         return {"replication_rows": str(len(rows)), "replication_bad_rows": str(len(bad))}
     if command == "utils core active list":
         return {"core_files": "0" if "No core files found" in output else "present"}

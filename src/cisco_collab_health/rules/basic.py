@@ -913,7 +913,7 @@ class CucmPlatformHealthRule:
                     [
                         f"Nodes reporting incomplete replication rows: {', '.join(sorted(check.node for check in replication))}"
                     ],
-                    "One or more collected replication rows were not reported as '(2) Setup Completed'.",
+                    "One or more collected replication rows did not report Setup Completed.",
                     "Review the replication runtime output and Cisco-supported remediation procedure before changing cluster services or database state.",
                 )
             )

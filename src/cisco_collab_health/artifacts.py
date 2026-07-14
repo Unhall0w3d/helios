@@ -328,8 +328,13 @@ def write_log_bundle(
             "generated_at": datetime.now().astimezone().isoformat(),
         }
     )
+    bundle_summary = summary_text
+    if html_report_path is not None and html_report_path.exists():
+        bundle_summary = re.sub(
+            r"(?m)^HTML report: .*$", "HTML report: report.html", bundle_summary
+        )
     paths = [
-        store.write_text("executive_summary.txt", summary_text),
+        store.write_text("executive_summary.txt", bundle_summary),
         store.write_json("assessment_report.json", report),
         store.write_json("collector_warnings.json", _collector_warnings(report)),
     ]

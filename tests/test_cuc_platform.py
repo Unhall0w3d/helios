@@ -147,6 +147,9 @@ class CucPlatformCollectorTests(unittest.TestCase):
         for probe in CUC_INFORMIX_PROBE_CATALOG:
             _validate_cuc_informix_probe(probe)
             self.assertTrue(probe.query.lower().startswith("select first 100 "))
+        duplicate_probe = CUC_INFORMIX_PROBE_CATALOG[0]
+        self.assertIn("having count(dtmfaccessid) != 1", duplicate_probe.query.lower())
+        self.assertNotIn(">", duplicate_probe.query)
 
         unsafe = CucInformixProbe(
             "unsafe", "unitydirdb", "select first 100 objectid from vw_user; delete from vw_user",

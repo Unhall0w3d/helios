@@ -24,3 +24,14 @@ class CucmPlatformSummaryTests(unittest.TestCase):
         self.assertEqual(ntp["bad_sources"], "1")
         self.assertEqual(replication["replication_rows"], "2")
         self.assertEqual(replication["replication_bad_rows"], "1")
+
+    def test_replication_summary_accepts_completed_subscriber_rows_without_status_code(self) -> None:
+        replication = _summary(
+            "utils dbreplication runtimestate",
+            "pub 10.0.0.1 0.01 Y/Y/Y 0 (g_2) (2) Setup Completed\n"
+            "sub-a 10.0.0.2 0.01 Y/Y/Y 0 (g_2) (-) Setup Completed\n"
+            "sub-b 10.0.0.3 0.01 Y/Y/Y 0 (g_2) (2) Setup Completed",
+        )
+
+        self.assertEqual(replication["replication_rows"], "3")
+        self.assertEqual(replication["replication_bad_rows"], "0")

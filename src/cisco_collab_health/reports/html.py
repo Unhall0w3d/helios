@@ -1018,6 +1018,7 @@ class HtmlReportBuilder:
     def _template_header(self, header_metadata: str, *, hero_image: str, logo_image: str) -> str:
         """Render the stable hero structure; themes only supply identity and art."""
 
+        eyebrow = "Customer assessment report" if self.customer_safe else self.template.eyebrow
         logo_markup = (
             f'<img class="rds-logo" src="{logo_image}" alt="{escape(self.template.title)}">'
             if self.theme.show_hero_logo
@@ -1033,7 +1034,7 @@ class HtmlReportBuilder:
     <div class="rds-hero__overlay"></div>
     <div class="hero-copy rds-hero__content">
       {logo_markup}
-      <p class="eyebrow rds-eyebrow">{escape(self.template.eyebrow)}</p>
+      <p class="eyebrow rds-eyebrow">{escape(eyebrow)}</p>
       <h1 class="rds-title">{escape(self.template.title)}</h1>
       <p class="rds-subtitle">{escape(self.template.tagline)}</p>
     </div>
@@ -1786,11 +1787,17 @@ class HtmlReportBuilder:
             ("Platform check count", str(len(report.facts.platform_checks))),
             (
                 "Profile",
-                self._identifier(display_text(metadata.get("profile_name")), "Profile"),
+                self._identifier(
+                    display_text(metadata.get("profile_name") or metadata.get("assessment_profile")),
+                    "Profile",
+                ),
             ),
             (
                 "Publisher",
-                self._identifier(display_text(metadata.get("publisher")), "Node"),
+                self._identifier(
+                    display_text(metadata.get("publisher") or metadata.get("publisher_ip")),
+                    "Node",
+                ),
             ),
             ("Artifacts enabled", "Yes" if metadata.get("artifacts_enabled") else "No"),
             ("Artifact redaction mode", display_text(metadata.get("artifact_redaction"))),
@@ -1800,7 +1807,9 @@ class HtmlReportBuilder:
             ),
             (
                 "Phone inventory scope",
-                "Enabled" if metadata.get("phone_inventory_enabled") else "Skipped",
+                "Not specified"
+                if metadata.get("phone_inventory_enabled") is None
+                else ("Enabled" if metadata.get("phone_inventory_enabled") else "Skipped"),
             ),
             ("Diagnostic capture", "Enabled" if metadata.get("diagnostic_capture") else "Disabled"),
             ("Customer-safe HTML", "Enabled" if self.customer_safe else "Disabled"),
@@ -3278,7 +3287,7 @@ def _source_caption(section_name: str, report: AssessmentReport) -> str:
         "Detailed Device Registration": registration_caption,
         "Services": "Source: Control Center Services normalized service records.",
         "Performance Counters": "Source: PerfMon normalized performance-counter records.",
-        "Platform Checks": "Source: SSH/CLI fallback. Real collector not implemented yet.",
+        "Platform Checks": "Source: Read-only SSH/CLI platform diagnostics.",
     }
     if section_name in axl_sections and _has_axl_evidence(report):
         return f'<p class="meta">{escape(axl_sections[section_name])}</p>'
