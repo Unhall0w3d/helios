@@ -453,10 +453,14 @@ The CLI discovers other registered templates only when their complete local
 asset pack is present, so a clean clone remains fully functional. Template
 selection never changes collection, findings, or report facts.
 
-`comsource` is an optional customer-facing template. Its layout and theme rules
-remain supported in source, but its private artwork is local-only, ignored by
-Git, and excluded from packages. When its complete pack is installed, the CLI
-automatically offers it:
+Private company templates are external data-only packs containing a manifest,
+stylesheet, and local assets. They are excluded from this repository and its
+Python packages. Install an authorized pack under
+`~/.config/aletheiauc/report-templates/<template>/`; the CLI and review-bundle
+renderer automatically offer every complete installed pack. An alternate parent
+directory can be selected with `ALETHEIAUC_REPORT_TEMPLATE_DIR`.
+
+For example, an authorized locally installed `comsource` pack is selected with:
 
 ```bash
 ./aletheiauc.py --html-template comsource --customer-safe-report

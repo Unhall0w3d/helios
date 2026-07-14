@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import os
+import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -58,6 +60,51 @@ class ReportBuilderTests(unittest.TestCase):
             collectors=[SampleCollector()],
             rules=[ClusterIdentityRule(), NodeReachabilityRule()],
         ).run()
+
+    @staticmethod
+    def _write_external_template(root: Path, *, key: str = "privatebrand") -> Path:
+        package = root / key
+        assets = package / "assets"
+        assets.mkdir(parents=True)
+        (assets / "logo.svg").write_text(
+            '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"></svg>',
+            encoding="utf-8",
+        )
+        (package / "theme.css").write_text(
+            f"body.{key}-report {{ color: #123456; }}",
+            encoding="utf-8",
+        )
+        manifest = {
+            "schema_version": 1,
+            "key": key,
+            "template": {
+                "title": "Private Brand Assessment",
+                "eyebrow": "Authorized report",
+                "tagline": "Private presentation pack",
+                "footer_label": "Prepared by Private Brand",
+            },
+            "theme": {
+                "stylesheet": "theme.css",
+                "asset_directory": "assets",
+                "slots": {"logo-primary": "logo.svg"},
+                "colors": {
+                    "page": "#ffffff",
+                    "surface": "#ffffff",
+                    "text": "#111111",
+                    "muted": "#555555",
+                    "accent": "#123456",
+                    "cyan": "#0088aa",
+                    "gold": "#aa8800",
+                },
+                "hero_overlay": "none",
+                "hero_focal_point": "center",
+                "watermark_opacity": "0",
+                "show_hero_logo": True,
+                "show_footer_logo": True,
+            },
+        }
+        (package / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+        return package
 
     def test_human_readable_report_formatters(self) -> None:
         self.assertEqual(display_duration(42), "Less than 1 minute")
@@ -260,26 +307,34 @@ class ReportBuilderTests(unittest.TestCase):
         self.assertIn("Source: Read-only SSH/CLI platform diagnostics.", payload)
         self.assertNotIn("Real collector not implemented yet", payload)
 
-    def test_comsource_template_is_standalone_and_brand_isolated(self) -> None:
-        if "comsource" not in available_report_templates():
-            self.skipTest("optional local ComSource asset pack is not installed")
-        payload = HtmlReportBuilder(customer_safe=True, template="comsource").build(self.report)
-        self.assertIn("ComSource", payload)
-        self.assertIn("Prepared by ComSource, Inc.", payload)
-        self.assertIn('<footer class="template-footer rds-footer"', payload)
-        footer = payload.split('<footer class="template-footer rds-footer"', 1)[1]
-        self.assertIn('class="rds-logo"', footer)
-        self.assertIn("rds-metric-group", payload)
-        self.assertIn("rds-chapter--analysis", payload)
+    def test_external_template_pack_is_discovered_and_rendered_standalone(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            self._write_external_template(root)
+            with patch.dict(
+                os.environ,
+                {"ALETHEIAUC_REPORT_TEMPLATE_DIR": str(root)},
+            ):
+                self.assertIn("privatebrand", available_report_templates())
+                payload = HtmlReportBuilder(customer_safe=True, template="privatebrand").build(
+                    self.report
+                )
+
+        self.assertIn("Private Brand Assessment", payload)
+        self.assertIn("Prepared by Private Brand", payload)
+        self.assertIn("body.privatebrand-report { color: #123456; }", payload)
         self.assertIn("data:image/svg+xml;base64", payload)
-        self.assertIn("@media print", payload)
-        self.assertIn("Customer deliverable", payload)
-        self.assertIn("Assessment Methodology and Scope", payload)
-        self.assertNotIn("AletheiaUC", payload)
-        self.assertNotIn("powered by", payload.lower())
-        self.assertNotIn("Truth Constellation", payload)
-        self.assertNotIn("Beacon Horizon", payload)
         self.assertNotIn("https://", payload)
+
+    def test_external_template_is_unavailable_when_pack_is_not_installed(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch.dict(
+                os.environ,
+                {"ALETHEIAUC_REPORT_TEMPLATE_DIR": tmpdir},
+            ):
+                self.assertEqual(available_report_templates(), ("aletheiauc",))
+                with self.assertRaisesRegex(ValueError, "Unknown HTML report template"):
+                    HtmlReportBuilder(template="privatebrand")
 
     def test_customer_deliverable_retains_scope_identifiers_and_evidence_operations(self) -> None:
         report = AssessmentReport(
@@ -402,13 +457,16 @@ class ReportBuilderTests(unittest.TestCase):
             HtmlReportBuilder(template="not-a-template")
 
     def test_registered_template_with_missing_assets_has_actionable_error(self) -> None:
-        missing = Path("/tmp/local-template/hero-background.svg")
-        with patch(
-            "cisco_collab_health.reports.html.missing_template_assets",
-            return_value=(missing,),
-        ):
-            with self.assertRaisesRegex(ValueError, "not installed locally"):
-                HtmlReportBuilder(template="comsource")
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            package = self._write_external_template(root)
+            (package / "assets" / "logo.svg").unlink()
+            with patch.dict(
+                os.environ,
+                {"ALETHEIAUC_REPORT_TEMPLATE_DIR": str(root)},
+            ):
+                with self.assertRaisesRegex(ValueError, "not installed locally"):
+                    HtmlReportBuilder(template="privatebrand")
 
     def test_server_rows_put_cucm_before_cuc_and_publishers_before_subscribers(self) -> None:
         report = AssessmentReport(

@@ -17,46 +17,42 @@ The CLI and interactive menu list only registered templates whose complete
 asset packs are present. Review bundles render the same installed set. A missing
 optional pack therefore cannot break the default report or a review export.
 
-Template behavior—metadata, design tokens, asset-slot mappings, and shared
-rendering code—belongs in source control. Supported built-in asset packs are
-packaged with the application so source checkouts, wheels, and installed
-assessment runtimes discover the same templates. Unregistered local packs may
-still live under `src/cisco_collab_health/reports/assets/<template>/`. A
-template with no asset slots, such as the default dark report, requires no
-files; an illustrated or branded template requires every file declared in its
-slot map.
+The generic renderer and shared report structure belong in source control.
+Company identity, brand-specific CSS, metadata, and artwork belong in an
+external data-only pack. The default installation directory is
+`~/.config/aletheiauc/report-templates/`; set
+`ALETHEIAUC_REPORT_TEMPLATE_DIR` to use another parent directory. A template
+with no asset slots, such as the default dark report, requires no files; an
+illustrated or branded template requires its manifest, stylesheet, and every
+file declared in its slot map.
 
-## ComSource
+## Private company templates
 
-`comsource` is a built-in customer-facing template selected with:
+An authorized external `comsource` pack can be selected with:
 
 ```bash
 ./aletheiauc.py --html-template comsource --customer-safe-report
 ```
 
-Its backing rules, shared layout, logo, and artwork are distributed with
-AletheiaUC so every installed assessment runtime can include it in review
-bundles. The pack contains:
+Its company name, presentation rules, logo, and artwork are not distributed
+with AletheiaUC. The private pack has this layout:
 
-- `ComSource_Logo.svg`
-- `hero-background.svg`
-- `section-band.svg`
-- `divider-horizontal.svg`
-- `watermark.svg`
-- `footer-background.svg`
-- `status-icons.svg`
+- `comsource/manifest.json`
+- `comsource/theme.css`
+- `comsource/assets/ComSource_Logo.svg`
+- the additional assets declared by the manifest
 
-When all required files exist, `comsource` is automatically available to the
-CLI, menu, report builder, and review-bundle renderer. If an operator explicitly
-requests a registered but incomplete template through code, the builder reports
-the missing files and local pack directory. Rendered reports embed installed
-assets as data URIs and have no external image dependency.
+Install the `comsource` directory directly beneath the external template parent,
+for example `~/.config/aletheiauc/report-templates/comsource/manifest.json`.
+When every required file exists, it is automatically available to the CLI,
+menu, report builder, and review-bundle renderer. An incomplete pack is not
+listed, and an explicit programmatic request reports its missing files. Rendered
+reports embed installed assets as data URIs and have no external image dependency.
 
-The ComSource template deliberately contains no AletheiaUC name, marks,
-taglines, capability row, or powered-by attribution. Its purple and cyan are
-identity/navigation colors; report severity states retain their independent,
-text-labeled meanings. The template supports narrow layouts and browser print
-preview.
+Removing or moving the installed directory disables future generation of that
+template. It does not alter standalone reports that were already generated.
+Keep private template ZIPs and installed packs out of this repository and public
+releases.
 
 ## Review bundles
 
@@ -145,7 +141,7 @@ always includes:
 - `reports/aletheiauc/engineering.html`
 - `reports/aletheiauc/customer-facing.html`
 
-With the complete local ComSource pack installed, it additionally includes:
+With an authorized external ComSource pack installed, it additionally includes:
 
 - `reports/comsource/engineering.html`
 - `reports/comsource/customer-facing.html`

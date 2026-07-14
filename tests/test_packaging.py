@@ -19,7 +19,7 @@ class PackagingMetadataTests(unittest.TestCase):
         package_data = metadata["tool"]["setuptools"]["package-data"]
 
         self.assertIn("reports/assets/*.png", package_data["cisco_collab_health"])
-        self.assertIn(
+        self.assertNotIn(
             "reports/assets/comsource/*.svg",
             package_data["cisco_collab_health"],
         )
