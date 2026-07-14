@@ -409,24 +409,96 @@ class ReportBuilderTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "not installed locally"):
                 HtmlReportBuilder(template="comsource")
 
-    def test_node_rows_put_publishers_first_within_each_technology(self) -> None:
+    def test_server_rows_put_cucm_before_cuc_and_publishers_before_subscribers(self) -> None:
         report = AssessmentReport(
             facts=AssessmentFacts(
+                clusters=[
+                    ClusterIdentity("unity", "Cisco Unity Connection", "15"),
+                    ClusterIdentity("call-control", "Cisco Unified Communications Manager", "15"),
+                ],
                 nodes=[
-                    CollaborationNode("cucm-sub", "192.0.2.12", "subscriber", technology="cucm"),
+                    CollaborationNode("cucm-sub10", "192.0.2.20", "subscriber", technology="cucm"),
                     CollaborationNode("cuc-pub", "192.0.2.21", "publisher", technology="cuc"),
                     CollaborationNode("cucm-pub", "192.0.2.11", "publisher", technology="cucm"),
-                    CollaborationNode("cuc-sub", "192.0.2.22", "subscriber", technology="cuc"),
-                ]
+                    CollaborationNode("cuc-sub2", "192.0.2.22", "subscriber", technology="cuc"),
+                    CollaborationNode("cucm-sub2", "192.0.2.12", "subscriber", technology="cucm"),
+                    CollaborationNode("cuc-sub1", "192.0.2.23", "subscriber", technology="cuc"),
+                ],
+                services=[
+                    ServiceStatusFact("cuc-sub2", "svc", True, "started", 1, "ControlCenter"),
+                    ServiceStatusFact("cucm-sub10", "svc", True, "started", 1, "ControlCenter"),
+                    ServiceStatusFact("cuc-pub", "svc", True, "started", 1, "ControlCenter"),
+                    ServiceStatusFact("cucm-pub", "svc", True, "started", 1, "ControlCenter"),
+                    ServiceStatusFact("cucm-sub2", "svc", True, "started", 1, "ControlCenter"),
+                ],
+                perf_counters=[
+                    PerfCounterFact("cuc-pub", "Memory", "% Mem Used", None, 40, 1, "PerfMon"),
+                    PerfCounterFact("cucm-sub2", "Memory", "% Mem Used", None, 30, 1, "PerfMon"),
+                    PerfCounterFact("cucm-pub", "Memory", "% Mem Used", None, 20, 1, "PerfMon"),
+                ],
+                platform_checks=[
+                    PlatformCheckFact("cuc-sub2", "show status", "ok", {}, "CUC.UCOS.CLI"),
+                    PlatformCheckFact("cuc-pub", "show status", "ok", {}, "CUC.UCOS.CLI"),
+                    PlatformCheckFact("cucm-sub2", "show status", "ok", {}, "CUCM.UCOS.CLI"),
+                    PlatformCheckFact("cucm-pub", "show status", "ok", {}, "CUCM.UCOS.CLI"),
+                ],
             ),
             collector_results=[],
             findings=[],
+            runtime_metadata={
+                "targets": [
+                    {"target_id": "unity", "technology": "cuc", "address": "192.0.2.21"},
+                    {"target_id": "call-control", "technology": "cucm", "address": "192.0.2.11"},
+                ]
+            },
         )
 
-        html = HtmlReportBuilder().build(report)
+        builder = HtmlReportBuilder()
+        node_rows = builder._node_rows(report)
+        service_rows = builder._service_rows(report)
+        perf_rows = builder._perf_counter_rows(report)
+        platform_rows = builder._platform_check_rows(report)
+        cuc_platform = builder._cuc_platform_section(report)
+        cluster_section = builder._cluster_section(report)
+        target_section = builder._target_scope_section(report)
 
-        self.assertLess(html.index("cuc-pub"), html.index("cuc-sub"))
-        self.assertLess(html.index("cucm-pub"), html.index("cucm-sub"))
+        expected = ("cucm-pub", "cucm-sub2", "cucm-sub10", "cuc-pub", "cuc-sub1", "cuc-sub2")
+        for first, second in zip(expected, expected[1:]):
+            self.assertLess(node_rows.index(first), node_rows.index(second))
+        service_expected = ("cucm-pub", "cucm-sub2", "cucm-sub10", "cuc-pub", "cuc-sub2")
+        for first, second in zip(service_expected, service_expected[1:]):
+            self.assertLess(service_rows.index(first), service_rows.index(second))
+        self.assertLess(perf_rows.index("cucm-pub"), perf_rows.index("cucm-sub2"))
+        self.assertLess(perf_rows.index("cucm-sub2"), perf_rows.index("cuc-pub"))
+        self.assertLess(platform_rows.index("cucm-pub"), platform_rows.index("cucm-sub2"))
+        self.assertLess(platform_rows.index("cucm-sub2"), platform_rows.index("cuc-pub"))
+        self.assertLess(cuc_platform.index("cuc-pub"), cuc_platform.index("cuc-sub2"))
+        self.assertLess(cluster_section.index("call-control"), cluster_section.index("unity"))
+        self.assertLess(target_section.index("call-control"), target_section.index("unity"))
+
+    def test_lengthy_report_tables_are_collapsible_and_printable(self) -> None:
+        for template in available_report_templates():
+            for customer_safe in (False, True):
+                html = HtmlReportBuilder(template=template, customer_safe=customer_safe).build(
+                    self.report
+                )
+
+                for summary in (
+                    "Show device inventory by model",
+                    "Show device load defaults and overrides",
+                    "Show active firmware by model",
+                    "Show performance summary",
+                    "Show configuration inventory summary",
+                    "Show certificates requiring attention",
+                    "Show platform checks",
+                    "Show collector evidence",
+                    "Show inventory-only device summaries and details",
+                ):
+                    self.assertIn(
+                        f'<details class="report-data"><summary>{summary}</summary>', html
+                    )
+                self.assertIn("details.report-data:not([open]) > *:not(summary)", html)
+                self.assertIn("details.report-data:not([open]) > table", html)
 
     def test_node_reachability_is_inferred_from_successful_collection(self) -> None:
         report = AssessmentReport(

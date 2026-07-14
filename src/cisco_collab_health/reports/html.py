@@ -8,10 +8,12 @@ from dataclasses import dataclass
 from functools import lru_cache
 from html import escape
 from pathlib import Path
+import re
 
 from cisco_collab_health.models.assessment import AssessmentReport
 from cisco_collab_health.models.facts import (
     CertificateFact,
+    CollaborationNode,
     ConfigurationObjectFact,
     DeviceInventoryFact,
     DeviceRegistrationFact,
@@ -129,6 +131,32 @@ REPORT_THEMES = {
 }
 
 
+def _natural_sort_key(value: str) -> tuple[tuple[int, object], ...]:
+    """Return a case-insensitive key that keeps numbered nodes in human order."""
+
+    return tuple(
+        (1, int(part)) if part.isdigit() else (0, part.casefold())
+        for part in re.split(r"(\d+)", value)
+        if part
+    )
+
+
+def _technology_sort_key(technology: str) -> tuple[int, tuple[tuple[int, object], ...]]:
+    normalized = technology.strip().casefold()
+    return ({"cucm": 0, "cuc": 1}.get(normalized, 2), _natural_sort_key(normalized))
+
+
+def _collaboration_node_sort_key(node: CollaborationNode) -> tuple[object, ...]:
+    normalized_role = node.role.strip().casefold()
+    role_rank = {"publisher": 0, "subscriber": 1}.get(normalized_role, 2)
+    return (
+        _technology_sort_key(node.technology or ""),
+        role_rank,
+        _natural_sort_key(node.name),
+        _natural_sort_key(node.address),
+    )
+
+
 @lru_cache(maxsize=None)
 def _theme_asset_data_uri(theme: str, slot: str) -> str:
     """Resolve one named asset slot as a standalone data URI."""
@@ -218,14 +246,22 @@ class HtmlReportBuilder:
         watermark_image = _optional_theme_asset_data_uri(self.template.key, "watermark")
         section_band_image = _optional_theme_asset_data_uri(self.template.key, "section-band")
         executive_image = _optional_theme_asset_data_uri(self.template.key, "executive-background")
-        chapter_findings_image = _optional_theme_asset_data_uri(self.template.key, "chapter-findings")
+        chapter_findings_image = _optional_theme_asset_data_uri(
+            self.template.key, "chapter-findings"
+        )
         chapter_scope_image = _optional_theme_asset_data_uri(self.template.key, "chapter-scope")
         chapter_infrastructure_image = _optional_theme_asset_data_uri(
             self.template.key, "chapter-infrastructure"
         )
-        chapter_analysis_image = _optional_theme_asset_data_uri(self.template.key, "chapter-analysis")
-        chapter_evidence_image = _optional_theme_asset_data_uri(self.template.key, "chapter-evidence")
-        recommendation_image = _optional_theme_asset_data_uri(self.template.key, "recommendation-background")
+        chapter_analysis_image = _optional_theme_asset_data_uri(
+            self.template.key, "chapter-analysis"
+        )
+        chapter_evidence_image = _optional_theme_asset_data_uri(
+            self.template.key, "chapter-evidence"
+        )
+        recommendation_image = _optional_theme_asset_data_uri(
+            self.template.key, "recommendation-background"
+        )
         footer_image = _optional_theme_asset_data_uri(self.template.key, "footer-background")
         logo_image = _optional_theme_asset_data_uri(self.template.key, "logo-primary")
         template_css = (
@@ -368,6 +404,7 @@ class HtmlReportBuilder:
             "Collector detail, reconciliation, provenance, and inventories",
             "evidence",
         )
+        body_class = "default-dark" if self.template.key == "aletheiauc" else self.template.key
 
         return f"""<!doctype html>
 <html lang="en">
@@ -563,6 +600,7 @@ class HtmlReportBuilder:
       font-weight: 700;
       margin: 8px 0 14px;
     }}
+    details.report-data {{ margin-bottom: 14px; }}
     th, td {{
       padding: 10px 8px;
       border-bottom: 1px solid var(--line);
@@ -704,12 +742,15 @@ class HtmlReportBuilder:
       section {{ border-color: #cbd1dc; break-inside: avoid; }}
       th, td {{ border-color: #d8dce5; }}
       th {{ color: #245ec9; background: #f2f5fa; }}
+      details.report-data > summary {{ display: none !important; }}
+      details.report-data:not([open]) > *:not(summary) {{ display: block !important; }}
+      details.report-data:not([open]) > table {{ display: table !important; }}
     }}
     {template_css}
     {self._design_system_css()}
   </style>
 </head>
-<body class="{escape('default-dark' if self.template.key == 'aletheiauc' else self.template.key)}-report">
+<body class="{escape(body_class)}-report">
   <div class="report-shell rds-report" style="--watermark-image: url('{watermark_image}'); --section-band-image: url('{section_band_image}'); --executive-image: url('{executive_image}'); --chapter-findings-image: url('{chapter_findings_image}'); --chapter-scope-image: url('{chapter_scope_image}'); --chapter-infrastructure-image: url('{chapter_infrastructure_image}'); --chapter-analysis-image: url('{chapter_analysis_image}'); --chapter-evidence-image: url('{chapter_evidence_image}'); --recommendation-image: url('{recommendation_image}');">
   <header class="report-hero rds-hero" style="--hero-image: url('{hero_image}');">
     {template_header}
@@ -743,6 +784,7 @@ class HtmlReportBuilder:
     <section>
       <h2>Device Inventory By Model</h2>
       {_source_caption("Device Inventory By Model", report)}
+      <details class="report-data"><summary>Show device inventory by model</summary>
       <table>
         <thead>
           <tr>
@@ -753,6 +795,7 @@ class HtmlReportBuilder:
           {device_model_rows}
         </tbody>
       </table>
+      </details>
     </section>
     <section>
       <h2>Device Registration Summary</h2>
@@ -772,6 +815,7 @@ class HtmlReportBuilder:
       <h2>Device Load Summary</h2>
       {_source_caption("Device Load Summary", report)}
       {device_load_note}
+      <details class="report-data"><summary>Show device load defaults and overrides</summary>
       <table>
         <thead>
           <tr>
@@ -784,46 +828,61 @@ class HtmlReportBuilder:
           {device_load_rows}
         </tbody>
       </table>
+      </details>
       <h3>Static Overrides by Model and Load</h3>
+      <details class="report-data"><summary>Show static load overrides</summary>
       <table>
         <thead><tr><th>Model</th><th>Protocol</th><th>Static Load</th><th>Devices</th></tr></thead>
         <tbody>{static_load_rows}</tbody>
       </table>
+      </details>
     </section>
     <section>
       <h2>Runtime Firmware and Downloads</h2>
       <p class="meta">Source: RISPort runtime firmware and download state. Unknown download
       status is reported as unknown and is not treated as a failure.</p>
+      <details class="report-data"><summary>Show active firmware by model</summary>
       <table>
         <thead><tr><th>Model</th><th>Protocol</th><th>Active Load</th><th>Devices</th></tr></thead>
         <tbody>{firmware_summary_rows}</tbody>
       </table>
+      </details>
       <h3>Configured / Runtime Firmware Correlation</h3>
+      <details class="report-data"><summary>Show configured and runtime firmware correlation</summary>
       <table>
         <thead><tr><th>State</th><th>Devices</th></tr></thead>
         <tbody>{firmware_correlation_rows}</tbody>
       </table>
+      </details>
       <h3>Mixed Active Firmware Populations</h3>
+      <details class="report-data"><summary>Show mixed active firmware populations</summary>
       <table>
         <thead><tr><th>Model</th><th>Protocol</th><th>Active Loads</th><th>Runtime</th><th>Configured</th></tr></thead>
         <tbody>{mixed_firmware_rows}</tbody>
       </table>
+      </details>
       <h3>Explicit Download Failures</h3>
+      <details class="report-data"><summary>Show explicit download failures</summary>
       <table>
         <thead><tr><th>Reason</th><th>Devices</th></tr></thead>
         <tbody>{firmware_failure_rows}</tbody>
       </table>
+      </details>
       <h3>Download Failures by Model and Node</h3>
+      <details class="report-data"><summary>Show download failures by model and node</summary>
       <table>
         <thead><tr><th>Model</th><th>Node</th><th>Reason</th><th>Devices</th></tr></thead>
         <tbody>{firmware_failure_detail_rows}</tbody>
       </table>
+      </details>
       <h3>Firmware Exceptions</h3>
+      <details class="report-data"><summary>Show firmware exceptions</summary>
       <table>
         <thead><tr><th>Impact / next step</th><th>Device</th><th>Model</th><th>Static Load</th><th>Default Load</th>
         <th>Active Load</th><th>Download Status</th><th>Failure Reason</th><th>Node</th></tr></thead>
         <tbody>{firmware_exception_rows}</tbody>
       </table>
+      </details>
     </section>
     <section>
       <h2>Services</h2>
@@ -844,13 +903,13 @@ class HtmlReportBuilder:
       </table>
       <h3>Service Deployment Comparison</h3>
       <p class="meta">Observed deployment only; differences are not evaluated against an assumed node-role policy.</p>
-      <details><summary>Show service deployment by node</summary>
+      <details class="report-data"><summary>Show service deployment by node</summary>
       <div class="table-scroll"><table>
         <thead><tr><th>Service</th><th>Group</th><th>Started Nodes</th><th>Stopped Nodes</th></tr></thead>
         <tbody>{service_deployment_rows}</tbody>
       </table></div>
       </details>
-      <details>
+      <details class="report-data">
         <summary>Show all service records</summary>
       <table>
         <thead>
@@ -870,11 +929,13 @@ class HtmlReportBuilder:
       {_source_caption("Performance Counters", report)}
       {cpu_note}
       <p class="meta">Memory values are point-in-time observations; no memory health threshold is applied.</p>
+      <details class="report-data"><summary>Show performance summary</summary>
       <table>
         <thead><tr><th>Node</th><th>Metric</th><th>Value</th><th>Samples</th></tr></thead>
         <tbody>{perf_summary_rows}</tbody>
       </table>
-      <details>
+      </details>
+      <details class="report-data">
         <summary>Show all performance counter records</summary>
       <table>
         <thead>
@@ -893,50 +954,52 @@ class HtmlReportBuilder:
       <h2>Configuration Inventory</h2>
       <p class="meta">Source: bounded, read-only AXL and CUPI configuration discovery. Counts
       reflect captured responses and do not by themselves imply policy validation.</p>
+      <details class="report-data"><summary>Show configuration inventory summary</summary>
       <table>
         <thead><tr><th>Object Type</th><th>Count</th></tr></thead>
         <tbody>{configuration_summary_rows}</tbody>
       </table>
+      </details>
       <h3>Route Pattern Destinations</h3>
-      <details><summary>Show route pattern relationships</summary>
+      <details class="report-data"><summary>Show route pattern relationships</summary>
       <div class="table-scroll"><table>
         <thead><tr><th>Pattern</th><th>Partition</th><th>Route Filter</th><th>Dial Plan</th><th>Gateway or Route List</th></tr></thead>
         <tbody>{route_pattern_rows}</tbody>
       </table></div>
       </details>
       <h3>Route List / Route Group Membership</h3>
-      <details><summary>Show route list relationships</summary>
+      <details class="report-data"><summary>Show route list relationships</summary>
       <div class="table-scroll"><table>
         <thead><tr><th>Route List</th><th>Route Groups</th></tr></thead>
         <tbody>{route_list_rows}</tbody>
       </table></div>
       </details>
       <h3>CSS / Partition Coverage</h3>
-      <details><summary>Show CSS membership coverage</summary>
+      <details class="report-data"><summary>Show CSS membership coverage</summary>
       <div class="table-scroll"><table>
         <thead><tr><th>CSS</th><th>Partitions</th><th>Count</th></tr></thead>
         <tbody>{css_coverage_rows}</tbody>
       </table></div>
       </details>
       <h3>Hunt and Directory-number Topology</h3>
-      <details><summary>Show hunt, line-group, and forwarding configuration</summary>
+      <details class="report-data"><summary>Show hunt, line-group, and forwarding configuration</summary>
       <div class="table-scroll"><table>
         <thead><tr><th>Type</th><th>Name/Pattern</th><th>Configuration</th></tr></thead>
         <tbody>{hunt_topology_rows}</tbody>
       </table></div></details>
       <h3>Trunk, Directory, and Device Security</h3>
-      <details><summary>Show integration and security configuration</summary>
+      <details class="report-data"><summary>Show integration and security configuration</summary>
       <div class="table-scroll"><table>
         <thead><tr><th>Type</th><th>Name</th><th>Configuration</th></tr></thead>
         <tbody>{integration_security_rows}</tbody>
       </table></div></details>
       <h3>Media Resource Topology</h3>
-      <details><summary>Show media-resource configuration and membership</summary>
+      <details class="report-data"><summary>Show media-resource configuration and membership</summary>
       <div class="table-scroll"><table>
         <thead><tr><th>Type</th><th>Name</th><th>Configuration</th></tr></thead>
         <tbody>{media_topology_rows}</tbody>
       </table></div></details>
-      <details>
+      <details class="report-data">
         <summary>Show captured configuration objects</summary>
         <table>
           <thead><tr><th>Type</th><th>Name/Pattern</th><th>Details</th><th>Source</th></tr></thead>
@@ -949,21 +1012,25 @@ class HtmlReportBuilder:
       <p class="meta">Source: per-node UC Certificate Management REST snapshots. Active service certificates and
       trust-store entries are presented separately: trust entries need review but do not alone establish an outage.</p>
       {certificate_summary}
+      <details class="report-data"><summary>Show certificates requiring attention</summary>
       <div class="table-scroll"><table>
         <thead><tr><th>Node</th><th>Certificate</th><th>Service/Store</th><th>Kind</th>
         <th>Expires</th><th>Days</th><th>Signing</th><th>Intermediate</th><th>Root</th><th>Chain</th></tr></thead>
         <tbody>{certificate_rows}</tbody>
       </table></div>
+      </details>
     </section>
     <section>
       <h2>Platform Checks</h2>
       {_source_caption("Platform Checks", report)}
+      <details class="report-data"><summary>Show platform checks</summary>
       <table>
         <thead><tr><th>Node</th><th>Check</th><th>Status</th><th>Details</th><th>Source</th></tr></thead>
         <tbody>
           {platform_check_rows}
         </tbody>
       </table>
+      </details>
     </section>
     {evidence_chapter}
     {collector_issues_section}
@@ -973,7 +1040,7 @@ class HtmlReportBuilder:
     <section>
       <h2>Detailed Device Inventory</h2>
       {_source_caption("Detailed Device Inventory", report)}
-      <details>
+      <details class="report-data">
       <summary>Show detailed configured device inventory</summary>
       <table>
         <thead>
@@ -992,7 +1059,7 @@ class HtmlReportBuilder:
     <section>
       <h2>Detailed Device Registration</h2>
       {_source_caption("Detailed Device Registration", report)}
-      <details>
+      <details class="report-data">
       <summary>Show detailed runtime registration inventory</summary>
       <table>
         <thead>
@@ -1725,7 +1792,7 @@ class HtmlReportBuilder:
         return "".join(chips)
 
     def _assessed_technologies(self, report: AssessmentReport) -> list[str]:
-        """Return unique technologies in selection order, without inventing scope."""
+        """Return unique technologies in report order, without inventing scope."""
 
         technologies: list[str] = []
         targets = report.runtime_metadata.get("targets")
@@ -1749,11 +1816,15 @@ class HtmlReportBuilder:
             normalized = technology.strip().lower()
             if normalized and normalized not in unique:
                 unique.append(normalized)
-        return unique
+        return sorted(unique, key=_technology_sort_key)
 
     def _methodology_scope_section(self, report: AssessmentReport) -> str:
         collector_names = ", ".join(
-            self._collector_label(result.collector_name) for result in report.collector_results
+            self._collector_label(result.collector_name)
+            for result in sorted(
+                report.collector_results,
+                key=lambda item: self._collector_result_sort_key(report, item),
+            )
         )
         if not collector_names:
             collector_names = display_text(None)
@@ -1788,7 +1859,9 @@ class HtmlReportBuilder:
             (
                 "Profile",
                 self._identifier(
-                    display_text(metadata.get("profile_name") or metadata.get("assessment_profile")),
+                    display_text(
+                        metadata.get("profile_name") or metadata.get("assessment_profile")
+                    ),
                     "Profile",
                 ),
             ),
@@ -1854,7 +1927,10 @@ class HtmlReportBuilder:
 """
 
     def _cluster_section(self, report: AssessmentReport) -> str:
-        if report.facts.cluster is None:
+        clusters = [*report.facts.clusters]
+        if report.facts.cluster is not None and report.facts.cluster not in clusters:
+            clusters.append(report.facts.cluster)
+        if not clusters:
             return f"""
     <section>
       <h2>Cluster</h2>
@@ -1863,17 +1939,28 @@ class HtmlReportBuilder:
     </section>
 """
 
-        cluster = report.facts.cluster
+        rows = "".join(
+            "<tr>"
+            f"<td>{escape(display_text(_technology_from_product(cluster.product)).upper())}</td>"
+            f"<td>{escape(self._identifier(cluster.name, 'Node'))}</td>"
+            f"<td>{escape(cluster.product)}</td>"
+            f"<td>{escape(cluster.version)}</td>"
+            "</tr>"
+            for cluster in sorted(
+                clusters,
+                key=lambda item: (
+                    _technology_sort_key(_technology_from_product(item.product) or ""),
+                    _natural_sort_key(item.name),
+                ),
+            )
+        )
         return f"""
     <section>
       <h2>Cluster</h2>
       {_source_caption("Cluster", report)}
       <table>
-        <tbody>
-          <tr><th>Cluster Anchor</th><td>{escape(self._identifier(cluster.name, "Node"))}</td></tr>
-          <tr><th>Product</th><td>{escape(cluster.product)}</td></tr>
-          <tr><th>Version</th><td>{escape(cluster.version)}</td></tr>
-        </tbody>
+        <thead><tr><th>Technology</th><th>Cluster Anchor</th><th>Product</th><th>Version</th></tr></thead>
+        <tbody>{rows}</tbody>
       </table>
     </section>
 """
@@ -1894,15 +1981,7 @@ class HtmlReportBuilder:
         if not report.facts.nodes:
             return '<tr><td colspan="5">No nodes discovered.</td></tr>'
 
-        nodes = sorted(
-            report.facts.nodes,
-            key=lambda item: (
-                item.technology or "",
-                item.role.strip().lower() != "publisher",
-                item.name.lower(),
-                item.address.lower(),
-            ),
-        )
+        nodes = sorted(report.facts.nodes, key=_collaboration_node_sort_key)
         return "\n".join(
             (
                 "<tr>"
@@ -2067,7 +2146,13 @@ class HtmlReportBuilder:
                 f"<td>{escape(display_source(registration.source))}</td>"
                 "</tr>"
             )
-            for registration in report.facts.registrations
+            for registration in sorted(
+                report.facts.registrations,
+                key=lambda item: (
+                    self._node_reference_sort_key(report, item.registered_node),
+                    _natural_sort_key(item.name),
+                ),
+            )
         )
 
     def _registration_summary_rows(self, report: AssessmentReport) -> str:
@@ -2152,7 +2237,14 @@ class HtmlReportBuilder:
         return "\n".join(
             f"<tr><td>{escape(model)}</td><td>{escape(self._identifier(node, 'Node'))}</td>"
             f"<td>{escape(reason)}</td><td>{count}</td></tr>"
-            for (model, node, reason), count in sorted(failures.items())
+            for (model, node, reason), count in sorted(
+                failures.items(),
+                key=lambda item: (
+                    self._node_reference_sort_key(report, item[0][1]),
+                    _natural_sort_key(item[0][0]),
+                    _natural_sort_key(item[0][2]),
+                ),
+            )
         )
 
     def _mixed_firmware_rows(self, report: AssessmentReport) -> str:
@@ -2177,7 +2269,13 @@ class HtmlReportBuilder:
         )
 
     def _firmware_exception_rows(self, report: AssessmentReport) -> str:
-        exceptions = _firmware_exceptions(report)
+        exceptions = sorted(
+            _firmware_exceptions(report),
+            key=lambda item: (
+                self._node_reference_sort_key(report, item[0].registered_node),
+                _natural_sort_key(item[0].name),
+            ),
+        )
         if not exceptions:
             return '<tr><td colspan="9">No firmware exceptions found.</td></tr>'
         rows = []
@@ -2214,7 +2312,13 @@ class HtmlReportBuilder:
                 f"<td>{escape(display_source(service.source))}</td>"
                 "</tr>"
             )
-            for service in report.facts.services
+            for service in sorted(
+                report.facts.services,
+                key=lambda item: (
+                    self._node_reference_sort_key(report, item.node),
+                    _natural_sort_key(item.service_name),
+                ),
+            )
         )
 
     def _service_summary_rows(self, report: AssessmentReport) -> str:
@@ -2230,7 +2334,9 @@ class HtmlReportBuilder:
             f"<td>{counts['stopped']}</td>"
             f"<td>{sum(counts.values())}</td>"
             "</tr>"
-            for node, counts in sorted(by_node.items())
+            for node, counts in sorted(
+                by_node.items(), key=lambda item: self._node_reference_sort_key(report, item[0])
+            )
         )
 
     def _service_reason_rows(self, report: AssessmentReport) -> str:
@@ -2277,7 +2383,15 @@ class HtmlReportBuilder:
                 f"<td>{escape(display_source(counter.source))}</td>"
                 "</tr>"
             )
-            for counter in report.facts.perf_counters
+            for counter in sorted(
+                report.facts.perf_counters,
+                key=lambda item: (
+                    self._node_reference_sort_key(report, item.node),
+                    _natural_sort_key(item.object_name),
+                    _natural_sort_key(item.counter_name),
+                    _natural_sort_key(item.instance or ""),
+                ),
+            )
         )
 
     def _perf_summary_rows(self, report: AssessmentReport) -> str:
@@ -2305,7 +2419,13 @@ class HtmlReportBuilder:
             f"<td>{escape('Unavailable (zero-only snapshot)' if cpu_zero_only and counter.counter_name == '% CPU Time' else display_text(counter.value))}</td>"
             f"<td>{counter.sample_count}</td>"
             "</tr>"
-            for counter in sorted(counters, key=lambda item: (item.node, item.counter_name))
+            for counter in sorted(
+                counters,
+                key=lambda item: (
+                    self._node_reference_sort_key(report, item.node),
+                    _natural_sort_key(item.counter_name),
+                ),
+            )
         )
 
     def _cpu_availability_note(self, report: AssessmentReport) -> str:
@@ -2322,9 +2442,14 @@ class HtmlReportBuilder:
         if not isinstance(targets, list) or not targets:
             return ""
         rows = []
-        for target in targets:
-            if not isinstance(target, dict):
-                continue
+        valid_targets = [target for target in targets if isinstance(target, dict)]
+        for target in sorted(
+            valid_targets,
+            key=lambda item: (
+                _technology_sort_key(str(item.get("technology") or "")),
+                _natural_sort_key(str(item.get("target_id") or "")),
+            ),
+        ):
             technology = display_text(target.get("technology")).upper()
             address = self._target_address(report, target)
             address = self._identifier(address, "Address")
@@ -2384,11 +2509,13 @@ class HtmlReportBuilder:
       <h2>Unity Connection Inventory</h2>
       <p class="meta">Source: bounded, read-only CUPI inventory probes. Counts are normalized
       from collection metadata; individual mailbox and contact identities are not included here.</p>
+      <details class="report-data"><summary>Show Unity Connection inventory details</summary>
       <table>
         <thead><tr><th>Inventory</th><th>Total</th><th>Probe rows</th><th>Normalized</th>
         <th>Coverage</th></tr></thead>
         <tbody>{rows}</tbody>
       </table>
+      </details>
 </section>
 """
 
@@ -2452,9 +2579,11 @@ class HtmlReportBuilder:
       Informix SELECT probes. Experimental SQL-derived records are explicitly labeled. Only
       reviewed non-secret fields are normalized; mailbox identities, credentials, and message
       content are excluded.</p>
+      <details class="report-data"><summary>Show Unity Connection configuration summary</summary>
       <table><thead><tr><th>Configuration area</th><th>Records</th></tr></thead>
       <tbody>{summary_rows}</tbody></table>
-      <details><summary>Show Unity Connection configuration details</summary>
+      </details>
+      <details class="report-data"><summary>Show Unity Connection configuration details</summary>
       <div class="table-scroll"><table><thead><tr><th>Type</th><th>Name</th><th>Occurrences</th><th>Configuration</th></tr></thead>
       <tbody>{detail_rows}</tbody></table></div></details>
 </section>
@@ -2504,7 +2633,13 @@ class HtmlReportBuilder:
             "utils core active list": "Active core files",
         }
         rows = []
-        for check in checks:
+        for check in sorted(
+            checks,
+            key=lambda item: (
+                self._node_reference_sort_key(report, item.node),
+                _natural_sort_key(item.check_name),
+            ),
+        ):
             if check.check_name not in labels:
                 continue
             details = check.details
@@ -2533,14 +2668,16 @@ class HtmlReportBuilder:
                     else "Core files present"
                 )
             rows.append(
-                f"<tr><td>{escape(labels[check.check_name])}</td><td>{escape(check.status)}</td><td>{escape(summary)}</td></tr>"
+                f"<tr><td>{escape(self._identifier(check.node, 'Node'))}</td>"
+                f"<td>{escape(labels[check.check_name])}</td><td>{escape(check.status)}</td>"
+                f"<td>{escape(summary)}</td></tr>"
             )
         if not rows:
             return ""
         return (
-            '<section class="technology-section cuc-section"><h2>Unity Connection Platform Health</h2><p class="meta">Source: bounded UCOS diagnostic commands. Full output remains in the private engineering artifact bundle.</p><table><thead><tr><th>Check</th><th>Status</th><th>Summary</th></tr></thead><tbody>'
+            '<section class="technology-section cuc-section"><h2>Unity Connection Platform Health</h2><p class="meta">Source: bounded UCOS diagnostic commands. Full output remains in the private engineering artifact bundle.</p><details class="report-data"><summary>Show Unity Connection platform checks</summary><table><thead><tr><th>Node</th><th>Check</th><th>Status</th><th>Summary</th></tr></thead><tbody>'
             + "".join(rows)
-            + "</tbody></table></section>"
+            + "</tbody></table></details></section>"
         )
 
     def _configuration_summary_rows(self, report: AssessmentReport) -> str:
@@ -2629,8 +2766,8 @@ class HtmlReportBuilder:
             return '<tr><td colspan="4">No service deployment facts collected.</td></tr>'
         return "\n".join(
             f"<tr><td>{escape(name)}</td><td>{escape(group)}</td>"
-            f"<td>{escape(', '.join(self._identifier(node, 'Node') for node in sorted(set(nodes['started']))) or '—')}</td>"
-            f"<td>{escape(', '.join(self._identifier(node, 'Node') for node in sorted(set(nodes['stopped']))) or '—')}</td></tr>"
+            f"<td>{escape(', '.join(self._identifier(node, 'Node') for node in sorted(set(nodes['started']), key=lambda value: self._node_reference_sort_key(report, value))) or '—')}</td>"
+            f"<td>{escape(', '.join(self._identifier(node, 'Node') for node in sorted(set(nodes['stopped']), key=lambda value: self._node_reference_sort_key(report, value))) or '—')}</td></tr>"
             for (name, group), nodes in sorted(grouped.items())
         )
 
@@ -2664,7 +2801,13 @@ class HtmlReportBuilder:
                 f"<td>{escape(display_source(check.source))}</td>"
                 "</tr>"
             )
-            for check in report.facts.platform_checks
+            for check in sorted(
+                report.facts.platform_checks,
+                key=lambda item: (
+                    self._node_reference_sort_key(report, item.node),
+                    _natural_sort_key(item.check_name),
+                ),
+            )
         )
 
     def _certificate_rows(self, report: AssessmentReport) -> str:
@@ -2688,7 +2831,7 @@ class HtmlReportBuilder:
             grouped.setdefault(key, []).append(item)
         return "\n".join(
             "<tr>"
-            f"<td>{escape(', '.join(self._identifier(node, 'Node') for node in sorted({entry.node for entry in occurrences})))}</td>"
+            f"<td>{escape(', '.join(self._identifier(node, 'Node') for node in sorted({entry.node for entry in occurrences}, key=lambda value: self._node_reference_sort_key(report, value))))}</td>"
             f"<td>{escape(display_text(item.name))}</td>"
             f"<td>{escape(display_text(item.service or item.store))}</td>"
             f"<td>{escape(item.certificate_kind)}</td>"
@@ -2699,7 +2842,13 @@ class HtmlReportBuilder:
             f"<td>{escape(display_text(item.root))}</td>"
             f"<td>{escape(display_text(item.chain_status))}</td>"
             "</tr>"
-            for occurrences in grouped.values()
+            for occurrences in sorted(
+                grouped.values(),
+                key=lambda entries: (
+                    min(self._node_reference_sort_key(report, entry.node) for entry in entries),
+                    _natural_sort_key(entries[0].name),
+                ),
+            )
             for item in occurrences[:1]
         )
 
@@ -2732,7 +2881,10 @@ class HtmlReportBuilder:
 
     def _collector_issues_section(self, report: AssessmentReport) -> str:
         rows = []
-        for result in report.collector_results:
+        for result in sorted(
+            report.collector_results,
+            key=lambda item: self._collector_result_sort_key(report, item),
+        ):
             for warning in result.warnings:
                 rows.append(
                     "<tr>"
@@ -2756,18 +2908,23 @@ class HtmlReportBuilder:
         return f"""
     <section>
       <h2>Collector Issues</h2>
+      <details class="report-data"><summary>Show collector issues</summary>
       <table>
         <thead><tr><th>Collector</th><th>Type</th><th>Message</th></tr></thead>
         <tbody>
           {"".join(rows)}
         </tbody>
       </table>
+      </details>
     </section>
 """
 
     def _collector_notes_section(self, report: AssessmentReport) -> str:
         rows = []
-        for result in report.collector_results:
+        for result in sorted(
+            report.collector_results,
+            key=lambda item: self._collector_result_sort_key(report, item),
+        ):
             for note in result.notes:
                 rows.append(
                     f"<tr><td>{escape(result.collector_name)}</td><td>{escape(note)}</td></tr>"
@@ -2777,12 +2934,14 @@ class HtmlReportBuilder:
             body = "<p>No collector notes recorded.</p>"
         else:
             body = f"""
+      <details class="report-data"><summary>Show collector notes</summary>
       <table>
         <thead><tr><th>Collector</th><th>Note</th></tr></thead>
         <tbody>
           {"".join(rows)}
         </tbody>
       </table>
+      </details>
 """
 
         return f"""
@@ -2794,8 +2953,17 @@ class HtmlReportBuilder:
 
     def _collector_evidence_section(self, report: AssessmentReport) -> str:
         rows = []
-        for result in report.collector_results:
-            for evidence in result.evidence:
+        for result in sorted(
+            report.collector_results,
+            key=lambda item: self._collector_result_sort_key(report, item),
+        ):
+            for evidence in sorted(
+                result.evidence,
+                key=lambda item: (
+                    self._node_reference_sort_key(report, item.node),
+                    _natural_sort_key(item.operation),
+                ),
+            ):
                 artifact = str(evidence.artifact_path) if evidence.artifact_path else None
                 if self.customer_safe:
                     artifact = None
@@ -2815,6 +2983,7 @@ class HtmlReportBuilder:
             body = "<p>No collector evidence references recorded.</p>"
         else:
             body = f"""
+      <details class="report-data"><summary>Show collector evidence</summary>
       <table>
         <thead>
           <tr>
@@ -2826,6 +2995,7 @@ class HtmlReportBuilder:
           {"".join(rows)}
         </tbody>
       </table>
+      </details>
 """
 
         return f"""
@@ -2871,7 +3041,7 @@ class HtmlReportBuilder:
             reconciliation.registration_capable_or_unclassified, "device_pool"
         )
         non_runtime_rows = self._inventory_only_rows(reconciliation.known_non_runtime)
-        runtime_only_rows = self._runtime_only_rows(reconciliation.runtime_only)
+        runtime_only_rows = self._runtime_only_rows(report, reconciliation.runtime_only)
 
         return f"""
     <section>
@@ -2886,13 +3056,16 @@ class HtmlReportBuilder:
         </tbody>
       </table>
       <h3>Runtime-only Devices</h3>
+      <details class="report-data"><summary>Show runtime-only devices</summary>
       <table>
         <thead><tr><th>Name</th><th>Status</th><th>Registered Node</th><th>Model</th><th>Protocol</th><th>Source</th></tr></thead>
         <tbody>
           {runtime_only_rows}
         </tbody>
       </table>
+      </details>
       <h3>Inventory-only Registration-capable or Unclassified Devices</h3>
+      <details class="report-data"><summary>Show inventory-only device summaries and details</summary>
       <div class="table-scroll"><table>
         <thead><tr><th>Model</th><th>Devices</th></tr></thead>
         <tbody>{inventory_model_rows}</tbody>
@@ -2907,15 +3080,20 @@ class HtmlReportBuilder:
           {inventory_only_rows}
         </tbody>
       </table>
+      </details>
       <h3>Known Non-runtime Inventory Objects</h3>
+      <details class="report-data"><summary>Show known non-runtime inventory objects</summary>
       <table>
         <thead><tr><th>Name</th><th>Model</th><th>Protocol</th><th>Device Pool</th><th>Location</th><th>Source</th></tr></thead>
         <tbody>{non_runtime_rows}</tbody>
       </table>
+      </details>
     </section>
 """
 
-    def _runtime_only_rows(self, registrations: list[DeviceRegistrationFact]) -> str:
+    def _runtime_only_rows(
+        self, report: AssessmentReport, registrations: list[DeviceRegistrationFact]
+    ) -> str:
         if not registrations:
             return '<tr><td colspan="6">No runtime-only devices found.</td></tr>'
         return "\n".join(
@@ -2929,7 +3107,13 @@ class HtmlReportBuilder:
                 f"<td>{escape(display_source(registration.source))}</td>"
                 "</tr>"
             )
-            for registration in registrations
+            for registration in sorted(
+                registrations,
+                key=lambda item: (
+                    self._node_reference_sort_key(report, item.registered_node),
+                    _natural_sort_key(item.name),
+                ),
+            )
         )
 
     def _inventory_only_rows(self, devices: list[DeviceInventoryFact]) -> str:
@@ -3039,6 +3223,37 @@ class HtmlReportBuilder:
         """Render the collector label consistently in both report editions."""
 
         return name
+
+    def _node_reference_sort_key(
+        self, report: AssessmentReport, value: str | None
+    ) -> tuple[object, ...]:
+        """Order a node reference by technology, role, and natural node sequence."""
+
+        normalized = (value or "").strip().casefold()
+        for node in report.facts.nodes:
+            if normalized in {node.name.strip().casefold(), node.address.strip().casefold()}:
+                return _collaboration_node_sort_key(node)
+        return (_technology_sort_key(""), 2, _natural_sort_key(value or ""), ())
+
+    def _collector_result_sort_key(
+        self, report: AssessmentReport, result: object
+    ) -> tuple[object, ...]:
+        name = str(getattr(result, "collector_name", ""))
+        normalized = name.casefold()
+        if "cucm" in normalized:
+            technology = "cucm"
+        elif "cuc" in normalized or "cupi" in normalized or "unity" in normalized:
+            technology = "cuc"
+        else:
+            evidence = getattr(result, "evidence", ())
+            node_keys = [
+                self._node_reference_sort_key(report, getattr(item, "node", None))
+                for item in evidence
+                if getattr(item, "node", None)
+            ]
+            technology_rank = min(node_keys)[0] if node_keys else _technology_sort_key("")
+            return (technology_rank, _natural_sort_key(name))
+        return (_technology_sort_key(technology), _natural_sort_key(name))
 
 
 def _protocol_bucket(protocol: str | None) -> str:
