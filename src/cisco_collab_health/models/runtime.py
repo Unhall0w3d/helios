@@ -28,6 +28,9 @@ class CollectionContext:
     os_username: str | None = None
     os_password: str | None = field(default=None, repr=False)
     node_platform_passwords: dict[str, str] = field(default_factory=dict, repr=False, compare=False)
+    ssh_preflight_contexts: dict[str, "CollectionContext"] = field(
+        default_factory=dict, repr=False, compare=False
+    )
     timeout_seconds: int = 30
     accept_new_host_key: bool = False
     host_key_approval: HostKeyApproval | None = field(default=None, repr=False, compare=False)

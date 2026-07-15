@@ -18,6 +18,7 @@ from cryptography.hazmat.primitives.asymmetric import ec, padding, rsa
 
 from cisco_collab_health.collectors.base import CollectionResult
 from cisco_collab_health.collectors.ssh_preflight import preflight_ssh_nodes
+from cisco_collab_health.config import normalize_node_address
 from cisco_collab_health.models.evidence import EvidenceRef
 from cisco_collab_health.models.facts import (
     AssessmentFacts,
@@ -316,6 +317,13 @@ class DiagnosticCaptureCollector:
                 context, nodes, UcosSshSession
             )
             warnings.extend(ssh_warnings)
+            context.ssh_preflight_contexts.update(
+                {
+                    normalize_node_address(item.publisher_ip or item.target or ""): item
+                    for item in certificate_contexts
+                    if item.publisher_ip or item.target
+                }
+            )
         self._capture_certificates(certificate_contexts, facts, evidence, warnings)
         self._capture_wsdls(context, nodes, evidence, warnings)
 

@@ -391,7 +391,7 @@ class HtmlReportBuilder:
         )
         static_load_rows = self._static_load_summary_rows(report)
         firmware_correlation_rows = self._firmware_correlation_rows(report)
-        coverage_section = self._coverage_section(report)
+        coverage_section = "" if self.customer_safe else self._coverage_section(report)
         registration_rows = self._registration_rows(report)
         registration_summary_rows = self._registration_summary_rows(report)
         endpoint_runtime_coverage_section = self._endpoint_runtime_coverage_section(report)
@@ -435,6 +435,20 @@ class HtmlReportBuilder:
         service_deployment_rows = self._service_deployment_rows(report)
         configuration_rows = self._configuration_rows(report)
         platform_check_rows = self._platform_check_rows(report)
+        platform_checks_section = "" if self.customer_safe else f"""
+    <section>
+      <h2>Platform Checks</h2>
+      {_source_caption("Platform Checks", report)}
+      <details class="report-data"><summary>Show platform checks</summary>
+      <table>
+        <thead><tr><th>Node</th><th>Check</th><th>Status</th><th>Details</th><th>Source</th></tr></thead>
+        <tbody>
+          {platform_check_rows}
+        </tbody>
+      </table>
+      </details>
+    </section>
+"""
         certificate_rows = self._certificate_rows(report)
         collector_issues_section = self._collector_issues_section(report)
         collector_notes_section = self._collector_notes_section(report)
@@ -1133,23 +1147,12 @@ class HtmlReportBuilder:
       </table></div>
       </details>
     </section>
-    <section>
-      <h2>Platform Checks</h2>
-      {_source_caption("Platform Checks", report)}
-      <details class="report-data"><summary>Show platform checks</summary>
-      <table>
-        <thead><tr><th>Node</th><th>Check</th><th>Status</th><th>Details</th><th>Source</th></tr></thead>
-        <tbody>
-          {platform_check_rows}
-        </tbody>
-      </table>
-      </details>
-    </section>
-    {evidence_chapter}
-    {collector_issues_section}
-    {collector_notes_section}
-    {collector_evidence_section}
-    {reconciliation_section}
+    {platform_checks_section}
+    {"" if self.customer_safe else evidence_chapter}
+    {"" if self.customer_safe else collector_issues_section}
+    {"" if self.customer_safe else collector_notes_section}
+    {"" if self.customer_safe else collector_evidence_section}
+    {"" if self.customer_safe else reconciliation_section}
     <section>
       <h2>Detailed Device Inventory</h2>
       {_source_caption("Detailed Device Inventory", report)}
@@ -1785,6 +1788,14 @@ class HtmlReportBuilder:
         return sorted(unique, key=_technology_sort_key)
 
     def _methodology_scope_section(self, report: AssessmentReport) -> str:
+        if self.customer_safe:
+            return """
+    <section>
+      <h2>Assessment Scope</h2>
+      <p>This is a point-in-time, read-only health assessment. It identifies conditions that
+      warrant review; no configuration changes were made by the assessment.</p>
+    </section>
+"""
         collector_names = ", ".join(
             self._collector_label(result.collector_name)
             for result in sorted(
@@ -3258,7 +3269,15 @@ class HtmlReportBuilder:
 
     def _finding_section(self, finding: HealthFinding) -> str:
         severity = escape(finding.severity.value)
-        facts = "\n".join(f"<li>{escape(fact)}</li>" for fact in finding.facts)
+        finding_facts = finding.facts
+        if self.customer_safe and finding.rule_id.startswith("security.certificate_validity"):
+            maximum = 3
+            if len(finding_facts) > maximum:
+                finding_facts = [
+                    *finding_facts[:maximum],
+                    f"{len(finding_facts) - maximum} additional certificate entries are listed in the certificate details section.",
+                ]
+        facts = "\n".join(f"<li>{escape(fact)}</li>" for fact in finding_facts)
         recommendation = ""
         if finding.recommendation:
             escaped_recommendation = escape(finding.recommendation)

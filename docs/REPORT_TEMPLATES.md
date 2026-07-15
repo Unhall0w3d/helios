@@ -64,11 +64,12 @@ the same private bundle.
 
 Customer-safe reports use the same assessment facts as engineering reports and
 do not use synthetic data. They retain profile and target names, hostnames, IP
-addresses, device identifiers, dial-plan values, CUC/CUCM configuration,
-normalized platform details, finding facts, and technical evidence operations.
-This is intentional: the customer audience includes engineers who need concrete
-identifiers to understand and act on the assessment. Private artifact paths and
-raw evidence content remain omitted.
+addresses, device identifiers, dial-plan values, CUC/CUCM configuration, and
+actionable finding facts. This is intentional: the customer audience includes
+engineers who need concrete identifiers to understand and act on the assessment.
+Private artifact paths, raw evidence, collection coverage, command-level
+platform-check records, collector notes/issues/evidence, and the engineering
+reconciliation appendix are omitted.
 
 Engineering reports expose bounded CUC inventory and sanitized configuration in
 separate sections. CUCM configuration reporting includes dedicated expandable

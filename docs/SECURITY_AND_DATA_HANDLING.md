@@ -12,9 +12,11 @@ defense in depth, not a guarantee that arbitrary customer data is safe to share;
 Customer-safe HTML is a customer-deliverable report, not an anonymized public
 report. It intentionally retains profile and target names, hostnames, IP
 addresses, device identifiers, dial-plan values, configuration names and
-settings, finding facts, and normalized evidence operations. This allows the
-customer's engineers to understand and act on the assessment. It omits private
-artifact paths and raw evidence content. Review the rendered HTML before sharing.
+settings, and finding facts. This allows the customer's engineers to understand
+and act on the assessment. It omits private artifact paths, raw evidence,
+collection coverage, command-level platform-check records, collector
+notes/issues/evidence, and the engineering reconciliation appendix. Review the
+rendered HTML before sharing.
 
 CUC detailed CUPI normalization uses per-resource field allowlists and excludes
 mailbox/user identities, email addresses, credentials, and message content.

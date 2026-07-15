@@ -12,6 +12,7 @@ from cisco_collab_health.collectors.ssh_preflight import (
     collect_preflighted_nodes,
     preflight_ssh_nodes,
 )
+from cisco_collab_health.config import normalize_node_address
 from cisco_collab_health.models.facts import AssessmentFacts, PlatformCheckFact
 from cisco_collab_health.models.runtime import CollectionContext
 from cisco_collab_health.transport.ssh import SshCommandResult, SshCommandTimeout, UcosSshSession
@@ -55,9 +56,29 @@ class CucmPlatformCollector:
         facts = AssessmentFacts()
         warnings: list[str] = []
         nodes = tuple(dict.fromkeys(context.discovered_nodes or (context.publisher_ip or context.target,)))
-        ready, preflight_warnings = preflight_ssh_nodes(
-            context, (node for node in nodes if node), self.session_factory
-        )
+        requested_nodes = tuple(node for node in nodes if node)
+        ready = [
+            context.ssh_preflight_contexts[normalize_node_address(node)]
+            for node in requested_nodes
+            if normalize_node_address(node) in context.ssh_preflight_contexts
+        ]
+        missing_nodes = [
+            node for node in requested_nodes
+            if normalize_node_address(node) not in context.ssh_preflight_contexts
+        ]
+        preflight_warnings: list[str] = []
+        if missing_nodes:
+            newly_ready, preflight_warnings = preflight_ssh_nodes(
+                context, missing_nodes, self.session_factory
+            )
+            ready.extend(newly_ready)
+            context.ssh_preflight_contexts.update(
+                {
+                    normalize_node_address(item.publisher_ip or item.target or ""): item
+                    for item in newly_ready
+                    if item.publisher_ip or item.target
+                }
+            )
         warnings.extend(preflight_warnings)
         for node_facts, node_warnings in collect_preflighted_nodes(
             ready, context.ssh_parallel_workers, self._collect_node

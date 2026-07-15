@@ -430,7 +430,7 @@ Use `--insecure` to explicitly keep certificate verification disabled.
 
 To generate an HTML report intended for controlled sharing with the assessed
 customer, retain operational identifiers and configuration while omitting private
-artifact paths:
+artifact paths and engineering-only collection mechanics:
 
 ```bash
 ./aletheiauc.py --customer-safe-report
@@ -446,8 +446,10 @@ customer deliverable, ComSource, and future templates. Themes retain their own
 colors, typography, imagery, and logo rules while sharing functional metric
 cards, chapter structure, responsive containment, findings, and evidence
 presentation. The customer edition retains target names, hostnames, IP
-addresses, devices, dial-plan values, and configuration so customer engineers
-can interpret the assessment.
+addresses, devices, dial-plan values, configuration, and actionable finding
+facts so customer engineers can interpret the assessment. It omits collection
+coverage, command-level platform-check records, collector notes/issues/evidence,
+and the engineering reconciliation appendix.
 
 The CLI discovers other registered templates only when their complete local
 asset pack is present, so a clean clone remains fully functional. Template

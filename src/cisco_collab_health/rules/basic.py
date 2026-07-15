@@ -24,17 +24,23 @@ class ClusterIdentityRule:
     rule_id = "core.cluster_identity"
 
     def evaluate(self, facts: AssessmentFacts) -> list[HealthFinding]:
-        if facts.cluster is not None:
+        clusters = [*facts.clusters]
+        if facts.cluster is not None and facts.cluster not in clusters:
+            clusters.append(facts.cluster)
+        if clusters:
             return [
                 HealthFinding(
                     rule_id=self.rule_id,
-                    title="Cluster identity collected",
+                    title=(
+                        "Cluster identity collected"
+                        if len(clusters) == 1
+                        else "Cluster identities collected"
+                    ),
                     severity=FindingSeverity.INFO,
                     recommendation_kind=RecommendationKind.INFORMATIONAL,
                     facts=[
-                        f"Product: {facts.cluster.product}",
-                        f"Version: {facts.cluster.version}",
-                        f"Cluster anchor: {facts.cluster.name}",
+                        f"{cluster.product}: version {cluster.version}; cluster anchor {cluster.name}"
+                        for cluster in clusters
                     ],
                     reasoning="The assessment has enough identity data to anchor later findings.",
                     evidence=[
@@ -1328,15 +1334,19 @@ class ConfigurationInventorySummaryRule:
     rule_id = "cucm.configuration_inventory_summary"
 
     def evaluate(self, facts: AssessmentFacts) -> list[HealthFinding]:
-        if not facts.configuration_objects:
+        cucm_objects = [
+            item for item in facts.configuration_objects
+            if item.source.strip().upper().startswith("AXL")
+        ]
+        if not cucm_objects:
             return []
-        counts = Counter(item.object_type for item in facts.configuration_objects)
+        counts = Counter(item.object_type for item in cucm_objects)
         return [
             _info_finding(
                 rule_id=self.rule_id,
                 title="Configuration inventory data collected",
                 facts=[
-                    f"Configuration objects: {len(facts.configuration_objects)}",
+                    f"CUCM configuration objects: {len(cucm_objects)}",
                     *[f"{object_type}: {count}" for object_type, count in sorted(counts.items())],
                 ],
                 operation="configuration_inventory_summary",

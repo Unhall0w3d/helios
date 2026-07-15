@@ -336,7 +336,7 @@ class ReportBuilderTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "Unknown HTML report template"):
                     HtmlReportBuilder(template="privatebrand")
 
-    def test_customer_deliverable_retains_scope_identifiers_and_evidence_operations(self) -> None:
+    def test_customer_deliverable_retains_scope_identifiers_without_evidence_detail(self) -> None:
         report = AssessmentReport(
             facts=AssessmentFacts(
                 nodes=[
@@ -365,7 +365,10 @@ class ReportBuilderTests(unittest.TestCase):
         self.assertIn("Yorktown-Call-Control", payload)
         self.assertIn("cuc-pub", payload)
         self.assertIn("cucm-pub", payload)
-        self.assertIn("Collector Evidence", payload)
+        self.assertNotIn("Collector Evidence", payload)
+        self.assertNotIn("Collector Notes", payload)
+        self.assertNotIn("Collection Coverage", payload)
+        self.assertNotIn("Platform Checks", payload)
         self.assertIn("CUCM configuration discovery; Unity Connection cluster status", payload)
 
     def test_target_scope_uses_discovered_publisher_when_address_is_unavailable(self) -> None:
@@ -542,17 +545,18 @@ class ReportBuilderTests(unittest.TestCase):
                     self.report
                 )
 
-                for summary in (
+                summaries = [
                     "Show device inventory by model",
                     "Show device load defaults and overrides",
                     "Show active firmware by model",
                     "Show performance summary",
                     "Show configuration inventory summary",
                     "Show certificates requiring attention",
-                    "Show platform checks",
-                    "Show collector evidence",
                     "Show configured endpoints without a runtime observation",
-                ):
+                ]
+                if not customer_safe:
+                    summaries.extend(("Show platform checks", "Show collector evidence"))
+                for summary in summaries:
                     self.assertIn(
                         f'<details class="report-data"><summary>{summary}</summary>', html
                     )
@@ -1108,14 +1112,10 @@ class ReportBuilderTests(unittest.TestCase):
             self.assertNotIn("Infrastructure and Inventory", customer)
             self.assertNotIn("04 / INFRASTRUCTURE", customer)
             self.assertIn("04 / ANALYSIS", customer)
-            self.assertIn("05 / EVIDENCE", customer)
+            self.assertNotIn("05 / EVIDENCE", customer)
             self.assertNotIn("Unity Connection Inventory", customer)
             self.assertNotIn("Unity Connection Configuration", customer)
             self.assertIn("Unity Connection Platform Health", customer)
-            self.assertLess(
-                customer.index("Collection Coverage"),
-                customer.index("Unity Connection Platform Health"),
-            )
             self.assertLess(
                 customer.index("Unity Connection Platform Health"),
                 customer.index("<h2>Cluster</h2>"),
@@ -1190,12 +1190,6 @@ class ReportBuilderTests(unittest.TestCase):
         )
 
         payload = HtmlReportBuilder(customer_safe=True).build(report)
-        reconciliation = payload[
-            payload.index("<h2>Inventory / Runtime Reconciliation</h2>") : payload.index(
-                "<h2>Detailed Device Inventory</h2>"
-            )
-        ]
-
         self.assertIn("Configured Endpoint Runtime Coverage", payload)
         self.assertIn("Hub_None", payload)
         self.assertIn("did not cause the missing runtime observations", payload)
@@ -1204,9 +1198,7 @@ class ReportBuilderTests(unittest.TestCase):
         self.assertIn("Annunciators", payload)
         self.assertIn("TRUNK-1", payload)
         self.assertIn("ANN-PUB", payload)
-        self.assertNotIn("TRUNK-1", reconciliation)
-        self.assertNotIn("ANN-PUB", reconciliation)
-        self.assertIn("UNMATCHED-PHONE", reconciliation)
+        self.assertNotIn("Inventory / Runtime Reconciliation", payload)
         self.assertNotIn("Inventory-only Registration-capable or Unclassified Devices", payload)
 
     def test_axl_skipped_phone_inventory_note_marks_devices_skipped(self) -> None:
@@ -1412,10 +1404,10 @@ class ReportBuilderTests(unittest.TestCase):
         payload = HtmlReportBuilder(customer_safe=True).build(report)
 
         self.assertIn("SEP001122334455", payload)
-        self.assertIn("PrivateCustomer", payload)
-        self.assertIn("private-publisher.example", payload)
+        self.assertNotIn("PrivateCustomer", payload)
+        self.assertNotIn("private-publisher.example", payload)
         self.assertNotIn("private/artifact/response.txt", payload)
-        self.assertIn("Customer-safe HTML</th><td>Enabled", payload)
+        self.assertIn("This is a point-in-time, read-only health assessment", payload)
 
     def test_html_report_contains_collector_notes_and_evidence(self) -> None:
         report = AssessmentReport(
