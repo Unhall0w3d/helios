@@ -23,6 +23,8 @@ from cisco_collab_health.collectors.base import Collector, TargetPipelineCollect
 from cisco_collab_health.config import (
     AssessmentTarget,
     RuntimeProfile,
+    load_node_platform_passwords,
+    save_node_platform_passwords,
 )
 from cisco_collab_health.engine import AssessmentEngine
 from cisco_collab_health.interfaces import PreflightResult, run_publisher_preflight
@@ -138,6 +140,9 @@ def run_assessment(
             gui_password=runtime_profile.gui_password,
             os_username=runtime_profile.stored.os_username,
             os_password=runtime_profile.os_password,
+            node_platform_passwords=load_node_platform_passwords(
+                runtime_profile.stored.name, runtime_profile.technology
+            ),
             axl_port=args.axl_port,
             risport_port=args.risport_port,
             control_center_port=args.control_center_port,
@@ -222,6 +227,14 @@ def run_assessment(
         rules=_assessment_rules((args.product,)),
     )
     report = engine.run(context)
+    if runtime_profile is not None and not args.no_save_credentials:
+        node_password_warning = save_node_platform_passwords(
+            runtime_profile.stored.name,
+            runtime_profile.technology,
+            context.node_platform_passwords,
+        )
+        if node_password_warning:
+            status.warn(node_password_warning)
     report = replace(
         report,
         runtime_metadata={
@@ -348,6 +361,7 @@ def run_multi_assessment(
         return 1
     pipelines: list[Collector] = []
     target_metadata = []
+    node_password_maps: list[tuple[RuntimeProfile, dict[str, str]]] = []
     for target, runtime in targets:
         status.stage(f"Preparing {target.target_id} ({target.technology})")
         context = CollectionContext(
@@ -360,6 +374,9 @@ def run_multi_assessment(
             gui_password=runtime.gui_password,
             os_username=runtime.stored.os_username,
             os_password=runtime.os_password,
+            node_platform_passwords=load_node_platform_passwords(
+                runtime.stored.name, runtime.technology
+            ),
             axl_port=args.axl_port,
             risport_port=args.risport_port,
             control_center_port=args.control_center_port,
@@ -409,6 +426,7 @@ def run_multi_assessment(
                 target_context=context,
             )
         )
+        node_password_maps.append((runtime, context.node_platform_passwords))
         target_metadata.append(
             {
                 "target_id": target.target_id,
@@ -434,6 +452,13 @@ def run_multi_assessment(
         rules=_assessment_rules(target.technology for target, _ in targets),
     )
     report = engine.run(CollectionContext(product="multi", artifact_store=artifact_store))
+    if not args.no_save_credentials:
+        for runtime, passwords in node_password_maps:
+            node_password_warning = save_node_platform_passwords(
+                runtime.stored.name, runtime.technology, passwords
+            )
+            if node_password_warning:
+                status.warn(node_password_warning)
     report = replace(
         report,
         runtime_metadata={

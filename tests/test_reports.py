@@ -804,11 +804,11 @@ class ReportBuilderTests(unittest.TestCase):
             payload,
         )
         self.assertIn(
-            "<tr><td>Gateways/endpoints</td><td>0</td><td>0</td><td>0</td><td>0</td></tr>",
+            "<tr><td>Gateways/endpoints</td><td>1</td><td>0</td><td>0</td><td>1</td></tr>",
             payload,
         )
         self.assertIn(
-            "<tr><td>SIP trunks</td><td>0</td><td>0</td><td>0</td><td>0</td></tr>",
+            "<tr><td>SIP trunks</td><td>0</td><td>1</td><td>0</td><td>1</td></tr>",
             payload,
         )
         self.assertIn(

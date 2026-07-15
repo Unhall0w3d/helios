@@ -85,6 +85,10 @@ class SshPreflightTests(unittest.TestCase):
         self.assertFalse(warnings)
         self.assertEqual(ready[0].os_password, "subscriber-password")
         self.assertIsNone(ready[0].ssh_password_retry)
+        self.assertEqual(
+            ready[0].node_platform_passwords,
+            {"192.0.2.11": "subscriber-password"},
+        )
 
     def test_collection_is_bounded_and_preserves_node_order(self) -> None:
         contexts = [CollectionContext(publisher_ip=f"192.0.2.{item}") for item in range(10, 13)]

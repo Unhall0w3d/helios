@@ -577,13 +577,81 @@ def profile_secret_key(profile_name: str) -> str:
     return credential_key(profile_name, "profile")
 
 
+def node_platform_password_key(profile_name: str, technology: str) -> str:
+    """Return the keyring username for node-specific platform credentials."""
+
+    return credential_key(profile_name, f"{technology}:node_platform_passwords")
+
+
+def normalize_node_address(node: str) -> str:
+    """Normalize a server address used as a per-node credential key."""
+
+    return node.strip().rstrip(".").casefold()
+
+
+def load_node_platform_passwords(
+    profile_name: str, technology: str, store: CredentialStore | None = None
+) -> dict[str, str]:
+    """Load encrypted per-node platform passwords for the active technology profile."""
+
+    credential_store = store if store is not None else load_keyring()
+    if credential_store is None:
+        return {}
+    try:
+        payload = credential_store.get_password(
+            KEYRING_SERVICE, node_platform_password_key(profile_name, technology)
+        )
+        parsed = json.loads(payload) if payload else {}
+    except Exception:
+        return {}
+    if not isinstance(parsed, dict):
+        return {}
+    return {
+        normalize_node_address(str(node)): str(password)
+        for node, password in parsed.items()
+        if isinstance(node, str) and isinstance(password, str) and password
+    }
+
+
+def save_node_platform_passwords(
+    profile_name: str,
+    technology: str,
+    passwords: dict[str, str],
+    store: CredentialStore | None = None,
+) -> str | None:
+    """Persist verified node-specific platform passwords in the OS credential store."""
+
+    credential_store = store if store is not None else load_keyring()
+    if credential_store is None:
+        return "Python keyring is unavailable; node-specific platform passwords were not saved."
+    payload = {
+        normalize_node_address(node): password
+        for node, password in passwords.items()
+        if password
+    }
+    try:
+        credential_store.set_password(
+            KEYRING_SERVICE,
+            node_platform_password_key(profile_name, technology),
+            json.dumps(payload, sort_keys=True),
+        )
+    except Exception as exc:
+        return f"Unable to save node-specific platform passwords: {exc}"
+    return None
+
+
 def delete_profile_credentials(profile_name: str, store: CredentialStore | None) -> None:
     """Best-effort deletion of stored profile credentials."""
 
     if store is None:
         return
 
-    for credential_name in ("profile", "gui_password", "os_password"):
+    credential_names = ["profile", "gui_password", "os_password"]
+    credential_names.extend(
+        f"{technology}:node_platform_passwords"
+        for technology in SUPPORTED_TECHNOLOGIES
+    )
+    for credential_name in credential_names:
         try:
             store.delete_password(KEYRING_SERVICE, credential_key(profile_name, credential_name))
         except Exception:

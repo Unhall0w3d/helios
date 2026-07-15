@@ -253,7 +253,7 @@ rows: 1""",
             ) -> SshCommandResult:
                 if command == "utils diagnose test":
                     self.commands.append(command)
-                    if timeout_seconds != 180:
+                    if timeout_seconds != 300:
                         raise AssertionError("long-running timeout was not applied")
                     raise SshCommandTimeout("diagnostic output in progress", False)
                 return super().execute(command, timeout_seconds=timeout_seconds)
@@ -272,7 +272,7 @@ rows: 1""",
             )
             self.assertEqual(check.status, "incomplete")
             self.assertEqual(check.details["output_length"], "29")
-            self.assertIn("did not return to the prompt", result.warnings[0])
+            self.assertIn("exceeded its 300-second budget", result.warnings[0])
             self.assertIn(
                 "diagnostic output in progress",
                 (

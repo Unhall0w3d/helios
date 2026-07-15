@@ -846,6 +846,33 @@ class CucmPlatformHealthRule:
     def evaluate(self, facts: AssessmentFacts) -> list[HealthFinding]:
         checks = [check for check in facts.platform_checks if check.source == "CUCM.UCOS.CLI"]
         findings: list[HealthFinding] = []
+        critical_disk = [
+            check for check in checks
+            if check.check_name == "show status"
+            and check.details.get("max_disk_usage_percent", "").isdigit()
+            and int(check.details.get("max_disk_usage_percent", "0")) >= 95
+        ]
+        warning_disk = [
+            check for check in checks
+            if check.check_name == "show status"
+            and check.details.get("max_disk_usage_percent", "").isdigit()
+            and 90 <= int(check.details.get("max_disk_usage_percent", "0")) < 95
+        ]
+        if critical_disk or warning_disk:
+            affected = critical_disk or warning_disk
+            findings.append(
+                _cucm_cli_finding(
+                    "disk_usage",
+                    FindingSeverity.CRITICAL if critical_disk else FindingSeverity.WARNING,
+                    "CUCM disk usage is critically high" if critical_disk else "CUCM disk usage needs attention",
+                    [
+                        f"{check.node}: {check.details.get('max_disk_usage_percent')}% highest collected partition usage"
+                        for check in sorted(affected, key=lambda item: item.node)
+                    ],
+                    "High disk utilization can prevent logging, database, upgrade, and core collaboration services from operating reliably.",
+                    "Have the UC administrator identify the affected partition, preserve any required evidence, and follow the Cisco-supported cleanup or capacity-expansion procedure.",
+                )
+            )
         ntp_unsynced = [
             check.node
             for check in checks

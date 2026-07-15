@@ -59,7 +59,7 @@ CUC_COMMAND_CATALOG = (
     UcosCommand("cuc.show_hardware", "show hardware", 30),
     UcosCommand("cuc.show_network_cluster", "show network cluster", 30),
     UcosCommand("cuc.show_network_eth0_detail", "show network eth0 detail", 30),
-    UcosCommand("cuc.utils_diagnose_test", "utils diagnose test", 180),
+    UcosCommand("cuc.utils_diagnose_test", "utils diagnose test", 300),
     UcosCommand("cuc.utils_service_list", "utils service list", 120),
     UcosCommand("cuc.utils_core_active_list", "utils core active list", 120),
     UcosCommand("cuc.show_cluster_status", "show cuc cluster status", 30),
@@ -229,7 +229,10 @@ class CucPlatformCollector:
                         if context.artifact_store is not None and exc.output:
                             context.artifact_store.write_command_output(node, definition.command, exc.output)
                         facts.platform_checks.append(_cuc_check(node, definition, "incomplete", exc.output, exc.paged, incomplete=True))
-                        warnings.append(f"CUC CLI '{definition.command}' on {node} did not return to the prompt; retained {len(exc.output)} characters of partial output.")
+                        warnings.append(
+                            f"CUC CLI '{definition.command}' exceeded its {definition.timeout_seconds}-second "
+                            f"budget; partial output was retained while diagnostics may still be running."
+                        )
                         _progress(context, f"CUC CLI {node}: partial output retained for '{definition.command}'")
                         continue
                     except Exception as exc:

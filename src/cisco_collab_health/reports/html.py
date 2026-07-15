@@ -1982,6 +1982,9 @@ class HtmlReportBuilder:
             for evidence in result.evidence:
                 if evidence.node and evidence.node.strip().casefold() in node_keys:
                     return "Yes (data collected)"
+        for check in report.facts.platform_checks:
+            if check.node.strip().casefold() in node_keys and check.status in {"collected", "incomplete"}:
+                return "Yes (data collected)"
         return "Not assessed directly"
 
     def _device_rows(self, report: AssessmentReport) -> str:
@@ -2122,11 +2125,7 @@ class HtmlReportBuilder:
         )
 
     def _registration_summary_rows(self, report: AssessmentReport) -> str:
-        registrations = [
-            registration
-            for registration in report.facts.registrations
-            if runtime_resource_category(registration) is None
-        ]
+        registrations = report.facts.registrations
         if not registrations:
             return '<tr><td colspan="5">No device registration facts collected.</td></tr>'
 
@@ -2136,12 +2135,20 @@ class HtmlReportBuilder:
             "SIP trunks": Counter(),
         }
         for registration in registrations:
-            category = _registration_category(
-                name=registration.name,
-                model=registration.model,
-                protocol=registration.protocol,
-            )
-            counts.setdefault(category, Counter())[
+            resource_category = runtime_resource_category(registration)
+            if resource_category == "SIP Trunks":
+                category = "SIP trunks"
+            elif resource_category in {"Gateways", "H.323 Gateways"}:
+                category = "Gateways/endpoints"
+            elif resource_category is not None:
+                continue
+            else:
+                category = _registration_category(
+                    name=registration.name,
+                    model=registration.model,
+                    protocol=registration.protocol,
+                )
+            counts[category][
                 _registration_status_bucket(registration.status)
             ] += 1
 

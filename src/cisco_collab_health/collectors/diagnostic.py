@@ -17,6 +17,7 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import ec, padding, rsa
 
 from cisco_collab_health.collectors.base import CollectionResult
+from cisco_collab_health.collectors.ssh_preflight import preflight_ssh_nodes
 from cisco_collab_health.models.evidence import EvidenceRef
 from cisco_collab_health.models.facts import (
     AssessmentFacts,
@@ -27,6 +28,7 @@ from cisco_collab_health.models.facts import (
 )
 from cisco_collab_health.models.runtime import CollectionContext
 from cisco_collab_health.transport.http import CapturedHttpClient, CapturedHttpError
+from cisco_collab_health.transport.ssh import UcosSshSession
 from cisco_collab_health.transport.soap import (
     SoapClient,
     SoapRequest,
@@ -305,8 +307,17 @@ class DiagnosticCaptureCollector:
             )
 
         nodes = tuple(dict.fromkeys(context.discovered_nodes or (context.publisher_ip,)))
+        # Resolve SSH trust and any node-specific Platform credential issues before
+        # starting node-specific HTTPS diagnostics.  This serial gate prevents
+        # competing prompts and gives later API calls the correct per-node password.
+        certificate_contexts: list[CollectionContext] = []
+        if context.os_username and context.os_password:
+            certificate_contexts, ssh_warnings = preflight_ssh_nodes(
+                context, nodes, UcosSshSession
+            )
+            warnings.extend(ssh_warnings)
+        self._capture_certificates(certificate_contexts, facts, evidence, warnings)
         self._capture_wsdls(context, nodes, evidence, warnings)
-        self._capture_certificates(context, nodes, facts, evidence, warnings)
 
         if "risport70" in self.available_interfaces:
             self._capture_risport(context, facts, evidence, warnings)
@@ -334,15 +345,15 @@ class DiagnosticCaptureCollector:
 
     def _capture_certificates(
         self,
-        context: CollectionContext,
-        nodes: tuple[str, ...],
+        contexts: list[CollectionContext],
         facts: AssessmentFacts,
         evidence: list[EvidenceRef],
         warnings: list[str],
     ) -> None:
-        if not context.os_username or not context.os_password:
-            return
-        for node in nodes:
+        for context in contexts:
+            node = context.publisher_ip or context.target
+            if not node or not context.os_username or not context.os_password:
+                continue
             endpoint = f"https://{node}/platformcom/api/v1/certmgr/config/snapshot/server"
             try:
                 response = self.http_client.get(

@@ -7,6 +7,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from typing import Protocol, TypeVar
 
+from cisco_collab_health.config import normalize_node_address
 from cisco_collab_health.models.runtime import CollectionContext
 from cisco_collab_health.transport.ssh import is_ssh_authentication_failure
 
@@ -33,7 +34,14 @@ def preflight_ssh_nodes(
     warnings: list[str] = []
     planned_nodes = tuple(dict.fromkeys(item for item in nodes if item))
     for index, node in enumerate(planned_nodes, start=1):
-        node_context = replace(context, target=node, publisher_ip=node)
+        node_context = replace(
+            context,
+            target=node,
+            publisher_ip=node,
+            os_password=context.node_platform_passwords.get(
+                normalize_node_address(node), context.os_password
+            ),
+        )
         _progress(
             context,
             f"SSH preflight {index}/{len(planned_nodes)}: {node} (trust, authenticate, open shell)",
@@ -88,6 +96,7 @@ def _retry_authentication(
     except Exception:
         _progress(context, f"SSH password retry failed: {node}")
         return None
+    context.node_platform_passwords[normalize_node_address(node)] = password
     return retry_context
 
 

@@ -205,6 +205,22 @@ class CucPlatformRulesTests(unittest.TestCase):
             [FindingSeverity.CRITICAL, FindingSeverity.CRITICAL],
         )
 
+    def test_cucm_platform_rule_flags_high_disk_usage(self) -> None:
+        findings = CucmPlatformHealthRule().evaluate(
+            AssessmentFacts(
+                platform_checks=[
+                    PlatformCheckFact(
+                        "cucm-sub", "show status", "collected",
+                        {"max_disk_usage_percent": "99"}, "CUCM.UCOS.CLI",
+                    )
+                ]
+            )
+        )
+
+        self.assertEqual(len(findings), 1)
+        self.assertEqual(findings[0].severity, FindingSeverity.CRITICAL)
+        self.assertIn("cucm-sub: 99%", findings[0].facts[0])
+
 
 class CucInformixDialPlanRuleTests(unittest.TestCase):
     def test_duplicate_extensions_and_transfer_paths_are_assessed(self) -> None:

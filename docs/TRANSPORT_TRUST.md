@@ -31,6 +31,9 @@ bounded worker count for a suitable environment.
 
 If this preflight receives an SSH authentication failure, an interactive run
 offers one node-specific Platform/CLI password retry. The replacement is used
-only for that node during the current run and is never written to the profile
-or credential store. Key, network, and shell failures do not trigger a password
-prompt.
+only for that normalized node address. When credential saving is enabled, a
+verified replacement is saved separately in the operating-system credential
+store for that profile and technology; it is never written to the profile file
+or assessment artifacts. With credential saving disabled (or no credential
+store available), it is used only for the current run. Key, network, and shell
+failures do not trigger a password prompt.
