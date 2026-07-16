@@ -34,6 +34,7 @@ class CucPlugin:
     def rules(self) -> list[HealthRule]:
         from cisco_collab_health.rules.basic import (
             CucPlatformHealthRule,
+            CucClusterRoleRule,
             CucPlatformStatusRule,
             CucInformixDialPlanRule,
             CucServicePolicyRule,
@@ -41,7 +42,7 @@ class CucPlugin:
         )
 
         return [
-            CucPlatformHealthRule(), CucPlatformStatusRule(), CucServicePolicyRule(),
+            CucPlatformHealthRule(), CucClusterRoleRule(), CucPlatformStatusRule(), CucServicePolicyRule(),
             CucSmtpSecurityRule(), CucInformixDialPlanRule(),
         ]
 

@@ -377,6 +377,7 @@ class HtmlReportBuilder:
         target_scope_section = self._target_scope_section(report)
         cuc_inventory_section = self._cuc_inventory_section(report)
         cuc_mailbox_usage_section = self._cuc_mailbox_usage_section(report)
+        cuc_cluster_role_section = self._cuc_cluster_role_section(report)
         cuc_configuration_section = self._cuc_configuration_section(report)
         cuc_platform_section = self._cuc_platform_section(report)
         cuc_informix_section = self._cuc_informix_section(report)
@@ -526,11 +527,12 @@ class HtmlReportBuilder:
             "evidence",
         )
         infrastructure_content = ""
-        analysis_cuc_platform_section = cuc_mailbox_usage_section + cuc_platform_section
+        analysis_cuc_platform_section = cuc_cluster_role_section + cuc_mailbox_usage_section + cuc_platform_section
         if not self.customer_safe:
             infrastructure_content = (
                 infrastructure_chapter
                 + cuc_inventory_section
+                + cuc_cluster_role_section
                 + cuc_mailbox_usage_section
                 + cuc_configuration_section
                 + cuc_platform_section
@@ -2833,6 +2835,29 @@ class HtmlReportBuilder:
         <thead><tr><th>Rank</th><th>User</th><th>Alias</th><th>Used size</th><th>Messages</th><th>Mounted</th></tr></thead>
         <tbody>{rows}</tbody>
       </table></div>
+    </section>
+"""
+
+    def _cuc_cluster_role_section(self, report: AssessmentReport) -> str:
+        runtime = [
+            item for item in report.facts.configuration_objects if item.object_type == "CucClusterRuntimeNode"
+        ]
+        if not runtime:
+            return ""
+        rows = "".join(
+            "<tr>"
+            f"<td>{escape(self._identifier(item.name, 'Node'))}</td>"
+            f"<td>{escape(display_text(item.details.get('server_state')))}</td>"
+            f"<td>{escape(display_text(item.details.get('internal_state')))}</td>"
+            f"<td>{escape(display_text(item.details.get('reason')))}</td></tr>"
+            for item in sorted(runtime, key=lambda item: _natural_sort_key(item.name))
+        )
+        return f"""
+    <section class="technology-section cuc-section">
+      <h2>Unity Connection Cluster Role and Replication</h2>
+      <p class="meta">Source: <code>show cuc cluster status</code>. A healthy two-node steady state has one Primary and one Secondary. A Subscriber in Primary is a valid failover state; multiple Primary roles require immediate engineering review.</p>
+      <table><thead><tr><th>Node</th><th>Server role</th><th>Internal state</th><th>Reason</th></tr></thead>
+      <tbody>{rows}</tbody></table>
     </section>
 """
 

@@ -14,6 +14,7 @@ from cisco_collab_health.collectors.cuc_platform import (
     CucInformixProbe,
     CucPlatformCollector,
     _cuc_cluster_nodes,
+    _cuc_cluster_runtime,
     _cuc_cli_summary,
     _cuc_dbquery_zero_rows,
     _parse_cuc_dbquery_rows,
@@ -105,6 +106,14 @@ class CucPlatformCollectorTests(unittest.TestCase):
             [("publisher", "10.51.200.9"), ("subscriber", "10.51.202.14")],
         )
         self.assertTrue(all(node.technology == "cuc" for node in nodes))
+
+    def test_cluster_status_normalizes_primary_secondary_roles(self) -> None:
+        runtime = _cuc_cluster_runtime(
+            "cuc-pub 0 Primary Pri Active Normal\ncuc-sub 1 Secondary Sec Active Normal"
+        )
+
+        self.assertEqual([item.details["server_state"] for item in runtime], ["Primary", "Secondary"])
+        self.assertEqual(runtime[0].details["internal_state"], "Pri Active")
 
     def test_collector_records_only_safe_commands_and_artifacts(self) -> None:
         commands: list[str] = []

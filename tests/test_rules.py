@@ -22,6 +22,7 @@ from cisco_collab_health.rules.basic import (
     CollectorHealthRule,
     CertificateValidityRule,
     CucPlatformStatusRule,
+    CucClusterRoleRule,
     CucInformixDialPlanRule,
     CucSmtpSecurityRule,
     CucmPlatformHealthRule,
@@ -166,6 +167,17 @@ class SoftwareLifecycleRuleTests(unittest.TestCase):
 
 
 class CucPlatformRulesTests(unittest.TestCase):
+    def test_cuc_cluster_role_rule_flags_multiple_primary_roles(self) -> None:
+        findings = CucClusterRoleRule().evaluate(
+            AssessmentFacts(
+                configuration_objects=[
+                    ConfigurationObjectFact("CucClusterRuntimeNode", "pub", {"server_state": "Primary"}, "CUC.UCOS.CLI"),
+                    ConfigurationObjectFact("CucClusterRuntimeNode", "sub", {"server_state": "Primary"}, "CUC.UCOS.CLI"),
+                ]
+            )
+        )
+
+        self.assertEqual(findings[0].severity, FindingSeverity.CRITICAL)
     def test_disk_and_long_uptime_findings_are_derived_from_cuc_show_status(self) -> None:
         findings = CucPlatformStatusRule().evaluate(
             AssessmentFacts(

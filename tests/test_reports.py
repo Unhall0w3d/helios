@@ -126,6 +126,15 @@ class ReportBuilderTests(unittest.TestCase):
         self.assertLess(payload.index("Largest Mailbox"), payload.index("Small Mailbox"))
         self.assertIn("3.0 MiB", payload)
 
+    def test_html_report_renders_cuc_cluster_role_section(self) -> None:
+        report = AssessmentReport(
+            facts=AssessmentFacts(configuration_objects=[
+                ConfigurationObjectFact("CucClusterRuntimeNode", "cuc-pub", {"server_state": "Primary", "internal_state": "Pri Active", "reason": "Normal"}, "CUC.UCOS.CLI")
+            ]), collector_results=[], findings=[]
+        )
+
+        self.assertIn("Unity Connection Cluster Role and Replication", HtmlReportBuilder().build(report))
+
     def setUp(self) -> None:
         self.report = AssessmentEngine(
             collectors=[SampleCollector()],

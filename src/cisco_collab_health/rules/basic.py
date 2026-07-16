@@ -12,6 +12,7 @@ from cisco_collab_health.models.facts import (
     CertificateFact,
     DeviceRegistrationFact,
     PlatformCheckFact,
+    ServiceStatusFact,
 )
 from cisco_collab_health.models.findings import (
     FindingSeverity,
@@ -1232,7 +1233,7 @@ class CucPlatformStatusRule:
 
 
 class CucServicePolicyRule:
-    """Apply conservative CUC publisher service expectations to normalized CLI facts."""
+    """Apply CUC critical-service expectations to every successfully collected active node."""
 
     rule_id = "cuc.service_policy"
     required_services = {
@@ -1242,39 +1243,48 @@ class CucServicePolicyRule:
         "Connection Conversation Manager",
         "Connection Mixer",
     }
-    singleton_services = {
+    primary_services = {
         "Connection Notifier",
         "Connection Message Transfer Agent",
-        "Connection Mailbox Sync",
     }
 
     def evaluate(self, facts: AssessmentFacts) -> list[HealthFinding]:
         services = [service for service in facts.services if service.source == "CUC.UCOS.CLI"]
         if not services:
             return []
-        by_name = {service.service_name: service for service in services}
-        failed_required = [
-            name
-            for name in self.required_services
-            if name not in by_name or by_name[name].status.strip().lower() != "started"
-        ]
-        failed_singletons = [
-            name
-            for name in self.singleton_services
-            if name in by_name
-            and by_name[name].activated is not False
-            and by_name[name].status.strip().lower() != "started"
-        ]
-        if not failed_required and not failed_singletons:
+        by_node: dict[str, dict[str, ServiceStatusFact]] = {}
+        for service in services:
+            by_node.setdefault(service.node.casefold(), {})[service.service_name.casefold()] = service
+        failures: list[str] = []
+        for node, node_services in sorted(by_node.items()):
+            for name in sorted(self.required_services):
+                node_service = node_services.get(name.casefold())
+                if node_service is None or node_service.status.strip().lower() != "started":
+                    failures.append(f"{node}: {name}")
+        primary_nodes = {
+            item.name.casefold()
+            for item in facts.configuration_objects
+            if item.object_type == "CucClusterRuntimeNode"
+            and item.details.get("server_state", "").casefold() == "primary"
+        }
+        primary_services_failed: list[str] = []
+        for node, node_services in sorted(by_node.items()):
+            if primary_nodes and not any(key in node or node in key for key in primary_nodes):
+                continue
+            for name in sorted(self.primary_services):
+                node_service = node_services.get(name.casefold())
+                if node_service is None or node_service.status.strip().lower() != "started":
+                    primary_services_failed.append(f"{node}: {name}")
+        if not failures and not primary_services_failed:
             return []
         facts_list = []
-        if failed_required:
+        if failures:
             facts_list.append(
-                "Required services not started: " + ", ".join(sorted(failed_required))
+                "Required services not started: " + ", ".join(failures)
             )
-        if failed_singletons:
+        if primary_services_failed:
             facts_list.append(
-                "Expected singleton services not started: " + ", ".join(sorted(failed_singletons))
+                "Primary-role services not started: " + ", ".join(primary_services_failed)
             )
         return [
             HealthFinding(
@@ -1284,8 +1294,8 @@ class CucServicePolicyRule:
                 recommendation_kind=RecommendationKind.ENGINEERING_RECOMMENDATION,
                 facts=facts_list,
                 reasoning=(
-                    "Core Unity Connection services should be started on the collected publisher. "
-                    "This check does not infer subscriber state from a publisher-only CLI session."
+                    "Cisco identifies these services as necessary for CUC call handling, media, "
+                    "message delivery, or notifications. Only successfully collected nodes are evaluated."
                 ),
                 recommendation=(
                     "Confirm whether the stopped service is intentional. If not, review service "
@@ -1298,6 +1308,54 @@ class CucServicePolicyRule:
                 ],
             )
         ]
+
+
+class CucClusterRoleRule:
+    """Interpret CUC Primary/Secondary roles from ``show cuc cluster status``."""
+
+    rule_id = "cuc.cluster_role"
+
+    def evaluate(self, facts: AssessmentFacts) -> list[HealthFinding]:
+        runtime = [
+            item for item in facts.configuration_objects if item.object_type == "CucClusterRuntimeNode"
+        ]
+        if not runtime:
+            return []
+        states = [item.details.get("server_state", "unknown") for item in runtime]
+        primary = [item.name for item in runtime if item.details.get("server_state") == "Primary"]
+        secondary = [item.name for item in runtime if item.details.get("server_state") == "Secondary"]
+        failed = [item.name for item in runtime if item.details.get("server_state") == "Not Functioning"]
+        if failed or len(primary) > 1 or (len(runtime) > 1 and not primary):
+            return [
+                HealthFinding(
+                    rule_id=self.rule_id,
+                    title="Unity Connection cluster role state needs immediate review",
+                    severity=FindingSeverity.CRITICAL,
+                    recommendation_kind=RecommendationKind.ENGINEERING_RECOMMENDATION,
+                    facts=[
+                        f"Primary: {', '.join(primary) or 'none'}",
+                        f"Secondary: {', '.join(secondary) or 'none'}",
+                        *([f"Not functioning: {', '.join(failed)}"] if failed else []),
+                    ],
+                    reasoning="A two-node CUC cluster should have one active Primary role; multiple Primary roles can indicate split-brain behavior.",
+                    recommendation="Review show cuc cluster status and Cluster Management before making service changes; preserve the diagnostic bundle for Cisco TAC if split-brain or node failure is present.",
+                    evidence=[EvidenceRef(source="CUC.UCOS.CLI", operation="show_cuc_cluster_status", confidence="high")],
+                )
+            ]
+        transitional = [state for state in states if state in {"Starting", "Replicating Data", "Split Brain Recovery"}]
+        if transitional:
+            return [_info_finding(
+                rule_id=self.rule_id,
+                title="Unity Connection cluster is in a transitional role state",
+                facts=[f"Observed states: {', '.join(states)}"],
+                operation="show_cuc_cluster_status",
+            )]
+        return [_info_finding(
+            rule_id=self.rule_id,
+            title="Unity Connection cluster roles are coherent",
+            facts=[f"Primary: {', '.join(primary)}", f"Secondary: {', '.join(secondary) or 'not applicable'}"],
+            operation="show_cuc_cluster_status",
+        )]
 
 
 def _cuc_finding(

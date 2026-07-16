@@ -245,6 +245,8 @@ class CucPlatformCollector:
                         version = version_summary(result.output, active=True)["active_version"]
                     if definition.command == "utils service list":
                         facts.services.extend(_cuc_service_status(node, result.output))
+                    if definition.command == "show cuc cluster status":
+                        facts.configuration_objects.extend(_cuc_cluster_runtime(result.output))
                     facts.platform_checks.append(_cuc_check(node, definition, "collected", result.output, result.paged))
                     _progress(context, f"CUC CLI {node}: completed '{definition.command}'")
         except Exception as exc:
@@ -545,3 +547,30 @@ def _cuc_cluster_nodes(output: str, *, target_id: str | None) -> list[Collaborat
             )
         )
     return nodes
+
+
+def _cuc_cluster_runtime(output: str) -> list[ConfigurationObjectFact]:
+    """Normalize the role rows from ``show cuc cluster status`` without guessing state."""
+
+    records: list[ConfigurationObjectFact] = []
+    pattern = re.compile(
+        r"(?im)^(?P<node>\S+)\s+\d+\s+"
+        r"(?P<state>Primary|Secondary|Deactivated|Not Functioning|Starting|Replicating Data|Split Brain Recovery)\s+"
+        r"(?P<remainder>.+)$"
+    )
+    for match in pattern.finditer(output):
+        remainder = match.group("remainder").strip()
+        internal_state, _, reason = remainder.rpartition(" ")
+        records.append(
+            ConfigurationObjectFact(
+                object_type="CucClusterRuntimeNode",
+                name=match.group("node"),
+                details={
+                    "server_state": match.group("state"),
+                    "internal_state": internal_state or "unknown",
+                    "reason": reason or "unknown",
+                },
+                source="CUC.UCOS.CLI/show cuc cluster status",
+            )
+        )
+    return records
