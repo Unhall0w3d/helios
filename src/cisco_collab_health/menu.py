@@ -125,9 +125,12 @@ def _manage_assessment_profiles(status: StatusPrinter) -> None:
     while True:
         assessments = load_assessment_profiles()
         print("\nAssessment Profiles\n===================")
-        for index, name in enumerate(sorted(assessments), start=1):
-            print(f"{index}. {name} ({len(assessments[name].targets)} clusters)")
-        print("C. Create from connection profiles\nR. Return")
+        if assessments:
+            for index, name in enumerate(sorted(assessments), start=1):
+                print(f"{index}. {name} ({len(assessments[name].targets)} clusters)")
+        else:
+            print("No saved assessment profiles.")
+        print("C. Create assessment profile from connection profiles\nR. Return")
         choice = input("Selection: ").strip()
         if choice.lower() == "r":
             return
@@ -147,9 +150,7 @@ def _manage_assessment_profiles(status: StatusPrinter) -> None:
         name = names[int(choice) - 1]
         assessment = assessments[name]
         _show_assessment_set(assessment)
-        action = input("V=View, E=Edit clusters, D=Delete, B=Back: ").strip().lower()
-        if action == "v":
-            continue
+        action = input("E=Edit clusters, D=Delete, B=Back: ").strip().lower()
         if action == "e":
             targets = _select_assessment_targets(status)
             if targets is not None:
@@ -292,17 +293,17 @@ def _prompt_assessment_name(
     assessments: dict[str, AssessmentProfile], status: StatusPrinter
 ) -> str:
     while True:
-        name = input("Assessment set name: ").strip()
+        name = input("Assessment profile name: ").strip()
         if not name:
-            status.warn("Assessment set name cannot be empty")
+            status.warn("Assessment profile name cannot be empty")
         elif name in assessments:
-            status.warn("Assessment set name already exists")
+            status.warn("Assessment profile name already exists")
         else:
             return name
 
 
 def _show_assessment_set(assessment: AssessmentProfile) -> None:
-    print(f"\nAssessment: {assessment.name}")
+    print(f"\nAssessment profile: {assessment.name}")
     for target in assessment.targets:
         print(f"  - {target.technology.upper()} {target.connection_profile}")
 
@@ -313,9 +314,12 @@ def _manage_profiles(status: StatusPrinter) -> None:
     while True:
         names = load_profile_names()
         print("\nConnection Profiles\n===================")
-        for index, name in enumerate(names, start=1):
-            print(f"{index}. {name}")
-        print("C. Create profile\nR. Return")
+        if names:
+            for index, name in enumerate(names, start=1):
+                print(f"{index}. {name} — {_connection_profile_summary(name)}")
+        else:
+            print("No saved connection profiles.")
+        print("C. Create connection profile\nR. Return")
         choice = input("Selection: ").strip().lower()
         if choice == "r":
             return None
@@ -354,7 +358,7 @@ def _manage_profile_management(status: StatusPrinter) -> None:
 
     while True:
         print("\nProfile Management\n==================")
-        print("1. Connection profiles by technology")
+        print("1. Connection profiles by technology (CUCM, CUC, CER, IM&P)")
         print("2. Assessment profiles (multi-technology)")
         print("R. Return")
         choice = input("Selection: ").strip().lower()
@@ -366,6 +370,18 @@ def _manage_profile_management(status: StatusPrinter) -> None:
             return
         else:
             status.warn("Invalid selection")
+
+
+def _connection_profile_summary(profile_name: str) -> str:
+    """Render saved technologies and addresses without exposing credentials."""
+
+    details = load_connection_profile_details(profile_name)
+    if not details:
+        return "connection details unavailable"
+    return "; ".join(
+        f"{technology.upper()} {profile.publisher_ip}"
+        for technology, profile in sorted(details.items())
+    )
 
 
 def _create_connection_profile(existing: list[str], status: StatusPrinter) -> None:

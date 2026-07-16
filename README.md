@@ -603,6 +603,8 @@ Running `./aletheiauc.py` with no arguments opens the assessment workflow. It ca
 - Create, view, edit cluster membership for, or delete saved assessment profiles
 - Create a connection profile and prompt once for its address, GUI/API
   credentials, and Platform/SSH credentials
+- Show each saved connection profile with its technology and Publisher address;
+  one connection-profile name can hold separate details for multiple technologies
 - Keep report, collection, network/TLS, and diagnostic settings in the menu session
   until changed or the program exits
 - Run a **standard assessment** for the two HTML reports only, or a **diagnostic

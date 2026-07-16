@@ -145,6 +145,18 @@ class CliTests(unittest.TestCase):
         self.assertTrue(run_args.no_artifacts)
         self.assertTrue(run_args.include_customer_safe_report)
 
+    def test_connection_profile_summary_shows_only_technology_and_address(self) -> None:
+        profiles = {
+            "cucm": type("Profile", (), {"publisher_ip": "192.0.2.10"})(),
+            "cuc": type("Profile", (), {"publisher_ip": "192.0.2.20"})(),
+        }
+        with patch(
+            "cisco_collab_health.menu.load_connection_profile_details", return_value=profiles
+        ):
+            summary = menu._connection_profile_summary("District")
+
+        self.assertEqual(summary, "CUC 192.0.2.20; CUCM 192.0.2.10")
+
     def test_keyboard_interrupt_returns_130(self) -> None:
         with patch(
             "cisco_collab_health.application.AssessmentEngine.run",
