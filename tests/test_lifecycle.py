@@ -25,6 +25,22 @@ class LifecycleCatalogTests(unittest.TestCase):
                 assert record is not None
                 self.assertEqual(record.release, "10")
 
+    def test_cisco_long_and_short_version_forms_resolve_consistently(self) -> None:
+        examples = (
+            ("cuc", "11.5.1.18900-2", "11.5"),
+            ("cuc", "v11.5SU8", "11.5"),
+            ("cer", "12.5(1)SU4", "12.5"),
+            ("imp", "v12.5SU6", "12.5"),
+            ("cucm", "14.0.1.10000-20", "14"),
+            ("cucm", "v14SU2", "14"),
+        )
+        for technology, version, release in examples:
+            with self.subTest(technology=technology, version=version):
+                record = lifecycle_for(technology, version)
+                self.assertIsNotNone(record)
+                assert record is not None
+                self.assertEqual(record.release, release)
+
     def test_unverified_release_is_not_inferred(self) -> None:
         self.assertIsNone(lifecycle_for("cucm", "15.0.1.12900-43"))
 

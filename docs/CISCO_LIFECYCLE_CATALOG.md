@@ -1,6 +1,8 @@
 # Cisco UC lifecycle catalog
 
-The report evaluates lifecycle only when its collected product and version exactly match a record in the curated catalog at `src/cisco_collab_health/lifecycle.py`. This prevents an unknown release from being presented as either supported or unsupported.
+The report evaluates lifecycle only when its collected product and resolved Cisco release match a record in the curated catalog at `src/cisco_collab_health/lifecycle.py`. This prevents an unknown release from being presented as either supported or unsupported.
+
+The resolver accepts Cisco's full build text and common shorthand forms—for example, `10.5.2.12901-1`, `v10SU3`, `12.5(1)SU4`, and `v14SU2`. It maps the collected major/minor release to the matching lifecycle notice; the update/SU/build portion does not change a major-release lifecycle notice unless Cisco publishes a more-specific catalog record.
 
 Catalog reviewed: 2026-07-16. Dates are Cisco's published end-of-sale, end-of-software-maintenance, and last-date-of-support milestones. They are planning inputs, not a substitute for validating entitlement, deployment model, or a supported upgrade path with Cisco.
 
