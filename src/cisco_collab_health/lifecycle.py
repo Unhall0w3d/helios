@@ -56,7 +56,11 @@ _BY_KEY = {(item.technology, item.release): item for item in _RECORDS}
 def lifecycle_for(technology: str, version: str) -> LifecycleRecord | None:
     """Return an exact catalog match; unknown versions are intentionally not inferred."""
 
-    match = re.match(r"\s*(\d+)(?:\.(\d+))?", version)
+    # Cisco version text can be a full build (``10.5.2.12901-1``) or a
+    # maintenance label (``v10SU3``).  Major-version notices intentionally
+    # apply to every 10.x maintenance release unless a more-specific catalog
+    # record exists.
+    match = re.match(r"\s*v?(\d+)(?:\.(\d+))?", version, flags=re.IGNORECASE)
     if not match:
         return None
     major, minor = match.groups()

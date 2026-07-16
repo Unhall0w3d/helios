@@ -17,6 +17,14 @@ class LifecycleCatalogTests(unittest.TestCase):
         self.assertEqual(record.release, "12.5")
         self.assertEqual(record.last_support, date(2025, 8, 31))
 
+    def test_10x_maintenance_releases_use_the_major_version_notice(self) -> None:
+        for version in ("10.5.2.12901-1", "v10SU3", "10SU6"):
+            with self.subTest(version=version):
+                record = lifecycle_for("cucm", version)
+                self.assertIsNotNone(record)
+                assert record is not None
+                self.assertEqual(record.release, "10")
+
     def test_unverified_release_is_not_inferred(self) -> None:
         self.assertIsNone(lifecycle_for("cucm", "15.0.1.12900-43"))
 
