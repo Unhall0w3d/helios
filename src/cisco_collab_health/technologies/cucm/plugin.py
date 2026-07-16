@@ -40,6 +40,7 @@ class CucmPlugin:
         from cisco_collab_health.rules.basic import (
             CertificateValidityRule,
             CucmPlatformHealthRule,
+            CucmServicePolicyRule,
             CucmTopologyCompletenessRule,
             ConfigurationInventorySummaryRule,
             DeviceInventorySummaryRule,
@@ -54,6 +55,7 @@ class CucmPlugin:
 
         return [
             CucmPlatformHealthRule(),
+            CucmServicePolicyRule(),
             CertificateValidityRule(),
             DeviceLoadRule(),
             DeviceInventorySummaryRule(),

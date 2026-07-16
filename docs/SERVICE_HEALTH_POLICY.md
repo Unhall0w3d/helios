@@ -12,6 +12,6 @@ Cisco references: [CUC services](https://www.cisco.com/c/en/us/td/docs/voice_ip_
 
 ## CUCM
 
-CUCM service activation depends on Publisher, call-processing Subscriber, dedicated TFTP, and enabled-feature roles. AletheiaUC therefore treats generic stopped-service evidence conservatively today; the next policy slice will add collected-node placement posture, including cluster TFTP availability, without declaring unconfigured optional services unhealthy.
+CUCM service activation depends on Publisher, call-processing Subscriber, dedicated TFTP, and enabled-feature roles. AletheiaUC normalizes collected `utils service list` output and evaluates only high-confidence conditions: no Cisco TFTP on any collected CLI node, a stopped activated CallManager, or stopped RIS/Data Layer Monitor where CallManager is running. Optional or unactivated feature services remain informational. CLI coverage is always stated before an activation change is recommended.
 
 Cisco reference: [CUCM service recommendations](https://www.cisco.com/c/en/us/td/docs/voice_ip_comm/cucm/admin/15/adminGd/cucm_b_administration-guide-15/cucm_b_test-adminguide_chapter_010111.html).

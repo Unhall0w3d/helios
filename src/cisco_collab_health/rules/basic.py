@@ -1232,6 +1232,62 @@ class CucPlatformStatusRule:
         return findings
 
 
+class CucmServicePolicyRule:
+    """Apply high-confidence CUCM placement checks to collected CLI service facts."""
+
+    rule_id = "cucm.service_policy"
+
+    def evaluate(self, facts: AssessmentFacts) -> list[HealthFinding]:
+        services = [service for service in facts.services if service.source == "CUCM.UCOS.CLI"]
+        if not services:
+            return []
+        by_node: dict[str, dict[str, ServiceStatusFact]] = {}
+        for service in services:
+            by_node.setdefault(service.node.casefold(), {})[service.service_name.casefold()] = service
+        findings: list[HealthFinding] = []
+        tftp_started = [
+            node for node, items in by_node.items()
+            if (tftp_service := items.get("cisco tftp")) and tftp_service.status.casefold() == "started"
+        ]
+        if not tftp_started:
+            findings.append(_cucm_service_policy_finding(
+                "tftp_unavailable", "No Cisco TFTP service was started in collected CUCM nodes",
+                [f"CLI service lists evaluated: {len(by_node)}"],
+                "Endpoints need at least one reachable Cisco TFTP service for configuration and firmware files.",
+                "Confirm the designated TFTP node and its service state. If CLI coverage is partial, collect the remaining call-processing or dedicated TFTP nodes before changing service activation.",
+            ))
+        issues: list[str] = []
+        for node, items in sorted(by_node.items()):
+            callmanager = items.get("cisco callmanager")
+            if callmanager and callmanager.activated is not False and callmanager.status.casefold() != "started":
+                issues.append(f"{node}: Cisco CallManager")
+            if callmanager and callmanager.status.casefold() == "started":
+                for name in ("Cisco RIS Data Collector", "Cisco Database Layer Monitor"):
+                    dependency = items.get(name.casefold())
+                    if dependency and dependency.status.casefold() != "started":
+                        issues.append(f"{node}: {name}")
+        if issues:
+            findings.append(_cucm_service_policy_finding(
+                "call_processing_dependencies", "Collected CUCM call-processing service dependencies need review",
+                issues,
+                "Cisco documents CallManager, RIS Data Collector, and Database Layer Monitor as related call-processing services.",
+                "Review Control Center and the intended node role before starting or restarting services; optional services that are not activated are not treated as failures.",
+            ))
+        return findings
+
+
+def _cucm_service_policy_finding(
+    suffix: str, title: str, facts: list[str], reasoning: str, recommendation: str
+) -> HealthFinding:
+    return HealthFinding(
+        rule_id=f"cucm.service_policy.{suffix}", title=title,
+        severity=FindingSeverity.WARNING,
+        recommendation_kind=RecommendationKind.ENGINEERING_RECOMMENDATION,
+        facts=facts, reasoning=reasoning, recommendation=recommendation,
+        evidence=[EvidenceRef(source="CUCM.UCOS.CLI", operation="utils_service_list", confidence="high")],
+    )
+
+
 class CucServicePolicyRule:
     """Apply CUC critical-service expectations to every successfully collected active node."""
 

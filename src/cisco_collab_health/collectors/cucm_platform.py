@@ -14,7 +14,7 @@ from cisco_collab_health.collectors.ssh_preflight import (
 )
 from cisco_collab_health.collectors.ucos_summary import disk_usage_summary, version_summary
 from cisco_collab_health.config import normalize_node_address
-from cisco_collab_health.models.facts import AssessmentFacts, PlatformCheckFact
+from cisco_collab_health.models.facts import AssessmentFacts, PlatformCheckFact, ServiceStatusFact
 from cisco_collab_health.models.runtime import CollectionContext
 from cisco_collab_health.transport.ssh import SshCommandResult, SshCommandTimeout, UcosSshSession
 
@@ -117,6 +117,8 @@ class CucmPlatformCollector:
                     if context.artifact_store is not None:
                         context.artifact_store.write_command_output(node, definition.command, result.output)
                     facts.platform_checks.append(_check(node, definition, "collected", result.output))
+                    if definition.command == "utils service list":
+                        facts.services.extend(_cucm_service_status(node, result.output))
                     _progress(context, f"CUCM CLI {node}: completed '{definition.command}'")
         except Exception as exc:
             warnings.append(f"CUCM SSH session failed on {node}: {exc}")
@@ -167,3 +169,19 @@ def _summary(command: str, output: str) -> dict[str, str]:
     if command == "show version inactive":
         return version_summary(output, active=False)
     return {}
+
+
+def _cucm_service_status(node: str, output: str) -> list[ServiceStatusFact]:
+    """Normalize CUCM CLI service states while retaining activation context."""
+
+    services: list[ServiceStatusFact] = []
+    pattern = re.compile(r"(?m)^(?P<name>.+?)\[(?P<state>STARTED|STOPPED)\](?P<detail>.*)$")
+    for match in pattern.finditer(output):
+        detail = match.group("detail").strip()
+        services.append(ServiceStatusFact(
+            node=node, service_name=match.group("name").strip(),
+            activated="service not activated" not in detail.lower(),
+            status=match.group("state").title(), uptime_seconds=None,
+            source="CUCM.UCOS.CLI", reason=detail or None,
+        ))
+    return services
