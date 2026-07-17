@@ -433,6 +433,7 @@ class HtmlReportBuilder:
         registration_balance_section = self._registration_balance_section(report)
         endpoint_runtime_coverage_section = self._endpoint_runtime_coverage_section(report)
         endpoint_web_sample_section = self._endpoint_web_sample_section(report)
+        endpoint_security_posture_section = self._endpoint_security_posture_section(report)
         call_manager_runtime_resources_section = self._call_manager_runtime_resources_section(
             report
         )
@@ -980,6 +981,7 @@ class HtmlReportBuilder:
     {registration_balance_section}
     {endpoint_runtime_coverage_section}
     {endpoint_web_sample_section}
+    {endpoint_security_posture_section}
     {call_manager_runtime_resources_section}
     <section>
       <h2>Device Load Summary</h2>
@@ -2536,6 +2538,50 @@ class HtmlReportBuilder:
       </tbody></table>
       <div class="table-scroll"><table>
         <thead><tr><th>Endpoint</th><th>Address</th><th>Model</th><th>Registered Node</th><th>Result</th></tr></thead>
+        <tbody>{rows}</tbody>
+      </table></div>
+    </section>
+"""
+
+    def _endpoint_security_posture_section(self, report: AssessmentReport) -> str:
+        """Summarize passive CUCM phone-security-profile configuration already collected."""
+
+        profiles = [
+            item
+            for item in report.facts.configuration_objects
+            if item.object_type == "PhoneSecurityProfile"
+        ]
+        if not profiles:
+            return ""
+        mode_counts = Counter(
+            item.details.get("device_security_mode") or "Not reported" for item in profiles
+        )
+        summary = "; ".join(
+            f"{mode}: {count}" for mode, count in sorted(mode_counts.items())
+        )
+        description = (
+            "Source: bounded AXL phone-security-profile configuration. This shows configured profile "
+            "posture, not the effective policy or current trust state of every endpoint."
+            if not self.customer_safe
+            else "This shows the configured phone security-profile posture. It does not by itself "
+            "confirm the effective policy or current trust state of every endpoint."
+        )
+        rows = "".join(
+            "<tr>"
+            f"<td>{escape(item.name)}</td>"
+            f"<td>{escape(display_text(item.details.get('device_security_mode')))}</td>"
+            f"<td>{escape(display_text(item.details.get('authentication_mode')))}</td>"
+            f"<td>{escape(display_text(item.details.get('key_size')))}</td>"
+            "</tr>"
+            for item in sorted(profiles, key=lambda item: _natural_sort_key(item.name))
+        )
+        return f"""
+    <section>
+      <h2>Endpoint Security Profile Posture</h2>
+      <p class="meta">{escape(description)}</p>
+      <p class="meta"><strong>Configured profile modes:</strong> {escape(summary)}</p>
+      <div class="table-scroll"><table>
+        <thead><tr><th>Phone Security Profile</th><th>Device Security Mode</th><th>Authentication Mode</th><th>Key Size</th></tr></thead>
         <tbody>{rows}</tbody>
       </table></div>
     </section>

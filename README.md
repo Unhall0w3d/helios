@@ -384,6 +384,11 @@ adds raw request/response evidence for:
   operation uses the configured per-operation cap; a CUCM response that ignores
   the page size is retained and explicitly marked server-unbounded. Broad
   `listLine` is deliberately excluded because live CUCM ignored its page bound.
+
+The report also presents the collected **Endpoint Security Profile Posture** as a
+passive configuration view of CUCM phone security profiles and their device
+security/authentication settings. It does not overstate this as per-phone trust
+or ITL/TVS validation.
 - Up to 500 bounded AXL `get` reads to recover route-list, route-group, CSS, SIP
   trunk destination/security, hunt-list/line-group, and MRG/MRGL relationships
   that CUCM may omit from list responses. Shared nested returned tags are emitted

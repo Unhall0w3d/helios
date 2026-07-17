@@ -99,6 +99,35 @@ class ReportBuilderTests(unittest.TestCase):
         self.assertIn("web-interface reachability only", customer)
         self.assertIn("Source: optional unauthenticated HTTPS GET", engineering)
 
+    def test_endpoint_security_profile_posture_is_passively_reported(self) -> None:
+        report = AssessmentReport(
+            facts=AssessmentFacts(
+                configuration_objects=[
+                    ConfigurationObjectFact(
+                        "PhoneSecurityProfile",
+                        "Secure Phone",
+                        {
+                            "device_security_mode": "Encrypted",
+                            "authentication_mode": "By Authentication String",
+                            "key_size": "2048",
+                        },
+                        "AXL.listPhoneSecurityProfile",
+                    )
+                ]
+            ),
+            collector_results=[],
+            findings=[],
+        )
+
+        customer = HtmlReportBuilder(customer_safe=True).build(report)
+        engineering = HtmlReportBuilder().build(report)
+
+        self.assertIn("Endpoint Security Profile Posture", customer)
+        self.assertIn("Secure Phone", customer)
+        self.assertIn("Encrypted", customer)
+        self.assertNotIn("Source: bounded AXL phone-security-profile", customer)
+        self.assertIn("Source: bounded AXL phone-security-profile", engineering)
+
     def test_html_report_renders_cluster_software_consistency(self) -> None:
         report = AssessmentReport(
             facts=AssessmentFacts(
