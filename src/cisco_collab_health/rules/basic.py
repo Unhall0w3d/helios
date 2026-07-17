@@ -955,6 +955,10 @@ class SoftwareLifecycleRule:
             status = lifecycle_status(record)
             if not status.attention_needed:
                 continue
+            assert record.end_of_sale is not None
+            assert record.end_of_maintenance is not None
+            assert record.last_support is not None
+            assert record.source_url is not None
             findings.append(
                 HealthFinding(
                     rule_id=f"{self.rule_id}.{technology}.{record.release}",
@@ -1288,7 +1292,9 @@ class CucmServicePolicyRule:
     rule_id = "cucm.service_policy"
 
     def evaluate(self, facts: AssessmentFacts) -> list[HealthFinding]:
-        services = [service for service in facts.services if service.source == "CUCM.UCOS.CLI"]
+        services = [
+            service for service in facts.services if _fact_has_source(service.source, "CUCM.UCOS.CLI")
+        ]
         if not services:
             return []
         by_node: dict[str, dict[str, ServiceStatusFact]] = {}
@@ -1324,6 +1330,12 @@ class CucmServicePolicyRule:
                 "Review Control Center and the intended node role before starting or restarting services; optional services that are not activated are not treated as failures.",
             ))
         return findings
+
+
+def _fact_has_source(source: str, expected: str) -> bool:
+    """Match a normalized source after complementary collectors have merged a fact."""
+
+    return expected in {part.strip() for part in source.split(",")}
 
 
 def _cucm_service_policy_finding(

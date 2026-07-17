@@ -582,6 +582,20 @@ class CucmServicePolicyRuleTests(unittest.TestCase):
         self.assertIn("cucm-pub: Cisco RIS Data Collector", findings[1].facts)
         self.assertIn("cucm-pub: Cisco Database Layer Monitor", findings[1].facts)
 
+    def test_merged_cli_and_control_center_tftp_fact_is_recognized(self) -> None:
+        findings = CucmServicePolicyRule().evaluate(
+            AssessmentFacts(
+                services=[
+                    ServiceStatusFact(
+                        "cucm-pub", "Cisco Tftp", True, "Started", None,
+                        "ControlCenter.soapGetServiceStatus, CUCM.UCOS.CLI",
+                    )
+                ]
+            )
+        )
+
+        self.assertEqual(findings, [])
+
 
 class RegistrationBalanceRuleTests(unittest.TestCase):
     def test_balanced_subscriber_registration_does_not_create_advisory(self) -> None:

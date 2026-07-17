@@ -11,10 +11,11 @@ from datetime import date
 class LifecycleRecord:
     technology: str
     release: str
-    end_of_sale: date
-    end_of_maintenance: date
-    last_support: date
-    source_url: str
+    end_of_sale: date | None
+    end_of_maintenance: date | None
+    last_support: date | None
+    source_url: str | None
+    notice_available: bool = True
 
 
 @dataclass(frozen=True)
@@ -46,6 +47,13 @@ _RECORDS = (
     ),
     *(
         LifecycleRecord(technology, "14", date(2025, 4, 7), date(2026, 4, 7), date(2027, 4, 30), _COMMON_14)
+        for technology in ("cucm", "cuc", "cer", "imp")
+    ),
+    # Version 15 is a current release family. Keep this explicit local state so
+    # reports do not imply it is unassessed or supported indefinitely while Cisco
+    # has not published its lifecycle notice.
+    *(
+        LifecycleRecord(technology, "15", None, None, None, None, notice_available=False)
         for technology in ("cucm", "cuc", "cer", "imp")
     ),
 )
@@ -88,6 +96,16 @@ def technology_for_product(product: str) -> str | None:
 def lifecycle_status(record: LifecycleRecord, *, as_of: date | None = None) -> LifecycleStatus:
     """Evaluate a catalog record without guessing for releases outside the catalog."""
 
+    if not record.notice_available:
+        return LifecycleStatus(
+            "End of sale / end of life / end of support not yet available",
+            "Cisco has not yet published lifecycle dates for this major release.",
+            False,
+        )
+
+    assert record.end_of_sale is not None
+    assert record.end_of_maintenance is not None
+    assert record.last_support is not None
     today = as_of or date.today()
     if today > record.last_support:
         return LifecycleStatus(

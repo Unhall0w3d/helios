@@ -1990,12 +1990,14 @@ class HtmlReportBuilder:
                 status = lifecycle_status(record)
                 lifecycle = f"{status.label}: {status.detail}"
                 dates = (
-                    record.end_of_sale.isoformat(),
-                    record.end_of_maintenance.isoformat(),
-                    record.last_support.isoformat(),
+                    record.end_of_sale.isoformat() if record.end_of_sale else "Not yet available",
+                    record.end_of_maintenance.isoformat() if record.end_of_maintenance else "Not yet available",
+                    record.last_support.isoformat() if record.last_support else "Not yet available",
                 )
                 source = (
                     f'<a href="{escape(record.source_url, quote=True)}">Cisco lifecycle notice</a>'
+                    if record.source_url
+                    else "Cisco lifecycle notice not yet published"
                 )
             rows.append(
                 "<tr>"
@@ -2009,7 +2011,7 @@ class HtmlReportBuilder:
         return f"""
     <section>
       <h2>Software Lifecycle</h2>
-      <p class="meta">Lifecycle dates are shown only when the collected product and release exactly match the curated, source-linked Cisco catalog. A non-cataloged release is intentionally not treated as supported or unsupported.</p>
+      <p class="meta">Lifecycle dates are shown only when the collected product and release match the curated local catalog. A non-cataloged release is intentionally not treated as supported or unsupported; a current release with no Cisco notice is shown as not yet available.</p>
       <div class="table-scroll"><table>
         <thead><tr><th>Technology</th><th>Cluster</th><th>Collected version</th><th>End of sale</th><th>End of maintenance</th><th>Last support</th><th>Assessment status</th><th>Source</th></tr></thead>
         <tbody>{''.join(rows)}</tbody>

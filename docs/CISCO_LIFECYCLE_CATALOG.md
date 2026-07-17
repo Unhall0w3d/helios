@@ -19,6 +19,6 @@ Catalog reviewed: 2026-07-16. Dates are Cisco's published end-of-sale, end-of-so
 
 ## Deliberate gaps
 
-The catalog does not infer dates for every 10.x–15.x release. In particular, an absent record, including a collected 15.x version, renders as **Not cataloged — no lifecycle conclusion**. Add a record only after verifying the exact product/release and dates against its official Cisco lifecycle notice; update this document in the same change.
+The catalog does not infer dates. For the current 15.x release family, the report explicitly shows **End of sale / end of life / end of support not yet available** until Cisco publishes the relevant lifecycle notice. Other absent records render as **Not cataloged — no lifecycle conclusion**. Add dates and the source URL only after verifying the exact product/release against Cisco's official lifecycle notice; update this document in the same change.
 
 The report prioritizes attention when Cisco support has ended, software maintenance has ended, or support ends within 180 days. It links the matching Cisco notice directly in the Software Lifecycle section.

@@ -41,8 +41,20 @@ class LifecycleCatalogTests(unittest.TestCase):
                 assert record is not None
                 self.assertEqual(record.release, release)
 
-    def test_unverified_release_is_not_inferred(self) -> None:
-        self.assertIsNone(lifecycle_for("cucm", "15.0.1.12900-43"))
+    def test_version_15_explicitly_reports_unpublished_lifecycle_dates(self) -> None:
+        record = lifecycle_for("cucm", "15.0.1.12900-43")
+
+        self.assertIsNotNone(record)
+        assert record is not None
+        self.assertFalse(record.notice_available)
+        self.assertIsNone(record.source_url)
+        self.assertEqual(
+            lifecycle_status(record).label,
+            "End of sale / end of life / end of support not yet available",
+        )
+
+    def test_unverified_future_release_is_not_inferred(self) -> None:
+        self.assertIsNone(lifecycle_for("cucm", "16.0.1.10000-1"))
 
     def test_maintenance_status_is_plain_language(self) -> None:
         record = lifecycle_for("cucm", "14.0")
