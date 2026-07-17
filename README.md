@@ -576,7 +576,9 @@ database replication, status, version, core-file, and service evidence for
 offline review and conservative priority findings. When a DRS history row has
 an unambiguous successful-backup date, the report shows its age and warns when
 the newest observed success is more than three days old. Unknown or localized
-date formats remain private raw evidence rather than being guessed at.
+date formats remain private raw evidence rather than being guessed at. The
+report separately marks unavailable, incomplete, and unparseable history as
+not evaluated; it does not present those states as a missing backup.
 
 During CUC diagnostic capture, AletheiaUC first uses `show network cluster` on
 the publisher, then applies its bounded, read-only platform catalog to each

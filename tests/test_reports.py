@@ -142,6 +142,7 @@ class ReportBuilderTests(unittest.TestCase):
                             "latest_successful_backup_age_days": "1",
                             "successful_backup_entries": "4",
                             "drs_unavailable": "false",
+                            "completion": "complete",
                         },
                         "CUCM.UCOS.CLI",
                     )
@@ -156,8 +157,33 @@ class ReportBuilderTests(unittest.TestCase):
 
         self.assertIn("Recovery and Backup Readiness", customer)
         self.assertIn("2026-07-15", customer)
+        self.assertIn("Assessment status", customer)
+        self.assertIn("Evaluated", customer)
         self.assertNotIn("Source: bounded UCOS Disaster Recovery history", customer)
         self.assertIn("Source: bounded UCOS Disaster Recovery history", engineering)
+
+    def test_backup_readiness_marks_unavailable_history_not_evaluated(self) -> None:
+        report = AssessmentReport(
+            facts=AssessmentFacts(
+                nodes=[CollaborationNode("cucm-pub", "192.0.2.10", "publisher")],
+                platform_checks=[
+                    PlatformCheckFact(
+                        "cucm-pub",
+                        "utils disaster_recovery history backup",
+                        "incomplete",
+                        {"drs_unavailable": "true", "completion": "prompt timeout"},
+                        "CUCM.UCOS.CLI",
+                    )
+                ],
+            ),
+            collector_results=[],
+            findings=[],
+        )
+
+        html = HtmlReportBuilder(customer_safe=True).build(report)
+
+        self.assertIn("Not evaluated — DRS unavailable or busy", html)
+        self.assertNotIn("No successful backup found", html)
 
     def test_html_report_renders_cluster_software_consistency(self) -> None:
         report = AssessmentReport(

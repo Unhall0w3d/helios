@@ -120,7 +120,9 @@ For DRS backup history, ISO and U.S.-style dates are considered only on rows
 that explicitly report success. AletheiaUC does not infer dates from failed,
 ambiguous, or unrecognized localized rows; those remain available only as
 private raw evidence. A clearly parsed newest success older than three days is
-reported as a recovery-readiness warning.
+reported as a recovery-readiness warning. An unavailable, incomplete, or
+unparseable history is explicitly marked not evaluated rather than being
+reported as a missing backup.
 
 CUC first obtains its bounded `show network cluster` listing from the publisher,
 then applies its read-only platform catalog to each discovered cluster member.

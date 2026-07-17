@@ -20,6 +20,7 @@ from cisco_collab_health.models.facts import (
     ConfigurationObjectFact,
     DeviceInventoryFact,
     DeviceRegistrationFact,
+    PlatformCheckFact,
 )
 from cisco_collab_health.models.findings import FindingSeverity, HealthFinding
 from cisco_collab_health.reports.coverage import build_report_coverage
@@ -2000,11 +2001,13 @@ class HtmlReportBuilder:
         if not checks:
             return ""
         description = (
-            "Source: bounded UCOS Disaster Recovery history. A missing date means the collected "
-            "CLI output did not contain an unambiguous successful-backup date."
+            "Source: bounded UCOS Disaster Recovery history. The assessment status separates "
+            "a confirmed absence of successful history from an unavailable, incomplete, or "
+            "unparseable observation."
             if not self.customer_safe
             else "This shows the most recent successfully recorded CUCM backup when its date could "
-            "be read unambiguously from the collected system history."
+            "be read unambiguously. It also distinguishes an unavailable or incomplete check "
+            "from a backup problem."
         )
         rows = "".join(
             "<tr>"
@@ -2013,6 +2016,7 @@ class HtmlReportBuilder:
             f"<td>{escape(display_text(item.details.get('latest_successful_backup_age_days')))}</td>"
             f"<td>{escape(display_text(item.details.get('successful_backup_entries')))}</td>"
             f"<td>{escape('Unavailable or busy' if item.details.get('drs_unavailable') == 'true' else 'Available')}</td>"
+            f"<td>{escape(self._backup_assessment_status(item))}</td>"
             "</tr>"
             for item in sorted(
                 checks, key=lambda item: self._node_reference_sort_key(report, item.node)
@@ -2023,11 +2027,27 @@ class HtmlReportBuilder:
       <h2>Recovery and Backup Readiness</h2>
       <p class="meta">{escape(description)}</p>
       <div class="table-scroll"><table>
-        <thead><tr><th>Node</th><th>Latest successful backup</th><th>Age (days)</th><th>Successful history entries</th><th>DRS status</th></tr></thead>
+        <thead><tr><th>Node</th><th>Latest successful backup</th><th>Age (days)</th><th>Successful history entries</th><th>DRS status</th><th>Assessment status</th></tr></thead>
         <tbody>{rows}</tbody>
       </table></div>
     </section>
 """
+
+    @staticmethod
+    def _backup_assessment_status(item: PlatformCheckFact) -> str:
+        """Describe whether collected DRS history supports a backup conclusion."""
+
+        if item.details.get("drs_unavailable") == "true":
+            return "Not evaluated — DRS unavailable or busy"
+        if item.status != "collected" or item.details.get("completion") != "complete":
+            return "Not evaluated — collection incomplete"
+        if item.details.get("latest_successful_backup"):
+            return "Evaluated"
+        if item.details.get("successful_backup_entries", "").isdigit():
+            if int(item.details["successful_backup_entries"]) > 0:
+                return "Not evaluated — successful date not recognized"
+            return "No successful backup found"
+        return "Not evaluated — history was not readable"
 
     def _software_lifecycle_section(self, report: AssessmentReport) -> str:
         """Show a source-linked lifecycle status only for curated exact version matches."""

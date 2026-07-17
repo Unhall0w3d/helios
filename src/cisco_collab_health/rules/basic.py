@@ -1138,6 +1138,8 @@ class CucmPlatformHealthRule:
             check.node
             for check in checks
             if check.check_name == "utils disaster_recovery history backup"
+            and check.status == "collected"
+            and check.details.get("completion") == "complete"
             and check.details.get("successful_backup_entries") == "0"
             and check.details.get("drs_unavailable") != "true"
         ]
@@ -1156,6 +1158,8 @@ class CucmPlatformHealthRule:
             check
             for check in checks
             if check.check_name == "utils disaster_recovery history backup"
+            and check.status == "collected"
+            and check.details.get("completion") == "complete"
             and check.details.get("latest_successful_backup_age_days", "").isdigit()
             and int(check.details["latest_successful_backup_age_days"]) > 3
         ]

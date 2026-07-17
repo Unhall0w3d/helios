@@ -352,6 +352,7 @@ class CucPlatformRulesTests(unittest.TestCase):
                         "utils disaster_recovery history backup",
                         "collected",
                         {
+                            "completion": "complete",
                             "successful_backup_entries": "4",
                             "latest_successful_backup": "2026-07-10",
                             "latest_successful_backup_age_days": "6",
@@ -366,6 +367,26 @@ class CucPlatformRulesTests(unittest.TestCase):
         self.assertEqual(findings[0].rule_id, "cucm.platform_health.backup_recency")
         self.assertEqual(findings[0].severity, FindingSeverity.WARNING)
         self.assertIn("cucm-pub: 2026-07-10 (6 days ago)", findings[0].facts)
+
+    def test_cucm_platform_rule_does_not_call_incomplete_history_no_backup(self) -> None:
+        findings = CucmPlatformHealthRule().evaluate(
+            AssessmentFacts(
+                platform_checks=[
+                    PlatformCheckFact(
+                        "cucm-pub",
+                        "utils disaster_recovery history backup",
+                        "incomplete",
+                        {
+                            "completion": "prompt timeout",
+                            "successful_backup_entries": "0",
+                        },
+                        "CUCM.UCOS.CLI",
+                    )
+                ]
+            )
+        )
+
+        self.assertEqual(findings, [])
 
 
 class CucInformixDialPlanRuleTests(unittest.TestCase):
