@@ -227,7 +227,10 @@ def _natural_sort_key(value: str) -> tuple[tuple[int, object], ...]:
 
 def _technology_sort_key(technology: str) -> tuple[int, tuple[tuple[int, object], ...]]:
     normalized = technology.strip().casefold()
-    return ({"cucm": 0, "cuc": 1}.get(normalized, 2), _natural_sort_key(normalized))
+    return (
+        {"cucm": 0, "cuc": 1, "imp": 2, "cer": 3}.get(normalized, 4),
+        _natural_sort_key(normalized),
+    )
 
 
 def _collaboration_node_sort_key(node: CollaborationNode) -> tuple[object, ...]:
@@ -948,7 +951,6 @@ class HtmlReportBuilder:
     <section>
       <h2>Device Inventory By Model</h2>
       {source_caption("Device Inventory By Model")}
-      <details class="report-data"><summary>Show device inventory by model</summary>
       <table>
         <thead>
           <tr>
@@ -959,7 +961,6 @@ class HtmlReportBuilder:
           {device_model_rows}
         </tbody>
       </table>
-      </details>
     </section>
     <section>
       <h2>Device Registration Summary</h2>
@@ -2066,7 +2067,13 @@ class HtmlReportBuilder:
             and item.source in {"CUCM.UCOS.CLI", "CUC.UCOS.CLI"}
         }
         rows = []
-        for target_id, source in sorted({(item.target_id or item.source, item.source) for item in active_checks}):
+        for target_id, source in sorted(
+            {(item.target_id or item.source, item.source) for item in active_checks},
+            key=lambda item: (
+                _technology_sort_key(_technology_from_platform_source(item[1])),
+                _natural_sort_key(item[0]),
+            ),
+        ):
             checks = [
                 item
                 for item in active_checks
@@ -2083,7 +2090,9 @@ class HtmlReportBuilder:
                 (item for item in checks if item.node.strip().lower() in publisher_keys), checks[0]
             )
             publisher_options = _split_software_options(publisher.details.get("installed_software_options"))
-            for item in sorted(checks, key=lambda entry: _natural_sort_key(entry.node)):
+            for item in sorted(
+                checks, key=lambda entry: self._node_reference_sort_key(report, entry.node)
+            ):
                 options = _split_software_options(item.details.get("installed_software_options"))
                 if item is publisher:
                     comparison = "Publisher baseline"
@@ -3114,7 +3123,14 @@ class HtmlReportBuilder:
                 continue
             details = check.details
             if check.check_name == "utils diagnose test":
-                summary = f"{details.get('passed', '0')} passed; {details.get('failed', '0')} failed; {details.get('skipped', '0')} skipped"
+                skipped = details.get("skipped", "0")
+                skipped_summary = (
+                    f"{skipped} skipped (expected)" if skipped != "0" else "0 skipped"
+                )
+                summary = (
+                    f"{details.get('passed', '0')} passed; {details.get('failed', '0')} failed; "
+                    f"{skipped_summary}"
+                )
             elif check.check_name == "utils service list":
                 summary = f"{details.get('started', '0')} started; {details.get('stopped', '0')} stopped; {details.get('not_activated', '0')} not activated"
             elif check.check_name == "show cuc cluster status":
@@ -3153,9 +3169,9 @@ class HtmlReportBuilder:
         return (
             '<section class="technology-section cuc-section"><h2>Unity Connection Platform Health</h2>'
             + platform_intro
-            + '<details class="report-data"><summary>Show Unity Connection platform checks</summary><table><thead><tr><th>Node</th><th>Check</th><th>Status</th><th>Summary</th></tr></thead><tbody>'
+            + '<table><thead><tr><th>Node</th><th>Check</th><th>Status</th><th>Summary</th></tr></thead><tbody>'
             + "".join(rows)
-            + "</tbody></table></details></section>"
+            + "</tbody></table></section>"
         )
 
     def _configuration_summary_rows(self, report: AssessmentReport) -> str:
@@ -3725,6 +3741,10 @@ class HtmlReportBuilder:
             technology = "cucm"
         elif "cuc" in normalized or "cupi" in normalized or "unity" in normalized:
             technology = "cuc"
+        elif "imp" in normalized or "presence" in normalized:
+            technology = "imp"
+        elif "cer" in normalized or "emergency" in normalized:
+            technology = "cer"
         else:
             evidence = getattr(result, "evidence", ())
             node_keys = [

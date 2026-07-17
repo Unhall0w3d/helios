@@ -629,6 +629,9 @@ class ReportBuilderTests(unittest.TestCase):
                     CollaborationNode("cuc-sub2", "192.0.2.22", "subscriber", technology="cuc"),
                     CollaborationNode("cucm-sub2", "192.0.2.12", "subscriber", technology="cucm"),
                     CollaborationNode("cuc-sub1", "192.0.2.23", "subscriber", technology="cuc"),
+                    CollaborationNode("imp-sub", "192.0.2.31", "subscriber", technology="imp"),
+                    CollaborationNode("cer-pub", "192.0.2.40", "publisher", technology="cer"),
+                    CollaborationNode("imp-pub", "192.0.2.30", "publisher", technology="imp"),
                 ],
                 services=[
                     ServiceStatusFact("cuc-sub2", "svc", True, "started", 1, "ControlCenter"),
@@ -668,7 +671,10 @@ class ReportBuilderTests(unittest.TestCase):
         cluster_section = builder._cluster_section(report)
         target_section = builder._target_scope_section(report)
 
-        expected = ("cucm-pub", "cucm-sub2", "cucm-sub10", "cuc-pub", "cuc-sub1", "cuc-sub2")
+        expected = (
+            "cucm-pub", "cucm-sub2", "cucm-sub10", "cuc-pub", "cuc-sub1", "cuc-sub2",
+            "imp-pub", "imp-sub", "cer-pub",
+        )
         for first, second in zip(expected, expected[1:]):
             self.assertLess(node_rows.index(first), node_rows.index(second))
         service_expected = ("cucm-pub", "cucm-sub2", "cucm-sub10", "cuc-pub", "cuc-sub2")
@@ -690,7 +696,6 @@ class ReportBuilderTests(unittest.TestCase):
                 )
 
                 summaries = [
-                    "Show device inventory by model",
                     "Show device load defaults and overrides",
                     "Show active firmware by model",
                     "Show performance summary",
@@ -698,6 +703,14 @@ class ReportBuilderTests(unittest.TestCase):
                     "Show certificates requiring attention",
                     "Show configured endpoints without a runtime observation",
                 ]
+                self.assertNotIn(
+                    '<details class="report-data"><summary>Show device inventory by model</summary>',
+                    html,
+                )
+                self.assertNotIn(
+                    '<details class="report-data"><summary>Show Unity Connection platform checks</summary>',
+                    html,
+                )
                 if not customer_safe:
                     summaries.extend(("Show platform checks", "Show collector evidence"))
                 for summary in summaries:
@@ -1239,7 +1252,14 @@ class ReportBuilderTests(unittest.TestCase):
                     ),
                 ],
                 platform_checks=[
-                    PlatformCheckFact("cuc-pub", "show status", "ok", {}, "CUC.UCOS.CLI")
+                    PlatformCheckFact("cuc-pub", "show status", "ok", {}, "CUC.UCOS.CLI"),
+                    PlatformCheckFact(
+                        "cuc-pub",
+                        "utils diagnose test",
+                        "ok",
+                        {"passed": "8", "failed": "0", "skipped": "2"},
+                        "CUC.UCOS.CLI",
+                    ),
                 ],
             ),
             collector_results=[],
@@ -1261,6 +1281,8 @@ class ReportBuilderTests(unittest.TestCase):
             self.assertNotIn("Unity Connection Configuration", customer)
             self.assertIn("Unity Connection Platform Health", customer)
             self.assertNotIn("Source: bounded UCOS diagnostic commands", customer)
+            self.assertIn("2 skipped (expected)", customer)
+            self.assertNotIn("Show Unity Connection platform checks", customer)
             self.assertLess(
                 customer.index("Unity Connection Platform Health"),
                 customer.index("<h2>Cluster</h2>"),
