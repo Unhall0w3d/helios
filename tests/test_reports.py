@@ -185,6 +185,35 @@ class ReportBuilderTests(unittest.TestCase):
         self.assertIn("Not evaluated — DRS unavailable or busy", html)
         self.assertNotIn("No successful backup found", html)
 
+    def test_backup_readiness_includes_cuc_publisher_history(self) -> None:
+        report = AssessmentReport(
+            facts=AssessmentFacts(
+                nodes=[CollaborationNode("cuc-pub", "192.0.2.20", "publisher")],
+                platform_checks=[
+                    PlatformCheckFact(
+                        "cuc-pub",
+                        "utils disaster_recovery history backup",
+                        "collected",
+                        {
+                            "completion": "complete",
+                            "latest_successful_backup": "2026-07-15",
+                            "latest_successful_backup_age_days": "1",
+                            "successful_backup_entries": "2",
+                            "drs_unavailable": "false",
+                        },
+                        "CUC.UCOS.CLI",
+                    )
+                ],
+            ),
+            collector_results=[],
+            findings=[],
+        )
+
+        engineering = HtmlReportBuilder().build(report)
+
+        self.assertIn("Recovery and Backup Readiness", engineering)
+        self.assertIn("Unity Connection history is assessed on its publisher", engineering)
+
     def test_html_report_renders_cluster_software_consistency(self) -> None:
         report = AssessmentReport(
             facts=AssessmentFacts(

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from datetime import UTC, date, datetime
 
 
 def version_summary(output: str, *, active: bool) -> dict[str, str]:
@@ -44,3 +45,53 @@ def disk_usage_summary(output: str) -> dict[str, str]:
         "disk_critical_count": str(sum(value >= 95 for value in values)),
     }
     return summary
+
+
+def drs_backup_summary(output: str, *, today: date | None = None) -> dict[str, str]:
+    """Summarize explicitly successful DRS history rows without guessing dates."""
+
+    successes = re.findall(r"\bSUCCESS\b", output, re.I)
+    unavailable = bool(
+        re.search(
+            r"master agent.*(?:down|processing)|network request timed out|error occurred",
+            output,
+            re.I,
+        )
+    )
+    summary = {
+        "successful_backup_entries": str(len(successes)),
+        "drs_unavailable": str(unavailable).lower(),
+    }
+    latest = _latest_successful_backup(output)
+    if latest is not None:
+        reference_date = today or datetime.now(UTC).date()
+        summary["latest_successful_backup"] = latest.isoformat()
+        summary["latest_successful_backup_age_days"] = str(
+            max(0, (reference_date - latest).days)
+        )
+    return summary
+
+
+def _latest_successful_backup(output: str) -> date | None:
+    """Parse common ISO/U.S. successful DRS backup-history dates only."""
+
+    candidates: list[datetime] = []
+    for line in output.splitlines():
+        if not re.search(r"\bSUCCESS\b", line, re.I):
+            continue
+        iso = re.search(r"\b(20\d{2}-\d{2}-\d{2})(?:[ T](\d{2}:\d{2}:\d{2}))?\b", line)
+        if iso:
+            value = f"{iso.group(1)} {iso.group(2) or '00:00:00'}"
+            try:
+                candidates.append(datetime.strptime(value, "%Y-%m-%d %H:%M:%S"))
+            except ValueError:
+                pass
+            continue
+        us = re.search(r"\b(\d{1,2}/\d{1,2}/20\d{2})(?:\s+(\d{2}:\d{2}:\d{2}))?\b", line)
+        if us:
+            value = f"{us.group(1)} {us.group(2) or '00:00:00'}"
+            try:
+                candidates.append(datetime.strptime(value, "%m/%d/%Y %H:%M:%S"))
+            except ValueError:
+                pass
+    return max(candidates).date() if candidates else None

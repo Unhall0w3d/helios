@@ -1990,22 +1990,23 @@ class HtmlReportBuilder:
 """
 
     def _backup_readiness_section(self, report: AssessmentReport) -> str:
-        """Show CUCM DRS history only when it was actually collected."""
+        """Show CUCM/CUC DRS history only when it was actually collected."""
 
         checks = [
             item
             for item in report.facts.platform_checks
-            if item.source == "CUCM.UCOS.CLI"
+            if item.source in {"CUCM.UCOS.CLI", "CUC.UCOS.CLI"}
             and item.check_name == "utils disaster_recovery history backup"
         ]
         if not checks:
             return ""
         description = (
-            "Source: bounded UCOS Disaster Recovery history. The assessment status separates "
+            "Source: bounded UCOS Disaster Recovery history. CUCM is assessed per node; Unity "
+            "Connection history is assessed on its publisher. The assessment status separates "
             "a confirmed absence of successful history from an unavailable, incomplete, or "
             "unparseable observation."
             if not self.customer_safe
-            else "This shows the most recent successfully recorded CUCM backup when its date could "
+            else "This shows the most recent successfully recorded UC backup when its date could "
             "be read unambiguously. It also distinguishes an unavailable or incomplete check "
             "from a backup problem."
         )

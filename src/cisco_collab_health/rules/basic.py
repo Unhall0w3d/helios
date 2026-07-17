@@ -1059,6 +1059,41 @@ class CucPlatformHealthRule:
                     ],
                 )
             )
+        backup = checks.get("utils disaster_recovery history backup")
+        if backup and backup.details.get("drs_unavailable") == "true":
+            findings.append(
+                _cuc_finding(
+                    "backup_unavailable",
+                    FindingSeverity.WARNING,
+                    "Unity Connection backup history could not be verified",
+                    [f"Publisher: {backup.node}"],
+                )
+            )
+        elif backup and backup.status == "collected" and backup.details.get("completion") == "complete":
+            if backup.details.get("successful_backup_entries") == "0":
+                findings.append(
+                    _cuc_finding(
+                        "backup_history",
+                        FindingSeverity.WARNING,
+                        "No successful Unity Connection backup was found in collected history",
+                        [f"Publisher: {backup.node}"],
+                    )
+                )
+            elif (
+                backup.details.get("latest_successful_backup_age_days", "").isdigit()
+                and int(backup.details["latest_successful_backup_age_days"]) > 3
+            ):
+                findings.append(
+                    _cuc_finding(
+                        "backup_recency",
+                        FindingSeverity.WARNING,
+                        "Latest successful Unity Connection backup is more than three days old",
+                        [
+                            f"{backup.node}: {backup.details['latest_successful_backup']} "
+                            f"({backup.details['latest_successful_backup_age_days']} days ago)"
+                        ],
+                    )
+                )
         return findings
 
 

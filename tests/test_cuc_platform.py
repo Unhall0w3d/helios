@@ -69,6 +69,12 @@ class CucPlatformCollectorTests(unittest.TestCase):
         self.assertEqual(
             _cuc_cli_summary("utils core active list", "No core files found")["core_files"], "0"
         )
+        backup = _cuc_cli_summary(
+            "utils disaster_recovery history backup",
+            "2026-07-01 02:03:04 FAILED\n2026-07-15 02:03:04 SUCCESS",
+        )
+        self.assertEqual(backup["successful_backup_entries"], "1")
+        self.assertEqual(backup["latest_successful_backup"], "2026-07-15")
         status = _cuc_cli_summary(
             "show status",
             "21:08:27 up 328 days, 5:41\nDisk/active 10K 1K 9K (90%)\nDisk/logging 10K 1K 9K (95%)",
@@ -166,8 +172,10 @@ class CucPlatformCollectorTests(unittest.TestCase):
         self.assertIn("192.0.2.21:show status", commands)
         self.assertEqual(
             len(result.facts.platform_checks),
-            1 + (len(CUC_SAFE_CLI_COMMANDS) - 1) * 2 + len(CUC_INFORMIX_PROBE_CATALOG),
+            1 + (len(CUC_SAFE_CLI_COMMANDS) - 1) + (len(CUC_SAFE_CLI_COMMANDS) - 2)
+            + len(CUC_INFORMIX_PROBE_CATALOG),
         )
+        self.assertNotIn("192.0.2.21:utils disaster_recovery history backup", commands)
         self.assertFalse(any("192.0.2.21:run cuc dbquery" in item for item in commands))
 
     def test_informix_catalog_is_fixed_bounded_and_read_only(self) -> None:

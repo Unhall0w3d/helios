@@ -21,6 +21,7 @@ from cisco_collab_health.models.findings import FindingSeverity
 from cisco_collab_health.rules.basic import (
     CollectorHealthRule,
     CertificateValidityRule,
+    CucPlatformHealthRule,
     CucPlatformStatusRule,
     CucClusterRoleRule,
     CucInformixDialPlanRule,
@@ -169,6 +170,30 @@ class SoftwareLifecycleRuleTests(unittest.TestCase):
 
 
 class CucPlatformRulesTests(unittest.TestCase):
+    def test_cuc_platform_rule_flags_stale_publisher_backup(self) -> None:
+        findings = CucPlatformHealthRule().evaluate(
+            AssessmentFacts(
+                platform_checks=[
+                    PlatformCheckFact(
+                        "cuc-pub",
+                        "utils disaster_recovery history backup",
+                        "collected",
+                        {
+                            "completion": "complete",
+                            "successful_backup_entries": "2",
+                            "latest_successful_backup": "2026-07-10",
+                            "latest_successful_backup_age_days": "7",
+                        },
+                        "CUC.UCOS.CLI",
+                    )
+                ]
+            )
+        )
+
+        self.assertEqual(len(findings), 1)
+        self.assertEqual(findings[0].rule_id, "cuc.platform_health.backup_recency")
+        self.assertEqual(findings[0].severity, FindingSeverity.WARNING)
+
     def test_cuc_cluster_role_rule_flags_multiple_primary_roles(self) -> None:
         findings = CucClusterRoleRule().evaluate(
             AssessmentFacts(

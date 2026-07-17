@@ -12,7 +12,12 @@ from cisco_collab_health.collectors.ssh_preflight import (
     collect_preflighted_nodes,
     preflight_ssh_nodes,
 )
-from cisco_collab_health.collectors.ucos_summary import disk_usage_summary, version_summary
+from cisco_collab_health.collectors.ucos_summary import (
+    disk_usage_summary,
+    drs_backup_summary,
+    version_summary,
+)
+from cisco_collab_health.config import normalize_node_address
 from cisco_collab_health.models.facts import (
     AssessmentFacts,
     ClusterIdentity,
@@ -60,6 +65,7 @@ CUC_COMMAND_CATALOG = (
     UcosCommand("cuc.show_hardware", "show hardware", 30),
     UcosCommand("cuc.show_network_cluster", "show network cluster", 30),
     UcosCommand("cuc.show_network_eth0_detail", "show network eth0 detail", 30),
+    UcosCommand("cuc.utils_drs_history", "utils disaster_recovery history backup", 60),
     UcosCommand("cuc.utils_diagnose_test", "utils diagnose test", 300),
     UcosCommand("cuc.utils_service_list", "utils service list", 120),
     UcosCommand("cuc.utils_core_active_list", "utils core active list", 120),
@@ -166,8 +172,16 @@ class CucPlatformCollector:
             }
         )
         ready = [ready_by_node[node] for node in nodes if node in ready_by_node]
+        publisher_key = normalize_node_address(publisher)
         for node, node_facts, node_warnings, node_version in collect_preflighted_nodes(
-            ready, context.ssh_parallel_workers, self._collect_node_result
+            ready,
+            context.ssh_parallel_workers,
+            lambda item: self._collect_node_result(
+                item,
+                collect_publisher_only=(
+                    normalize_node_address(item.publisher_ip or item.target or "") == publisher_key
+                ),
+            ),
         ):
             facts.merge(node_facts)
             warnings.extend(node_warnings)
@@ -180,12 +194,14 @@ class CucPlatformCollector:
         return CollectionResult(self.name, facts, warnings=warnings, notes=notes)
 
     def _collect_node_result(
-        self, context: CollectionContext
+        self, context: CollectionContext, *, collect_publisher_only: bool
     ) -> tuple[str, AssessmentFacts, list[str], str | None]:
         facts = AssessmentFacts()
         warnings: list[str] = []
         node = context.publisher_ip or context.target or "unknown"
-        version = self._collect_node(context, node, facts, warnings)
+        version = self._collect_node(
+            context, node, facts, warnings, collect_publisher_only=collect_publisher_only
+        )
         return node, facts, warnings, version
 
     def _collect_cluster_listing(
@@ -211,13 +227,24 @@ class CucPlatformCollector:
         return result.output
 
     def _collect_node(
-        self, context: CollectionContext, node: str, facts: AssessmentFacts, warnings: list[str]
+        self,
+        context: CollectionContext,
+        node: str,
+        facts: AssessmentFacts,
+        warnings: list[str],
+        *,
+        collect_publisher_only: bool,
     ) -> str | None:
         version: str | None = None
         try:
             with self.session_factory(context) as session:
                 for definition in CUC_COMMAND_CATALOG:
                     if definition.command == "show network cluster":
+                        continue
+                    if (
+                        definition.command == "utils disaster_recovery history backup"
+                        and not collect_publisher_only
+                    ):
                         continue
                     _progress(
                         context,
@@ -474,6 +501,8 @@ def _cuc_cli_summary(command: str, output: str) -> dict[str, str]:
             "stopped": str(len(re.findall(r"\[STOPPED\]", output))),
             "not_activated": str(output.count("Service Not Activated")),
         }
+    if command == "utils disaster_recovery history backup":
+        return drs_backup_summary(output)
     if command == "show cuc cluster status":
         return {
             "primary_nodes": str(len(re.findall(r"\bPrimary\b", output))),

@@ -583,6 +583,8 @@ not evaluated; it does not present those states as a missing backup.
 During CUC diagnostic capture, AletheiaUC first uses `show network cluster` on
 the publisher, then applies its bounded, read-only platform catalog to each
 discovered member. Experimental Informix validation runs only on the publisher.
+CUC backup-history collection also runs on the publisher only, consistent with
+Cisco's Unity Connection DRS backup model.
 Newly discovered SSH hosts remain rejected by default; use
 the explicit first-use enrollment choice only after verifying their fingerprints
 out of band.

@@ -69,7 +69,8 @@ standard AXL list/get calls are preferred wherever they remain reliably bounded.
 | `cuc.show_hardware` | `show hardware` | 30s |
 | `cuc.show_network_cluster` | `show network cluster` | 30s |
 | `cuc.show_network_eth0_detail` | `show network eth0 detail` | 30s |
-| `cuc.utils_diagnose_test` | `utils diagnose test` | 180s |
+| `cuc.utils_drs_history` | `utils disaster_recovery history backup` (publisher only) | 60s |
+| `cuc.utils_diagnose_test` | `utils diagnose test` | 300s |
 | `cuc.utils_service_list` | `utils service list` | 120s |
 | `cuc.utils_core_active_list` | `utils core active list` | 120s |
 | `cuc.show_cluster_status` | `show cuc cluster status` | 30s |
@@ -126,5 +127,8 @@ reported as a missing backup.
 
 CUC first obtains its bounded `show network cluster` listing from the publisher,
 then applies its read-only platform catalog to each discovered cluster member.
+DRS history is intentionally collected only from the CUC publisher. Its result
+uses the same explicit-success/date recognition boundary as CUCM and reports a
+stale newest success only when a date is unambiguous.
 An unknown SSH host key remains rejected unless the operator explicitly enables
 first-use enrollment after out-of-band fingerprint verification.
