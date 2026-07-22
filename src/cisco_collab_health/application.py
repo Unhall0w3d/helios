@@ -384,6 +384,7 @@ def run_multi_assessment(
     pipelines: list[Collector] = []
     target_metadata = []
     node_password_maps: list[tuple[RuntimeProfile, dict[str, str]]] = []
+    imp_in_scope = any(target.technology == "imp" for target, _ in targets)
     for target, runtime in targets:
         status.stage(f"Preparing {target.target_id} ({target.technology})")
         context = CollectionContext(
@@ -407,6 +408,7 @@ def run_multi_assessment(
             phone_inventory_page_size=args.phone_inventory_page_size,
             phone_inventory_max_devices=args.phone_inventory_max_devices,
             diagnostic_capture=args.diagnostic_capture,
+            collect_imp_integration=target.technology == "cucm" and imp_in_scope,
             diagnostic_max_devices=args.diagnostic_max_devices,
             diagnostic_axl_page_size=args.diagnostic_axl_page_size,
             diagnostic_axl_max_records=args.diagnostic_axl_max_records,

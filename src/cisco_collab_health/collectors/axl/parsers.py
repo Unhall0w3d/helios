@@ -168,7 +168,7 @@ def parse_configuration_objects(
     facts = []
     for element in _iter_local_name(root, element_name):
         values = {tag: ", ".join(_descendant_path_texts(element, tag)) for tag in returned_tags}
-        name = values.get("name") or values.get("pattern")
+        name = values.get("name") or values.get("pattern") or values.get("userid")
         if not name:
             continue
         details = {
@@ -365,6 +365,11 @@ def _configuration_detail_name(tag: str) -> str:
         "userSearchBase": "user_search_base",
         "repeatInterval": "repeat_interval",
         "nextSyncTime": "next_sync_time",
+        "imAndPresenceEnable": "im_and_presence_enable",
+        "presenceGroupName": "presence_group",
+        "presenceServer1": "presence_server_1",
+        "presenceServer2": "presence_server_2",
+        "enableHighAvailability": "high_availability_enabled",
         "distributionAlgorithm": "distribution_algorithm",
         "gatewayOrRouteListName": "destination",
         "routeFilterName": "route_filter",

@@ -14,6 +14,7 @@ from cisco_collab_health.collectors.axl import AxlCollector, AxlVersionPolicy
 from cisco_collab_health.collectors.axl.collector import (
     DIAGNOSTIC_AXL_GET_RELATIONSHIPS,
     DIAGNOSTIC_AXL_OPERATIONS,
+    IMP_INTEGRATION_AXL_OPERATIONS,
     LINE_FORWARDING_SQL,
 )
 from cisco_collab_health.collectors.axl.bodies import (
@@ -285,6 +286,15 @@ class AxlCollectorTests(unittest.TestCase):
         self.assertIn("select first 500", SIP_TRUNK_DESTINATIONS_SQL.lower())
         self.assertIn("siptrunkdestination", SIP_TRUNK_DESTINATIONS_SQL.lower())
 
+    def test_imp_integration_catalog_is_separate_and_bounded(self) -> None:
+        operations = {operation for operation, _, _ in IMP_INTEGRATION_AXL_OPERATIONS}
+
+        self.assertEqual(
+            operations,
+            {"listPresenceRedundancyGroup", "listPresenceGroup", "listUser"},
+        )
+        self.assertNotIn("listUser", {operation for operation, _, _ in DIAGNOSTIC_AXL_OPERATIONS})
+
     def test_device_defaults_sql_is_bounded_to_configured_models_and_xml_safe(self) -> None:
         body = execute_sql_query_body(DEVICE_DEFAULTS_SQL)
 
@@ -311,6 +321,21 @@ class AxlCollectorTests(unittest.TestCase):
         self.assertEqual(facts[0].details["partition"], "PT-PSTN")
         self.assertEqual(facts[0].details["route_filter"], "US-RF")
         self.assertEqual(facts[0].details["dial_plan"], "NANP")
+
+    def test_diagnostic_axl_parser_uses_userid_for_im_presence_user_records(self) -> None:
+        response = """<Envelope><return><user><userid>alex</userid>
+        <imAndPresenceEnable>true</imAndPresenceEnable>
+        <presenceGroupName>Standard Presence group</presenceGroupName>
+        </user></return></Envelope>"""
+
+        facts = parse_configuration_objects(
+            response,
+            "listUser",
+            ("userid", "imAndPresenceEnable", "presenceGroupName"),
+        )
+
+        self.assertEqual(facts[0].name, "alex")
+        self.assertEqual(facts[0].details["im_and_presence_enable"], "true")
 
     def test_diagnostic_axl_parser_normalizes_nested_memberships(self) -> None:
         response = """<Envelope><return><routeList uuid="{ABC}"><name>PSTN-RL</name><members>

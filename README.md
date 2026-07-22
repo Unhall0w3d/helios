@@ -611,6 +611,14 @@ presence APIs or perform CER configuration changes. Additional API resources,
 cluster discovery, and technology-specific health rules require live output
 validation before expansion.
 
+When IM&P and CUCM are both selected in the same diagnostic assessment,
+AletheiaUC also queries the CUCM Publisher's read-only AXL configuration for
+presence redundancy groups, presence groups, and a bounded page of IM-enabled
+users with their presence-group assignment. This is intentionally separate from
+IM&P runtime collection: CUCM is authoritative for the integration design,
+whereas IM&P UCOS output supplies runtime evidence. Presence-server/user
+assignment API response variants will be added only after live WSDL validation.
+
 During CUC diagnostic capture, AletheiaUC first uses `show network cluster` on
 the publisher, then applies its bounded, read-only platform catalog to each
 discovered member. Experimental Informix validation runs only on the publisher.

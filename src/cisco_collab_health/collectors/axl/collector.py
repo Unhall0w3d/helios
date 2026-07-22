@@ -131,6 +131,18 @@ DIAGNOSTIC_AXL_OPERATIONS = (
     ("listMtp", "name", ("name", "devicePoolName")),
 )
 
+# CUCM owns IM&P integration configuration. These reads are only scheduled
+# when a multi-technology assessment includes an IM&P target.
+IMP_INTEGRATION_AXL_OPERATIONS = (
+    (
+        "listPresenceRedundancyGroup",
+        "name",
+        ("name", "description", "presenceServer1", "presenceServer2", "enableHighAvailability"),
+    ),
+    ("listPresenceGroup", "name", ("name", "description")),
+    ("listUser", "userid", ("userid", "imAndPresenceEnable", "presenceGroupName")),
+)
+
 DIAGNOSTIC_AXL_GET_RELATIONSHIPS = {
     "Css": ("getCss", ("members/member/routePartitionName",)),
     "RouteGroup": ("getRouteGroup", ("members/member/deviceName",)),
@@ -431,7 +443,10 @@ class AxlCollector:
     ) -> None:
         page_size = max(1, context.diagnostic_axl_page_size)
         max_records = max(1, context.diagnostic_axl_max_records)
-        for operation, criteria_tag, returned_tags in DIAGNOSTIC_AXL_OPERATIONS:
+        operations: tuple[tuple[str, str, tuple[str, ...]], ...] = DIAGNOSTIC_AXL_OPERATIONS
+        if context.collect_imp_integration:
+            operations = (*operations, *IMP_INTEGRATION_AXL_OPERATIONS)
+        for operation, criteria_tag, returned_tags in operations:
             captured = 0
             while captured < max_records:
                 first = min(page_size, max_records - captured)

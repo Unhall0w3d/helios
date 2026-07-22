@@ -158,3 +158,8 @@ response as a service-health determination. IM&P's published interfaces are
 client/presence oriented, so this slice intentionally avoids unvalidated API
 health queries. No CER or IM&P collector writes configuration or runs state-
 changing CLI commands.
+
+When a diagnostic assessment includes both CUCM and IM&P, CUCM's bounded AXL
+catalog additionally reads presence redundancy groups, presence groups, and
+IM-enabled user/presence-group configuration. These are read-only configuration
+facts from the CUCM Publisher; they do not query or alter user presence state.
