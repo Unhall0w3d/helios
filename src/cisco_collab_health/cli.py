@@ -51,6 +51,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Do not write the styled HTML report.",
     )
     parser.add_argument(
+        "--no-pdf-report",
+        action="store_true",
+        help="Do not render PDF copies of the engineering and customer-facing HTML reports.",
+    )
+    parser.add_argument(
         "--customer-safe-report",
         action="store_true",
         help=(

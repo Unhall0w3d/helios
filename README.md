@@ -588,6 +588,17 @@ release-specific prerequisite check and installed firmware, locale, and media
 content can require more space. Active and inactive partition utilization
 remains diagnostic evidence and does not independently create this finding.
 
+### PDF reports
+
+Each HTML report also produces an adjacent engineering or customer-facing PDF.
+PDF rendering is local: AletheiaUC uses Playwright's headless Chromium against
+the self-contained report HTML, so no assessment data is sent to a rendering
+service. After `pip install -r requirements.txt`, install the local browser once
+with `python -m playwright install chromium`. If it is unavailable, the run
+retains the HTML reports and prints the exact installation command. Use
+`--no-pdf-report` to skip PDF output deliberately. Diagnostic review ZIPs include
+engineering and customer-facing HTML and PDF variants for every installed theme.
+
 During CUC diagnostic capture, AletheiaUC first uses `show network cluster` on
 the publisher, then applies its bounded, read-only platform catalog to each
 discovered member. Experimental Informix validation runs only on the publisher.

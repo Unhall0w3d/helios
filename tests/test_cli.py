@@ -82,6 +82,12 @@ class CliTests(unittest.TestCase):
         self.assertFalse(diagnostic.no_logs)
         self.assertFalse(diagnostic.no_artifacts)
 
+    def test_pdf_reports_are_enabled_unless_explicitly_disabled(self) -> None:
+        parser = cli.build_parser()
+
+        self.assertFalse(parser.parse_args([]).no_pdf_report)
+        self.assertTrue(parser.parse_args(["--no-pdf-report"]).no_pdf_report)
+
     def test_no_arguments_opens_menu_and_can_quit(self) -> None:
         output = io.StringIO()
         with (

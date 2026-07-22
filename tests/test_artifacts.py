@@ -329,6 +329,38 @@ class ArtifactStoreTests(unittest.TestCase):
             )
             self.assertEqual(set(manifest["review_report_variants"]), set(expected))
 
+    def test_log_bundle_renders_pdf_variants_when_enabled(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_store = RunLogStore.create(Path(tmpdir), "pdf-templates")
+            report = AssessmentReport(AssessmentFacts(), [], [])
+
+            def render_pdf(html_path: Path, pdf_path: Path) -> Path:
+                pdf_path.write_bytes(b"%PDF-1.4\n")
+                return pdf_path
+
+            with (
+                patch(
+                    "cisco_collab_health.reports.html.available_report_templates",
+                    return_value=("aletheiauc",),
+                ),
+                patch("cisco_collab_health.artifacts.render_html_to_pdf", side_effect=render_pdf),
+            ):
+                write_log_bundle(
+                    log_store,
+                    report=report,
+                    summary_text="Executive Summary\n",
+                    artifact_store=None,
+                    html_report_path=None,
+                    include_pdf_reports=True,
+                )
+
+            self.assertTrue((log_store.root / "reports" / "aletheiauc" / "engineering.pdf").exists())
+            self.assertTrue(
+                (log_store.root / "reports" / "aletheiauc" / "customer-facing.pdf").exists()
+            )
+            manifest = json.loads((log_store.root / "manifest.json").read_text(encoding="utf-8"))
+            self.assertIn("reports/aletheiauc/engineering.pdf", manifest["review_report_variants"])
+
 
 if __name__ == "__main__":
     unittest.main()

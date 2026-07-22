@@ -17,6 +17,8 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, TextIO
 
+from cisco_collab_health.reports.pdf import render_html_to_pdf
+
 _PRIVATE_DIRECTORY_MODE = 0o700
 _PRIVATE_FILE_MODE = 0o600
 
@@ -296,6 +298,7 @@ def write_log_bundle(
     artifact_store: ArtifactStore | None,
     html_report_path: Path | None,
     customer_safe_html_report_path: Path | None = None,
+    include_pdf_reports: bool = False,
 ) -> list[Path]:
     """Write troubleshooting files that are easy to share for analysis."""
 
@@ -317,7 +320,16 @@ def write_log_bundle(
                 f"reports/{theme}/{audience}.html"
                 for theme in installed_templates
                 for audience in ("engineering", "customer-facing")
-            ],
+            ]
+            + (
+                [
+                    f"reports/{theme}/{audience}.pdf"
+                    for theme in installed_templates
+                    for audience in ("engineering", "customer-facing")
+                ]
+                if include_pdf_reports
+                else []
+            ),
             "target_technologies": sorted(
                 {
                     target.get("technology")
@@ -342,18 +354,18 @@ def write_log_bundle(
     # installed theme. This lets report development compare presentation only;
     # all variants are rendered from the exact same normalized assessment data.
     for theme in installed_templates:
-        paths.append(
-            store.write_text(
-                Path("reports") / theme / "engineering.html",
-                HtmlReportBuilder(template=theme).build(report),
-            )
+        engineering_html = store.write_text(
+            Path("reports") / theme / "engineering.html",
+            HtmlReportBuilder(template=theme).build(report),
         )
-        paths.append(
-            store.write_text(
-                Path("reports") / theme / "customer-facing.html",
-                HtmlReportBuilder(customer_safe=True, template=theme).build(report),
-            )
+        customer_html = store.write_text(
+            Path("reports") / theme / "customer-facing.html",
+            HtmlReportBuilder(customer_safe=True, template=theme).build(report),
         )
+        paths.extend((engineering_html, customer_html))
+        if include_pdf_reports:
+            paths.append(render_html_to_pdf(engineering_html, engineering_html.with_suffix(".pdf")))
+            paths.append(render_html_to_pdf(customer_html, customer_html.with_suffix(".pdf")))
     if artifact_store is not None:
         copied_root = store.copy_artifact_tree(artifact_store.root, "artifacts")
         paths.append(
@@ -373,6 +385,13 @@ def write_log_bundle(
         paths.append(store.copy_file(html_report_path, "report.html"))
     if customer_safe_html_report_path is not None and customer_safe_html_report_path.exists():
         paths.append(store.copy_file(customer_safe_html_report_path, "customer_safe_report.html"))
+        customer_safe_pdf = customer_safe_html_report_path.with_suffix(".pdf")
+        if include_pdf_reports and customer_safe_pdf.exists():
+            paths.append(store.copy_file(customer_safe_pdf, "customer_safe_report.pdf"))
+    if html_report_path is not None and html_report_path.exists():
+        pdf_report = html_report_path.with_suffix(".pdf")
+        if include_pdf_reports and pdf_report.exists():
+            paths.append(store.copy_file(pdf_report, "report.pdf"))
     return paths
 
 

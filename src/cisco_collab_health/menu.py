@@ -249,7 +249,7 @@ def _confirm_run(
     for target in assessment.targets:
         print(f"  - {target.technology.upper()} {target.connection_profile}")
     print(f"Report template: {args.html_template}")
-    print("Reports: engineering and customer-facing HTML")
+    print("Reports: engineering and customer-facing HTML, with PDF copies when Chromium is installed")
     print(f"TLS verification: {'enabled' if args.verify_tls else 'disabled'}")
     if diagnostic:
         print("Bundle: artifacts, logs, and private review ZIP")

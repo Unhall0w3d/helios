@@ -34,6 +34,7 @@ from cisco_collab_health.models.runtime import (
     HostKeyApproval,
     SshPasswordRetry,
 )
+from cisco_collab_health.reports.pdf import PdfRenderError, render_html_to_pdf
 from cisco_collab_health.reports.html import HtmlReportBuilder
 from cisco_collab_health.reports.json import JsonReportBuilder
 from cisco_collab_health.reports.summary import ExecutiveSummaryBuilder
@@ -275,6 +276,7 @@ def run_assessment(
 
     html_report_path = None
     customer_safe_html_report_path = None
+    pdf_reports_enabled = not args.no_html_report and not getattr(args, "no_pdf_report", False)
     if not args.no_html_report:
         status.stage("Writing HTML report")
         try:
@@ -295,6 +297,16 @@ def run_assessment(
                 status.ok(f"Customer-facing HTML report written: {customer_safe_html_report_path}")
         except OSError as exc:
             status.fail(f"Unable to write HTML report: {exc}")
+        if html_report_path and pdf_reports_enabled:
+            try:
+                pdf_report_path = _write_pdf_report(html_report_path)
+                status.ok(f"PDF report written: {pdf_report_path}")
+                if customer_safe_html_report_path:
+                    customer_safe_pdf_report_path = _write_pdf_report(customer_safe_html_report_path)
+                    status.ok(f"Customer-facing PDF report written: {customer_safe_pdf_report_path}")
+            except PdfRenderError as exc:
+                pdf_reports_enabled = False
+                status.warn(str(exc))
 
     status.stage("Rendering terminal output")
     if args.format == "json":
@@ -319,6 +331,7 @@ def run_assessment(
                 artifact_store=artifact_store,
                 html_report_path=html_report_path,
                 customer_safe_html_report_path=customer_safe_html_report_path,
+                include_pdf_reports=pdf_reports_enabled,
             )
         except Exception as exc:
             status.fail(f"Unable to finalize troubleshooting logs: {exc}")
@@ -494,6 +507,7 @@ def run_multi_assessment(
         write_assessment_artifacts(artifact_store, report)
     html_report_path = None
     customer_safe_html_report_path = None
+    pdf_reports_enabled = not args.no_html_report and not getattr(args, "no_pdf_report", False)
     if not args.no_html_report:
         html_report_path = _write_html_report(
             report,
@@ -510,6 +524,16 @@ def run_multi_assessment(
                 template=args.html_template,
             )
             status.ok(f"Customer-facing HTML report written: {customer_safe_html_report_path}")
+        if html_report_path and pdf_reports_enabled:
+            try:
+                pdf_report_path = _write_pdf_report(html_report_path)
+                status.ok(f"PDF report written: {pdf_report_path}")
+                if customer_safe_html_report_path:
+                    customer_safe_pdf_report_path = _write_pdf_report(customer_safe_html_report_path)
+                    status.ok(f"Customer-facing PDF report written: {customer_safe_pdf_report_path}")
+            except PdfRenderError as exc:
+                pdf_reports_enabled = False
+                status.warn(str(exc))
     summary_text = ExecutiveSummaryBuilder().build(
         report,
         str(html_report_path) if html_report_path else None,
@@ -527,6 +551,7 @@ def run_multi_assessment(
                 artifact_store=artifact_store,
                 html_report_path=html_report_path,
                 customer_safe_html_report_path=customer_safe_html_report_path,
+                include_pdf_reports=pdf_reports_enabled,
             )
         except Exception as exc:
             status.fail(f"Unable to finalize troubleshooting logs: {exc}")
@@ -589,6 +614,12 @@ def _customer_safe_report_path(report_path: Path) -> Path:
     """Keep the review copy adjacent to, but distinct from, the selected report."""
 
     return report_path.with_name(f"{report_path.stem}-customer-safe{report_path.suffix}")
+
+
+def _write_pdf_report(html_report_path: Path) -> Path:
+    """Write a same-name PDF adjacent to a generated HTML report."""
+
+    return render_html_to_pdf(html_report_path, html_report_path.with_suffix(".pdf"))
 
 
 def _create_artifact_store(
