@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# Source this file: source ./activate
+SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+if [[ -d "$SCRIPT_DIR/src" ]]; then ROOT="$SCRIPT_DIR"; else ROOT="$(dirname "$SCRIPT_DIR")"; fi
+if [[ ! -f "$ROOT/.venv/bin/activate" ]]; then
+  echo "Portable runtime is not installed. Run ./install.sh first." >&2
+  return 1 2>/dev/null || exit 1
+fi
+. "$ROOT/.venv/bin/activate"

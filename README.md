@@ -182,6 +182,12 @@ This launcher is the main user entry point for a cloned repository. It opens the
 interactive menu by default and loads the package from `src/` directly, so an
 editable package install is optional.
 
+For operators who cannot use Git, maintainers can build a source-based portable
+bootstrap ZIP. It creates a local virtual environment and attempts to install
+Chromium for PDF reports after extraction; if Chromium is blocked, HTML-only
+reporting remains available. See
+[portable bootstrap release instructions](docs/PORTABLE_RELEASE.md).
+
 `requirements.txt` explicitly contains the runtime dependencies and local build/
 quality tools needed for a Windows or Linux test virtual environment. It does
 not install the local checkout. `pyproject.toml` remains authoritative for

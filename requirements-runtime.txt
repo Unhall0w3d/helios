@@ -1,0 +1,7 @@
+# Runtime dependencies for a portable AletheiaUC installation.
+# pyproject.toml remains authoritative for package metadata.
+keyring>=25
+defusedxml>=0.7
+cryptography>=44
+paramiko>=3.4
+playwright>=1.53

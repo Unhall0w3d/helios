@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# Run AletheiaUC with the portable release's virtual environment.
+set -euo pipefail
+
+SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+if [[ -d "$SCRIPT_DIR/src" ]]; then ROOT="$SCRIPT_DIR"; else ROOT="$(dirname "$SCRIPT_DIR")"; fi
+PYTHON="$ROOT/.venv/bin/python"
+
+if [[ ! -x "$PYTHON" ]]; then
+  echo "Portable runtime is not installed. Run ./install.sh first." >&2
+  exit 1
+fi
+
+exec "$PYTHON" "$ROOT/aletheiauc.py" "$@"
