@@ -66,6 +66,137 @@ template. It does not alter standalone reports that were already generated.
 Keep private template ZIPs and installed packs out of this repository and public
 releases.
 
+## Create a compatible template pack
+
+An external pack changes presentation only: it cannot add, remove, or alter
+assessment facts, health logic, report sections, or the customer-data policy.
+Start with a simple text-first theme, validate it, and add artwork only where it
+materially improves the report.
+
+### 1. Create this directory layout
+
+Choose a lowercase key made of letters, numbers, `_`, or `-`; this example uses
+`northstar`.
+
+```text
+~/.config/aletheiauc/report-templates/
+└── northstar/
+    ├── manifest.json
+    ├── theme.css
+    └── assets/
+        └── logo.svg                 # optional
+```
+
+`manifest.json` must be directly inside the key directory. `theme.css` and every
+declared asset must be regular files inside that same pack; paths outside the
+pack, including `..`, are rejected. The supported artwork formats are SVG, PNG,
+JPG/JPEG, and WebP. Assets are embedded in each generated report, so do not use
+remote URLs, web fonts, JavaScript, or analytics.
+
+### 2. Use this complete minimal manifest
+
+This pack has no imagery and is valid as soon as `theme.css` exists. All seven
+color keys are required even if a stylesheet also sets colors.
+
+```json
+{
+  "schema_version": 1,
+  "key": "northstar",
+  "template": {
+    "title": "Collaboration Health Assessment",
+    "eyebrow": "Customer health report",
+    "tagline": "Clear findings and practical next steps",
+    "footer_label": "Northstar · Collaboration Health Assessment"
+  },
+  "theme": {
+    "asset_directory": "assets",
+    "stylesheet": "theme.css",
+    "slots": {},
+    "colors": {
+      "page": "#16202A",
+      "surface": "#203040",
+      "text": "#F5F8FA",
+      "muted": "#B5C1CB",
+      "accent": "#7997B2",
+      "cyan": "#70C3D4",
+      "gold": "#D7B96F"
+    },
+    "hero_overlay": "none",
+    "hero_focal_point": "center",
+    "watermark_opacity": "0",
+    "show_hero_logo": false,
+    "show_footer_logo": false
+  }
+}
+```
+
+`schema_version` is currently `1`. A pack with an unknown version, an invalid
+key, a missing required field, or a missing referenced file is ignored during
+discovery rather than breaking report generation. `footer_label` is optional;
+all other fields in the example are required.
+
+### 3. Add the stylesheet
+
+`theme.css` is a full presentation stylesheet for the pack; it replaces the
+built-in generic-dark stylesheet, while AletheiaUC continues to add the shared
+`rds-*` design-system layout afterward. Scope selectors to the template body
+class (`<key>-report`) so the theme remains isolated. A minimal usable start is:
+
+```css
+body.northstar-report { background: #16202a; color: #f5f8fa; }
+.northstar-report .report-shell { width: min(1320px, calc(100% - 40px)); margin: 24px auto 64px; }
+.northstar-report .report-hero { padding: 34px 42px 28px; border: 1px solid #40566a; border-radius: 14px; background: #203040; }
+.northstar-report main { display: grid; gap: 18px; margin-top: 18px; }
+.northstar-report section { margin: 0; border-color: #40566a; background: #203040; }
+.northstar-report .meta-chip { border-color: #5c7a93; color: #f5f8fa; }
+@media print { body.northstar-report { background: #fff; color: #111; } }
+```
+
+Use the shared `rds-*` classes for any further visual refinement. Do not hide
+findings, evidence, customer-relevant identifiers, or report sections in the
+stylesheet; templates must remain presentation-only.
+
+### 4. Add optional artwork through slots
+
+Put files under `assets/`, then map each used slot to a filename relative to
+`asset_directory`. No slots are mandatory. The available slot names are:
+
+- `hero-background`, `executive-background`, `section-band`, and `watermark`
+- `chapter-findings`, `chapter-scope`, `chapter-infrastructure`,
+  `chapter-analysis`, and `chapter-evidence`
+- `recommendation-background`, `footer-background`, and `logo-primary`
+
+For example, add this to `theme.slots` when `assets/logo.svg` exists:
+
+```json
+"slots": { "logo-primary": "logo.svg" }
+```
+
+Set `show_hero_logo` and/or `show_footer_logo` to `true` only when
+`logo-primary` is declared. For photographic backgrounds, use a broad image
+with enough quiet space for text and set `hero_focal_point` to a valid CSS
+`object-position` value such as `center`, `center right`, or `45% 50%`.
+
+### 5. Install and validate
+
+Copy the complete directory to the template parent, then start AletheiaUC. The
+menu and `--html-template` option list the pack only after it validates. A quick
+local discovery check is:
+
+```bash
+python -c "from cisco_collab_health.reports.html import available_report_templates; print(*available_report_templates(), sep='\\n')"
+```
+
+`northstar` should appear in the output. Select it in **Settings**, or run an
+assessment with `--html-template northstar`, and inspect both engineering and
+customer-facing HTML/PDF outputs. A diagnostic review ZIP renders every complete
+installed template, which is the preferred final layout check.
+
+The automatic Downloads import is intentionally reserved for approved
+`ComSource-Private-Report-Template-*.zip` archives whose internal directory and
+key are both `comsource`. Install all other template packs manually using the
+directory layout above.
+
 ## Review bundles
 
 With `--export-review-zip`, the private troubleshooting bundle includes the

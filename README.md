@@ -542,7 +542,7 @@ the ZIP itself remains private diagnostic material because it can also contain
 raw evidence and engineering artifacts.
 
 See [HTML Report Templates](docs/REPORT_TEMPLATES.md) for the local asset-pack
-contract and review-bundle behavior.
+contract, copy-ready pack-author guide, and review-bundle behavior.
 
 To establish a bounded Cisco Unity Connection CUPI baseline with a dedicated
 CUC profile:
